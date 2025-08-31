@@ -1,0 +1,61 @@
+# Miscellaneous
+.DS_Store
+.env
+.flutter_tool_state
+
+# IDEs
+.idea/
+.vscode/
+
+# Build artifacts
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.gradle/
+build/
+*.iml
+*.lock
+
+# Dependency caching
+.pub-cache/
+
+# Android-specific
+android/local.properties
+android/.gradle
+android/captures/
+android/app/src/main/kotlin/com/example/ninja_tutor/
+android/app/build/
+*.apk
+*.aab
+
+# iOS-specific
+ios/.symlinks/
+ios/.generated/
+ios/Flutter/ephemeral/
+ios/Flutter/App.framework
+ios/Flutter/engine/
+ios/Runner/*.xcodeproj/project.pbxproj
+ios/Runner/*.xcworkspace/contents.xcworkspacedata
+ios/Runner/*.xcworkspace/xcshareddata/
+ios/Runner/GeneratedPluginRegistrant.*
+ios/Pods/
+ios/DerivedData/
+*.xcarchive
+*.ipa
+
+# Web-specific
+web/
+# If you have specific files or directories inside web/ that you want to include,
+# you would uncomment and modify the lines below.
+# For example, to include manifest.json and favicon.png:
+#!web/manifest.json
+#!web/favicon.png
+#!web/icons/
+
+# Generated files
+lib/generated_plugin_registrant.dart
+lib/**.g.dart
+
+# Local files
+Based on my earlier researches in the above discus.md

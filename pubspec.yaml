@@ -1,0 +1,93 @@
+name: ninja_tutor
+description: "AI Enhanced Educational App with contextual learning features"
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.1.0 <4.0.0"
+  flutter: ">=3.13.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+
+  # Navigation
+  go_router: ^12.1.3
+
+  # UI & Theming
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0
+  flutter_svg: ^2.0.9
+
+  # Data & Storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  shared_preferences: ^2.2.2
+  path_provider: ^2.1.1
+
+  # Network & API
+  http: ^1.1.0
+  dio: ^5.4.0
+  json_annotation: ^4.8.1
+
+  # File handling
+  file_picker: ^6.1.1
+  path: ^1.8.3
+
+  # PDF & Documents (syncfusion removed due to intl version conflicts)
+  # Can be added later with proper version resolution
+
+  # Internationalization
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+
+  # Utils
+  uuid: ^4.2.1
+  equatable: ^2.0.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Code generation
+  build_runner: ^2.4.7
+  riverpod_generator: ^2.3.9
+  json_serializable: ^6.7.1
+  hive_generator: ^2.0.1
+
+  # Linting
+  flutter_lints: ^3.0.0
+  very_good_analysis: ^5.1.0
+
+  # Testing
+  mockito: ^5.4.4
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/fonts/
+
+  # fonts:
+  #   - family: Inter
+  #     fonts:
+  #       - asset: assets/fonts/Inter-Regular.ttf
+  #       - asset: assets/fonts/Inter-Medium.ttf
+  #         weight: 500
+  #       - asset: assets/fonts/Inter-SemiBold.ttf
+  #         weight: 600
+  #       - asset: assets/fonts/Inter-Bold.ttf
+  #         weight: 700
+
+flutter_intl:
+  enabled: true

@@ -1,0 +1,514 @@
+import 'package:flutter/material.dart';
+
+import '../../../core/constants/app_constants.dart';
+import '../../../models/content/book_model.dart';
+
+/// Book card widget for displaying book information
+class BookCard extends StatelessWidget {
+  const BookCard({
+    super.key,
+    required this.book,
+    this.onTap,
+    this.onLongPress,
+    this.showProgress = true,
+    this.compact = false,
+  });
+
+  final BookModel book;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool showProgress;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      elevation: AppConstants.cardElevation,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        child: Padding(
+          padding: EdgeInsets.all(compact ? 12 : 16),
+          child: compact ? _buildCompactLayout(context, theme) : _buildFullLayout(context, theme),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFullLayout(BuildContext context, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Book cover and basic info
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Book cover
+            _buildBookCover(theme, 50, 70),
+            const SizedBox(width: 12),
+            
+            // Book info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    book.title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  
+                  Text(
+                    book.author,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  
+                  Row(
+                    children: [
+                      _buildSubjectChip(theme),
+                      const SizedBox(width: 8),
+                      Text(
+                        book.grade,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            // Status indicators
+            _buildStatusIndicators(theme),
+          ],
+        ),
+        
+        if (showProgress) ...[
+          const SizedBox(height: 12),
+          _buildProgressSection(theme),
+        ],
+        
+        // Action buttons (if any)
+        if (book.lastReadAt != null) ...[
+          const SizedBox(height: 8),
+          _buildLastReadInfo(theme),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCompactLayout(BuildContext context, ThemeData theme) {
+    return Row(
+      children: [
+        // Book cover
+        _buildBookCover(theme, 40, 56),
+        const SizedBox(width: 12),
+        
+        // Book info
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                book.title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                book.author,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (showProgress)
+                _buildMiniProgress(theme),
+            ],
+          ),
+        ),
+        
+        // Status and progress
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildSubjectChip(theme, small: true),
+            if (showProgress)
+              Text(
+                '${(book.progressPercentage * 100).toInt()}%',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBookCover(ThemeData theme, double width, double height) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: _getSubjectColor().withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: theme.colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: book.coverUrl != null
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                book.coverUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => _buildDefaultCover(theme),
+              ),
+            )
+          : _buildDefaultCover(theme),
+    );
+  }
+
+  Widget _buildDefaultCover(ThemeData theme) {
+    return Icon(
+      Icons.menu_book,
+      color: _getSubjectColor(),
+      size: compact ? 20 : 24,
+    );
+  }
+
+  Widget _buildSubjectChip(ThemeData theme, {bool small = false}) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: small ? 6 : 8,
+        vertical: small ? 2 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: _getSubjectColor().withOpacity(0.1),
+        borderRadius: BorderRadius.circular(small ? 8 : 12),
+      ),
+      child: Text(
+        book.subject,
+        style: (small ? theme.textTheme.labelSmall : theme.textTheme.labelMedium)?.copyWith(
+          color: _getSubjectColor(),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusIndicators(ThemeData theme) {
+    return Column(
+      children: [
+        if (book.isOfflineAvailable)
+          Icon(
+            Icons.download_done,
+            size: 16,
+            color: Colors.green.shade600,
+          ),
+        if (book.isCompleted)
+          Icon(
+            Icons.check_circle,
+            size: 16,
+            color: Colors.blue.shade600,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildProgressSection(ThemeData theme) {
+    final progress = book.progress;
+    if (progress == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Page ${progress.currentPage} of ${book.totalPages}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+            Text(
+              '${(book.progressPercentage * 100).toInt()}%',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        
+        LinearProgressIndicator(
+          value: book.progressPercentage,
+          backgroundColor: theme.colorScheme.outline.withOpacity(0.2),
+          valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniProgress(ThemeData theme) {
+    return Container(
+      width: 60,
+      height: 2,
+      margin: const EdgeInsets.only(top: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.outline.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(1),
+      ),
+      child: FractionallySizedBox(
+        alignment: Alignment.centerLeft,
+        widthFactor: book.progressPercentage,
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary,
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLastReadInfo(ThemeData theme) {
+    final lastRead = book.lastReadAt!;
+    final now = DateTime.now();
+    final difference = now.difference(lastRead);
+    
+    String timeAgo;
+    if (difference.inDays > 0) {
+      timeAgo = '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      timeAgo = '${difference.inHours}h ago';
+    } else {
+      timeAgo = '${difference.inMinutes}m ago';
+    }
+
+    return Row(
+      children: [
+        Icon(
+          Icons.access_time,
+          size: 12,
+          color: theme.colorScheme.onSurface.withOpacity(0.5),
+        ),
+        const SizedBox(width: 4),
+        
+        Text(
+          'Last read $timeAgo',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.5),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Color _getSubjectColor() {
+    switch (book.subject.toLowerCase()) {
+      case 'mathematics':
+      case 'math':
+        return Colors.blue;
+      case 'science':
+      case 'biology':
+      case 'chemistry':
+      case 'physics':
+        return Colors.green;
+      case 'english':
+      case 'literature':
+        return Colors.purple;
+      case 'history':
+      case 'social studies':
+        return Colors.orange;
+      case 'computer science':
+      case 'programming':
+        return Colors.teal;
+      default:
+        return Colors.grey;
+    }
+  }
+}
+
+/// Grid book card for grid layouts
+class GridBookCard extends StatelessWidget {
+  const GridBookCard({
+    super.key,
+    required this.book,
+    this.onTap,
+    this.onLongPress,
+  });
+
+  final BookModel book;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      elevation: AppConstants.cardElevation,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Book cover (larger for grid)
+              Expanded(
+                flex: 3,
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: _getSubjectColor().withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withOpacity(0.2),
+                    ),
+                  ),
+                  child: book.coverUrl != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            book.coverUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => _buildDefaultCover(theme),
+                          ),
+                        )
+                      : _buildDefaultCover(theme),
+                ),
+              ),
+              
+              const SizedBox(height: 8),
+              
+              // Book info
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      book.title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    
+                    Text(
+                      book.author,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    
+                    const Spacer(),
+                    
+                    // Progress and subject
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _getSubjectColor().withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            book.subject,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: _getSubjectColor(),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        
+                        Text(
+                          '${(book.progressPercentage * 100).toInt()}%',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDefaultCover(ThemeData theme) {
+    return Center(
+      child: Icon(
+        Icons.menu_book,
+        color: _getSubjectColor(),
+        size: 32,
+      ),
+    );
+  }
+
+  Color _getSubjectColor() {
+    switch (book.subject.toLowerCase()) {
+      case 'mathematics':
+      case 'math':
+        return Colors.blue;
+      case 'science':
+      case 'biology':
+      case 'chemistry':
+      case 'physics':
+        return Colors.green;
+      case 'english':
+      case 'literature':
+        return Colors.purple;
+      case 'history':
+      case 'social studies':
+        return Colors.orange;
+      case 'computer science':
+      case 'programming':
+        return Colors.teal;
+      default:
+        return Colors.grey;
+    }
+  }
+}
