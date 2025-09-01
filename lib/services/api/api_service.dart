@@ -98,7 +98,7 @@ class ApiService {
   /// Get user profile
   Future<Map<String, dynamic>> getUserProfile() async {
     try {
-      final response = await _dio.get('/user/profile');
+      final response = await _dio.get('/auth/profile');
       return response.data;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
@@ -108,7 +108,7 @@ class ApiService {
   /// Update user profile
   Future<Map<String, dynamic>> updateUserProfile(Map<String, dynamic> data) async {
     try {
-      final response = await _dio.put('/user/profile', data: data);
+      final response = await _dio.put('/auth/profile', data: data);
       return response.data;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
@@ -128,12 +128,12 @@ class ApiService {
       final response = await _dio.get('/books', queryParameters: {
         if (subject != null) 'subject': subject,
         if (grade != null) 'grade': grade,
-        'page': page,
+        'offset': (page - 1) * limit,
         'limit': limit,
       });
 
       final books = <BookModel>[];
-      for (final bookJson in response.data['books']) {
+      for (final bookJson in response.data) {
         books.add(BookModel.fromJson(bookJson));
       }
       return books;
@@ -157,7 +157,12 @@ class ApiService {
     try {
       final formData = FormData.fromMap({
         'file': await MultipartFile.fromFile(file.path),
-        'metadata': metadata,
+        'title': metadata['title'] ?? 'Unknown',
+        'author': metadata['author'] ?? 'Unknown',
+        'subject': metadata['subject'] ?? 'General',
+        'grade': metadata['grade'] ?? 'General',
+        'description': metadata['description'],
+        'tags': metadata['tags']?.join(',') ?? '',
       });
 
       final response = await _dio.post('/books/upload', data: formData);
@@ -175,7 +180,7 @@ class ApiService {
       });
 
       final books = <BookModel>[];
-      for (final bookJson in response.data['books']) {
+      for (final bookJson in response.data) {
         books.add(BookModel.fromJson(bookJson));
       }
       return books;
@@ -240,9 +245,12 @@ class ApiService {
   /// Generate quiz from content
   Future<quiz.QuizModel> generateQuiz(String bookId, List<int> pageRange) async {
     try {
-      final response = await _dio.post('/ai/generate-quiz', data: {
+      final response = await _dio.post('/quizzes/generate', data: {
         'book_id': bookId,
         'page_range': pageRange,
+        'question_count': 10,
+        'difficulty': 'medium',
+        'question_types': ['multiple_choice'],
       });
       return quiz.QuizModel.fromJson(response.data);
     } on DioException catch (e) {
@@ -359,7 +367,7 @@ class ApiService {
       final response = await _dio.get('/notes/shared/$bookId');
       
       final notes = <NoteModel>[];
-      for (final noteJson in response.data['notes']) {
+      for (final noteJson in response.data) {
         notes.add(NoteModel.fromJson(noteJson));
       }
       return notes;

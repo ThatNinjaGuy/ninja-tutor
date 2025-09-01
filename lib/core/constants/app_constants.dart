@@ -5,8 +5,8 @@ class AppConstants {
   static const String appVersion = '1.0.0';
   
   // API Configuration
-  static const String baseUrl = 'https://api.ninjatutor.com';
-  static const String apiVersion = 'v1';
+  static const String baseUrl = 'http://localhost:8000';
+  static const String apiVersion = 'api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
   
   // Storage Keys

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -487,7 +488,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 }
 
 /// Bottom sheet for adding books
-class _AddBookBottomSheet extends StatelessWidget {
+class _AddBookBottomSheet extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_AddBookBottomSheet> createState() => _AddBookBottomSheetState();
+}
+
+class _AddBookBottomSheetState extends ConsumerState<_AddBookBottomSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -542,8 +548,60 @@ class _AddBookBottomSheet extends StatelessWidget {
     );
 
     if (result != null) {
-      // TODO: Process the selected file
-      print('Selected file: ${result.files.first.name}');
+      final file = result.files.first;
+      if (file.bytes != null) {
+        await _uploadFile(file);
+      }
+    }
+  }
+
+  Future<void> _uploadFile(PlatformFile file) async {
+    try {
+      // For now, show a placeholder message since file upload requires desktop/mobile
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('File upload is not supported on web. Please use desktop or mobile app.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      
+      // TODO: Implement web file upload or redirect to desktop/mobile
+      // For testing purposes, we can create a mock book
+      final mockBook = BookModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+        author: 'Mock Author',
+        subject: 'General',
+        grade: 'General',
+        type: BookType.other,
+        filePath: 'mock_path/${file.name}',
+        totalPages: 100,
+        addedAt: DateTime.now(),
+        lastReadAt: DateTime.now(),
+        estimatedReadingTime: 120,
+        tags: const ['uploaded'],
+        metadata: const BookMetadata(
+          format: 'PDF',
+          language: 'en',
+          difficulty: DifficultyLevel.medium,
+        ),
+      );
+      
+      await ref.read(booksProvider.notifier).addBook(mockBook);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mock book "${mockBook.title}" added for testing!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
     }
   }
 }
