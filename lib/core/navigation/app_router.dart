@@ -10,6 +10,8 @@ import '../../ui/screens/library/library_screen.dart';
 import '../../ui/screens/notes/notes_screen.dart';
 import '../../ui/screens/settings/settings_screen.dart';
 import '../../ui/screens/splash/splash_screen.dart';
+import '../../ui/screens/auth/login_screen.dart';
+import '../../ui/screens/auth/register_screen.dart';
 import '../../ui/widgets/navigation/main_navigation.dart';
 
 /// Router configuration provider
@@ -22,6 +24,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.splash,
         name: 'splash',
         builder: (context, state) => const SplashScreen(),
+      ),
+
+      // Authentication screens
+      GoRoute(
+        path: AppRoutes.login,
+        name: 'login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.register,
+        name: 'register',
+        builder: (context, state) => const RegisterScreen(),
       ),
 
       // Main shell with bottom navigation

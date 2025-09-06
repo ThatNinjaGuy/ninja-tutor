@@ -26,6 +26,7 @@ class ApiService {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'ngrok-skip-browser-warning': 'true', // Skip ngrok browser warning
       },
     ));
 
@@ -388,6 +389,8 @@ class _AuthInterceptor extends Interceptor {
     if (_apiService._authToken != null) {
       options.headers['Authorization'] = 'Bearer ${_apiService._authToken}';
     }
+    // Always add ngrok header to skip browser warning
+    options.headers['ngrok-skip-browser-warning'] = 'true';
     super.onRequest(options, handler);
   }
 }

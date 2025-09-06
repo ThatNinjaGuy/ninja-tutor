@@ -5,7 +5,7 @@ class AppConstants {
   static const String appVersion = '1.0.0';
   
   // API Configuration
-  static const String baseUrl = 'http://localhost:8000';
+  static const String baseUrl = 'https://1e6ee738dec9.ngrok-free.app';
   static const String apiVersion = 'api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
   
@@ -46,6 +46,8 @@ class AppConstants {
 /// Route names for navigation
 class AppRoutes {
   static const String splash = '/';
+  static const String login = '/login';
+  static const String register = '/register';
   static const String dashboard = '/dashboard';
   static const String reading = '/reading';
   static const String practice = '/practice';
