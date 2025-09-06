@@ -3,7 +3,18 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../models/content/book_model.dart';
 
-/// Book card widget for displaying book information
+/// Layout modes for the BookCard component
+enum BookCardLayout {
+  /// Full detailed layout for lists and large displays
+  full,
+  /// Compact horizontal layout for lists  
+  compact,
+  /// Grid layout optimized for responsive grids
+  grid,
+}
+
+/// Unified book card widget for displaying book information
+/// Supports multiple layouts: full, compact, and grid
 class BookCard extends StatelessWidget {
   const BookCard({
     super.key,
@@ -11,14 +22,14 @@ class BookCard extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.showProgress = true,
-    this.compact = false,
+    this.layout = BookCardLayout.full,
   });
 
   final BookModel book;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final bool showProgress;
-  final bool compact;
+  final BookCardLayout layout;
 
   @override
   Widget build(BuildContext context) {
@@ -34,11 +45,35 @@ class BookCard extends StatelessWidget {
         onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(AppConstants.borderRadius),
         child: Padding(
-          padding: EdgeInsets.all(compact ? 12 : 16),
-          child: compact ? _buildCompactLayout(context, theme) : _buildFullLayout(context, theme),
+          padding: EdgeInsets.all(_getPadding()),
+          child: _buildLayoutContent(context, theme),
         ),
       ),
     );
+  }
+
+  /// Get padding based on layout mode
+  double _getPadding() {
+    switch (layout) {
+      case BookCardLayout.compact:
+        return 12.0;
+      case BookCardLayout.grid:
+        return 12.0;
+      case BookCardLayout.full:
+        return 16.0;
+    }
+  }
+
+  /// Build content based on selected layout mode
+  Widget _buildLayoutContent(BuildContext context, ThemeData theme) {
+    switch (layout) {
+      case BookCardLayout.compact:
+        return _buildCompactLayout(context, theme);
+      case BookCardLayout.grid:
+        return _buildGridLayout(context, theme);
+      case BookCardLayout.full:
+        return _buildFullLayout(context, theme);
+    }
   }
 
   Widget _buildFullLayout(BuildContext context, ThemeData theme) {
@@ -192,11 +227,26 @@ class BookCard extends StatelessWidget {
     );
   }
 
-  Widget _buildDefaultCover(ThemeData theme) {
-    return Icon(
-      Icons.menu_book,
-      color: _getSubjectColor(),
-      size: compact ? 20 : 24,
+  Widget _buildDefaultCover(ThemeData theme, [double? size]) {
+    double iconSize;
+    switch (layout) {
+      case BookCardLayout.compact:
+        iconSize = size ?? 20;
+        break;
+      case BookCardLayout.grid:
+        iconSize = size ?? 32;
+        break;
+      case BookCardLayout.full:
+        iconSize = size ?? 24;
+        break;
+    }
+    
+    return Center(
+      child: Icon(
+        Icons.menu_book,
+        color: _getSubjectColor(),
+        size: iconSize,
+      ),
     );
   }
 
@@ -330,161 +380,109 @@ class BookCard extends StatelessWidget {
     );
   }
 
-  Color _getSubjectColor() {
-    switch (book.subject.toLowerCase()) {
-      case 'mathematics':
-      case 'math':
-        return Colors.blue;
-      case 'science':
-      case 'biology':
-      case 'chemistry':
-      case 'physics':
-        return Colors.green;
-      case 'english':
-      case 'literature':
-        return Colors.purple;
-      case 'history':
-      case 'social studies':
-        return Colors.orange;
-      case 'computer science':
-      case 'programming':
-        return Colors.teal;
-      default:
-        return Colors.grey;
-    }
-  }
-}
-
-/// Grid book card for grid layouts
-class GridBookCard extends StatelessWidget {
-  const GridBookCard({
-    super.key,
-    required this.book,
-    this.onTap,
-    this.onLongPress,
-  });
-
-  final BookModel book;
-  final VoidCallback? onTap;
-  final VoidCallback? onLongPress;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      elevation: AppConstants.cardElevation,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
+  /// Grid layout optimized for responsive grids (replaces old GridBookCard)
+  Widget _buildGridLayout(BuildContext context, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Book cover (larger for grid)
+        Expanded(
+          flex: 3,
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: _getSubjectColor().withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.outline.withOpacity(0.2),
+              ),
+            ),
+            child: book.coverUrl != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      book.coverUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => _buildDefaultCover(theme, 32),
+                    ),
+                  )
+                : _buildDefaultCover(theme, 32),
+          ),
+        ),
+        
+        const SizedBox(height: 8),
+        
+        // Book info
+        Expanded(
+          flex: 2,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Book cover (larger for grid)
-              Expanded(
-                flex: 3,
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: _getSubjectColor().withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: theme.colorScheme.outline.withOpacity(0.2),
-                    ),
-                  ),
-                  child: book.coverUrl != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            book.coverUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => _buildDefaultCover(theme),
-                          ),
-                        )
-                      : _buildDefaultCover(theme),
+              // Title with better sizing
+              Text(
+                book.title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13, // Optimized for grid
                 ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              
+              // Author with better sizing
+              Text(
+                book.author,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  fontSize: 11, // Smaller for better fit
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               
-              const SizedBox(height: 8),
+              const Spacer(),
               
-              // Book info
-              Expanded(
-                flex: 2,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      book.title,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+              // Progress and subject with flexible layout
+              Column(
+                children: [
+                  // Subject chip (full width)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _getSubjectColor().withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    const SizedBox(height: 4),
-                    
-                    Text(
-                      book.author,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    child: Text(
+                      book.subject,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: _getSubjectColor(),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 10, // Smaller for better fit
                       ),
+                      textAlign: TextAlign.center,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    
-                    const Spacer(),
-                    
-                    // Progress and subject
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _getSubjectColor().withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            book.subject,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: _getSubjectColor(),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        
-                        Text(
-                          '${(book.progressPercentage * 100).toInt()}%',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                  ),
+                  const SizedBox(height: 4),
+                  
+                  // Progress percentage
+                  Text(
+                    '${(book.progressPercentage * 100).toInt()}%',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildDefaultCover(ThemeData theme) {
-    return Center(
-      child: Icon(
-        Icons.menu_book,
-        color: _getSubjectColor(),
-        size: 32,
-      ),
+      ],
     );
   }
 

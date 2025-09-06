@@ -100,7 +100,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
 
   Widget _buildSearchAndFilters() {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(AppConstants.defaultPadding),
       decoration: BoxDecoration(
@@ -157,15 +157,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
 
         return GridView.builder(
           padding: const EdgeInsets.all(AppConstants.defaultPadding),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: _getCrossAxisCount(context),
-            childAspectRatio: 0.7,
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: _getMaxCardWidth(context),
+            childAspectRatio: _getChildAspectRatio(context),
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
           ),
           itemCount: books.length,
           itemBuilder: (context, index) => BookCard(
             book: books[index],
+            layout: BookCardLayout.grid,
             onTap: () => _openBook(books[index]),
             onLongPress: () => _showBookOptions(books[index]),
           ),
@@ -199,7 +200,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
           itemBuilder: (context, index) {
             final subject = subjectMap.keys.elementAt(index);
             final subjectBooks = subjectMap[subject]!;
-            
+
             return _buildSubjectCard(subject, subjectBooks);
           },
         );
@@ -211,7 +212,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
 
 
   Widget _buildSubjectCard(String subject, List<BookModel> books) {
-    return Card(
+            return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: ExpansionTile(
         leading: CircleAvatar(
@@ -220,19 +221,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
         ),
         title: Text(subject, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text('${books.length} books'),
-        children: [
+                  children: [
           SizedBox(
-            height: 200,
+            height: 280, // Further increased height to prevent overflow with larger cards
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.all(16),
               itemCount: books.length,
               itemBuilder: (context, index) => Container(
-                width: 120,
+                width: _getSubjectCardWidth(context), // Responsive width
                 margin: const EdgeInsets.only(right: 16),
                 child: BookCard(
                   book: books[index],
+                  layout: BookCardLayout.grid,
                   onTap: () => _openBook(books[index]),
+                  onLongPress: () => _showBookOptions(books[index]),
                 ),
               ),
             ),
@@ -298,12 +301,53 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
     );
   }
 
-  // Utility methods
-  int _getCrossAxisCount(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    if (width >= AppConstants.desktopBreakpoint) return 6;
-    if (width >= AppConstants.tabletBreakpoint) return 4;
-    return 2;
+  // Utility methods for responsive card sizing
+  double _getMaxCardWidth(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    // Set reasonable card width limits based on screen size (increased for better content fit)
+    if (screenWidth >= AppConstants.desktopBreakpoint) {
+      // Desktop: cards should be between 220-320px wide (increased)
+      return 320.0;
+    } else if (screenWidth >= AppConstants.tabletBreakpoint) {
+      // Tablet: cards should be between 200-280px wide (increased)
+      return 280.0;
+    } else {
+      // Mobile: cards should be between 180-240px wide (increased)
+      return 240.0;
+    }
+  }
+
+  double _getChildAspectRatio(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    // Adjust aspect ratio based on screen size for better proportions (increased height to prevent overflow)
+    if (screenWidth >= AppConstants.desktopBreakpoint) {
+      // Desktop: wider cards with more height to prevent overflow
+      return 0.9;
+    } else if (screenWidth >= AppConstants.tabletBreakpoint) {
+      // Tablet: balanced proportions with more height
+      return 0.85;
+    } else {
+      // Mobile: taller cards for better text readability and no overflow
+      return 0.8;
+    }
+  }
+
+  double _getSubjectCardWidth(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    // Width for horizontal cards in subject sections (increased for better content fit)
+    if (screenWidth >= AppConstants.desktopBreakpoint) {
+      // Desktop: larger cards for better readability (increased)
+      return 220.0;
+    } else if (screenWidth >= AppConstants.tabletBreakpoint) {
+      // Tablet: medium-sized cards (increased)
+      return 200.0;
+    } else {
+      // Mobile: adequate size for horizontal scroll (increased)
+      return 180.0;
+    }
   }
 
   Color _getSubjectColor(String subject) {
@@ -326,11 +370,4 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
     }
   }
 
-  String _formatLastRead(DateTime lastRead) {
-    final now = DateTime.now();
-    final difference = now.difference(lastRead);
-    if (difference.inDays > 0) return '${difference.inDays}d ago';
-    if (difference.inHours > 0) return '${difference.inHours}h ago';
-    return '${difference.inMinutes}m ago';
-  }
 }
