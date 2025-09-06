@@ -21,6 +21,7 @@ class BookModel extends Equatable {
   final String? description;
   
   @HiveField(4)
+  @JsonKey(name: 'cover_url')
   final String? coverUrl;
   
   @HiveField(5)
@@ -33,18 +34,23 @@ class BookModel extends Equatable {
   final BookType type;
   
   @HiveField(8)
+  @JsonKey(name: 'file_path')
   final String? filePath; // Local file path for offline content
   
   @HiveField(9)
+  @JsonKey(name: 'file_url')
   final String? fileUrl; // Remote URL for online content
   
   @HiveField(10)
+  @JsonKey(name: 'total_pages')
   final int totalPages;
   
   @HiveField(11)
+  @JsonKey(name: 'estimated_reading_time')
   final int? estimatedReadingTime; // in minutes
   
   @HiveField(12)
+  @JsonKey(name: 'added_at')
   final DateTime addedAt;
   
   @HiveField(13)
@@ -79,8 +85,64 @@ class BookModel extends Equatable {
     this.progress,
   });
   
-  factory BookModel.fromJson(Map<String, dynamic> json) => 
-      _$BookModelFromJson(json);
+  factory BookModel.fromJson(Map<String, dynamic> json) {
+    // Handle backend API format with snake_case to camelCase conversion
+    return BookModel(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      author: json['author'] as String,
+      description: json['description'] as String?,
+      coverUrl: json['cover_url'] as String?,
+      subject: json['subject'] as String,
+      grade: json['grade'] as String,
+      type: _parseBookType(json['type'] as String?),
+      filePath: json['file_path'] as String?,
+      fileUrl: json['file_url'] as String?,
+      totalPages: json['total_pages'] as int? ?? 0,
+      estimatedReadingTime: json['estimated_reading_time'] as int?,
+      addedAt: DateTime.parse(json['added_at'] as String),
+      lastReadAt: json['last_read_at'] != null 
+          ? DateTime.parse(json['last_read_at'] as String) 
+          : null,
+      tags: (json['tags'] as List<dynamic>?)?.cast<String>() ?? [],
+      metadata: BookMetadata(
+        format: json['type'] == 'pdf' ? 'PDF' : 'Unknown',
+        language: 'en', // Default
+        difficulty: DifficultyLevel.medium, // Default
+      ),
+      progress: json['progress_percentage'] != null 
+          ? ReadingProgress(
+              bookId: json['id'] as String,
+              currentPage: ((json['progress_percentage'] as num) * (json['total_pages'] as int? ?? 1)).round(),
+              lastReadAt: json['last_read_at'] != null 
+                  ? DateTime.parse(json['last_read_at'] as String)
+                  : DateTime.now(),
+              startedAt: json['added_at'] != null 
+                  ? DateTime.parse(json['added_at'] as String)
+                  : DateTime.now(),
+            )
+          : null,
+    );
+  }
+
+  static BookType _parseBookType(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'textbook':
+        return BookType.textbook;
+      case 'reference':
+        return BookType.reference;
+      case 'novel':
+        return BookType.novel;
+      case 'workbook':
+        return BookType.workbook;
+      case 'magazine':
+        return BookType.magazine;
+      case 'research':
+        return BookType.research;
+      default:
+        return BookType.other;
+    }
+  }
   
   Map<String, dynamic> toJson() => _$BookModelToJson(this);
   

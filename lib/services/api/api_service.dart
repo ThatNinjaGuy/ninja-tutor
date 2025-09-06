@@ -163,7 +163,34 @@ class ApiService {
         'subject': metadata['subject'] ?? 'General',
         'grade': metadata['grade'] ?? 'General',
         'description': metadata['description'],
-        'tags': metadata['tags']?.join(',') ?? '',
+        'tags': metadata['tags'] ?? '',
+      });
+
+      final response = await _dio.post('/books/upload', data: formData);
+      return BookModel.fromJson(response.data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Upload book from bytes (for web compatibility)
+  Future<BookModel> uploadBookFromBytes(
+    List<int> bytes, 
+    String fileName, 
+    Map<String, dynamic> metadata
+  ) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: fileName,
+        ),
+        'title': metadata['title'] ?? 'Unknown',
+        'author': metadata['author'] ?? 'Unknown',
+        'subject': metadata['subject'] ?? 'General',
+        'grade': metadata['grade'] ?? 'General',
+        'description': metadata['description'],
+        'tags': metadata['tags'] ?? '',
       });
 
       final response = await _dio.post('/books/upload', data: formData);

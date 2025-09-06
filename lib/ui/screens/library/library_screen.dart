@@ -1,10 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/books_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../models/content/book_model.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/library/book_filter.dart';
@@ -38,8 +40,39 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final books = ref.watch(booksProvider);
+    final books = ref.watch(booksApiProvider);
+    final user = ref.watch(authProvider);
+
+    // Show login prompt if user is not authenticated
+    if (user == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Library')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.library_books_outlined, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              const Text(
+                'Please log in to access your library',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Your books and reading progress will be saved across devices',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => context.go('/login'),
+                child: const Text('Log In'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -115,6 +148,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
               setState(() {
                 _searchQuery = value;
               });
+              // Trigger search on the backend
+              if (value.isNotEmpty) {
+                ref.read(bookSearchProvider.notifier).searchBooks(value);
+              } else {
+                ref.read(bookSearchProvider.notifier).clearSearch();
+              }
             },
           ),
           
@@ -128,11 +167,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
               setState(() {
                 _selectedSubject = subject;
               });
+              // Reload books with new filter
+              ref.read(booksApiProvider.notifier).loadBooks(
+                subject: _selectedSubject?.isEmpty == true ? null : _selectedSubject,
+                grade: _selectedGrade?.isEmpty == true ? null : _selectedGrade,
+              );
             },
             onGradeChanged: (grade) {
               setState(() {
                 _selectedGrade = grade;
               });
+              // Reload books with new filter
+              ref.read(booksApiProvider.notifier).loadBooks(
+                subject: _selectedSubject?.isEmpty == true ? null : _selectedSubject,
+                grade: _selectedGrade?.isEmpty == true ? null : _selectedGrade,
+              );
             },
           ),
         ],
@@ -141,9 +190,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 
   Widget _buildMyBooks(BuildContext context, AsyncValue<List<BookModel>> books) {
-    return books.when(
+    // Use search results if there's a search query, otherwise use the main books list
+    final searchResults = ref.watch(bookSearchProvider);
+    final booksToShow = _searchQuery.isNotEmpty ? searchResults : books;
+    
+    return booksToShow.when(
       data: (bookList) {
-        if (bookList.isEmpty) {
+        if (bookList.isEmpty && _searchQuery.isEmpty) {
           return _buildEmptyState(
             'No Books in Library',
             'Add your first book to get started with learning!',
@@ -151,12 +204,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           );
         }
 
-        final filteredBooks = _filterBooks(bookList);
+        final filteredBooks = _searchQuery.isNotEmpty ? bookList : _filterBooks(bookList);
 
         if (filteredBooks.isEmpty) {
           return _buildEmptyState(
-            'No Books Found',
-            'Try adjusting your search or filters',
+            _searchQuery.isNotEmpty ? 'No Books Found' : 'No Matching Books',
+            _searchQuery.isNotEmpty ? 'Try a different search term' : 'Try adjusting your filters',
             Icons.search_off,
           );
         }
@@ -190,7 +243,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             Text('Error loading books: $error'),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => ref.refresh(booksProvider),
+              onPressed: () => ref.read(booksApiProvider.notifier).refresh(),
               child: const Text('Retry'),
             ),
           ],
@@ -513,7 +566,7 @@ class _AddBookBottomSheetState extends ConsumerState<_AddBookBottomSheet> {
             subtitle: const Text('Add from your device'),
             onTap: () {
               Navigator.pop(context);
-              _pickFile();
+              _showUploadDialog();
             },
           ),
 
@@ -524,6 +577,9 @@ class _AddBookBottomSheetState extends ConsumerState<_AddBookBottomSheet> {
             onTap: () {
               Navigator.pop(context);
               // TODO: Implement scanning
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scanning feature coming soon!')),
+              );
             },
           ),
 
@@ -534,6 +590,9 @@ class _AddBookBottomSheetState extends ConsumerState<_AddBookBottomSheet> {
             onTap: () {
               Navigator.pop(context);
               // TODO: Implement URL import
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('URL import feature coming soon!')),
+              );
             },
           ),
         ],
@@ -541,66 +600,323 @@ class _AddBookBottomSheetState extends ConsumerState<_AddBookBottomSheet> {
     );
   }
 
-  void _pickFile() async {
+  void _showUploadDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => _BookUploadDialog(),
+    );
+  }
+
+}
+
+/// Dialog for uploading books with metadata
+class _BookUploadDialog extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_BookUploadDialog> createState() => _BookUploadDialogState();
+}
+
+class _BookUploadDialogState extends ConsumerState<_BookUploadDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _authorController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _tagsController = TextEditingController();
+  
+  String _selectedSubject = 'General';
+  String _selectedGrade = '10';
+  PlatformFile? _selectedFile;
+  bool _isUploading = false;
+
+  final List<String> _subjects = [
+    'General',
+    'Mathematics',
+    'Science',
+    'English',
+    'History',
+    'Geography',
+    'Computer Science',
+    'Art',
+    'Music',
+  ];
+
+  final List<Map<String, String>> _grades = [
+    {'value': '1', 'display': 'Grade 1'},
+    {'value': '2', 'display': 'Grade 2'},
+    {'value': '3', 'display': 'Grade 3'},
+    {'value': '4', 'display': 'Grade 4'},
+    {'value': '5', 'display': 'Grade 5'},
+    {'value': '6', 'display': 'Grade 6'},
+    {'value': '7', 'display': 'Grade 7'},
+    {'value': '8', 'display': 'Grade 8'},
+    {'value': '9', 'display': 'Grade 9'},
+    {'value': '10', 'display': 'Grade 10'},
+    {'value': '11', 'display': 'Grade 11'},
+    {'value': '12', 'display': 'Grade 12'},
+    {'value': 'College', 'display': 'College'},
+  ];
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _authorController.dispose();
+    _descriptionController.dispose();
+    _tagsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Upload Book'),
+      content: SizedBox(
+        width: 400,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // File picker
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        _selectedFile != null ? Icons.description : Icons.upload_file,
+                        size: 48,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _selectedFile?.name ?? 'No file selected',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      ElevatedButton(
+                        onPressed: _pickFile,
+                        child: const Text('Choose File'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Title
+                TextFormField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Book Title *',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter a book title';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Author
+                TextFormField(
+                  controller: _authorController,
+                  decoration: const InputDecoration(
+                    labelText: 'Author',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Subject and Grade
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedSubject,
+                        decoration: const InputDecoration(
+                          labelText: 'Subject',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _subjects.map((subject) {
+                          return DropdownMenuItem(
+                            value: subject,
+                            child: Text(subject),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedSubject = value!;
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedGrade,
+                        decoration: const InputDecoration(
+                          labelText: 'Grade',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _grades.map((grade) {
+                          return DropdownMenuItem(
+                            value: grade['value'],
+                            child: Text(grade['display']!),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedGrade = value!;
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Description
+                TextFormField(
+                  controller: _descriptionController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+
+                // Tags
+                TextFormField(
+                  controller: _tagsController,
+                  decoration: const InputDecoration(
+                    labelText: 'Tags (comma-separated)',
+                    border: OutlineInputBorder(),
+                    hintText: 'physics, textbook, advanced',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isUploading ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isUploading ? null : _uploadBook,
+          child: _isUploading 
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Upload'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['pdf', 'epub'],
+      allowedExtensions: ['pdf', 'epub', 'txt', 'docx'],
     );
 
     if (result != null) {
-      final file = result.files.first;
-      if (file.bytes != null) {
-        await _uploadFile(file);
-      }
+      setState(() {
+        _selectedFile = result.files.first;
+        // Auto-fill title from filename if title is empty
+        if (_titleController.text.isEmpty) {
+          _titleController.text = result.files.first.name
+              .replaceAll(RegExp(r'\.[^.]+$'), '');
+        }
+      });
     }
   }
 
-  Future<void> _uploadFile(PlatformFile file) async {
-    try {
-      // For now, show a placeholder message since file upload requires desktop/mobile
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('File upload is not supported on web. Please use desktop or mobile app.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      
-      // TODO: Implement web file upload or redirect to desktop/mobile
-      // For testing purposes, we can create a mock book
-      final mockBook = BookModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-        author: 'Mock Author',
-        subject: 'General',
-        grade: 'General',
-        type: BookType.other,
-        filePath: 'mock_path/${file.name}',
-        totalPages: 100,
-        addedAt: DateTime.now(),
-        lastReadAt: DateTime.now(),
-        estimatedReadingTime: 120,
-        tags: const ['uploaded'],
-        metadata: const BookMetadata(
-          format: 'PDF',
-          language: 'en',
-          difficulty: DifficultyLevel.medium,
+  Future<void> _uploadBook() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_selectedFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a file to upload'),
+          backgroundColor: Colors.red,
         ),
       );
-      
-      await ref.read(booksProvider.notifier).addBook(mockBook);
-      
+      return;
+    }
+
+    final user = ref.read(authProvider);
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please log in to upload books'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isUploading = true;
+    });
+
+    try {
+      // Prepare metadata
+      final metadata = {
+        'title': _titleController.text.trim(),
+        'author': _authorController.text.trim().isEmpty 
+            ? 'Unknown Author' 
+            : _authorController.text.trim(),
+        'subject': _selectedSubject,
+        'grade': _selectedGrade,
+        'description': _descriptionController.text.trim().isEmpty 
+            ? null 
+            : _descriptionController.text.trim(),
+        'tags': _tagsController.text.trim(),
+      };
+
+      // Upload the book
+      await ref.read(booksApiProvider.notifier).uploadBookFromBytes(
+        _selectedFile!.bytes!,
+        _selectedFile!.name,
+        metadata,
+      );
+
       if (mounted) {
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Mock book "${mockBook.title}" added for testing!')),
+          SnackBar(
+            content: Text('Book "${_titleController.text}" uploaded successfully!'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
+          SnackBar(
+            content: Text('Upload failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
       }
     }
   }

@@ -44,10 +44,10 @@ class BookFilter extends StatelessWidget {
               labelText: 'Grade',
               prefixIcon: Icon(Icons.school),
             ),
-            items: _getGrades().map((grade) {
+            items: _getGrades().map((gradeEntry) {
               return DropdownMenuItem(
-                value: grade,
-                child: Text(grade),
+                value: gradeEntry['value'],
+                child: Text(gradeEntry['display']!),
               );
             }).toList(),
             onChanged: onGradeChanged,
@@ -70,21 +70,21 @@ class BookFilter extends StatelessWidget {
     ];
   }
 
-  List<String> _getGrades() {
+  List<Map<String, String>> _getGrades() {
     return [
-      'Grade 1',
-      'Grade 2',
-      'Grade 3',
-      'Grade 4',
-      'Grade 5',
-      'Grade 6',
-      'Grade 7',
-      'Grade 8',
-      'Grade 9',
-      'Grade 10',
-      'Grade 11',
-      'Grade 12',
-      'College',
+      {'value': '1', 'display': 'Grade 1'},
+      {'value': '2', 'display': 'Grade 2'},
+      {'value': '3', 'display': 'Grade 3'},
+      {'value': '4', 'display': 'Grade 4'},
+      {'value': '5', 'display': 'Grade 5'},
+      {'value': '6', 'display': 'Grade 6'},
+      {'value': '7', 'display': 'Grade 7'},
+      {'value': '8', 'display': 'Grade 8'},
+      {'value': '9', 'display': 'Grade 9'},
+      {'value': '10', 'display': 'Grade 10'},
+      {'value': '11', 'display': 'Grade 11'},
+      {'value': '12', 'display': 'Grade 12'},
+      {'value': 'College', 'display': 'College'},
     ];
   }
 }
