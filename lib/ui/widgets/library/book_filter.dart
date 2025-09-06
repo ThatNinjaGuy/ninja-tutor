@@ -59,6 +59,7 @@ class BookFilter extends StatelessWidget {
 
   List<String> _getSubjects() {
     return [
+      'All',
       'Mathematics',
       'Science',
       'English',
@@ -67,11 +68,13 @@ class BookFilter extends StatelessWidget {
       'Computer Science',
       'Art',
       'Music',
+      'General'
     ];
   }
 
   List<Map<String, String>> _getGrades() {
     return [
+      {'value': 'All', 'display': 'All'},
       {'value': '1', 'display': 'Grade 1'},
       {'value': '2', 'display': 'Grade 2'},
       {'value': '3', 'display': 'Grade 3'},
