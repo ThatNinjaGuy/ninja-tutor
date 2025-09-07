@@ -82,21 +82,14 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _showControls = !_showControls;
-          _showHint = false; // Hide hint when user taps
-        });
-      },
-      child: Container(
-        color: theme.colorScheme.surface,
-        child: Stack(
-          children: [
-            // Main content area
-            if (_isLoading)
-              _buildLoadingState(theme)
-            else if (_error != null)
+    return Container(
+      color: theme.colorScheme.surface,
+      child: Stack(
+        children: [
+          // Main content area
+          if (_isLoading)
+            _buildLoadingState(theme)
+          else if (_error != null)
               _buildErrorState(theme)
             else
               _buildPdfViewer(theme),
@@ -127,7 +120,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
               ),
           ],
         ),
-      ),
     );
   }
 
@@ -219,45 +211,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
             ),
           ),
           
-          // PDF controls overlay
-          Positioned(
-            top: 16,
-            left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    widget.book.title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => _openPdfInNewTab(),
-                        icon: const Icon(Icons.open_in_new, color: Colors.white, size: 20),
-                        tooltip: 'Open in new tab',
-                      ),
-                      IconButton(
-                        onPressed: () => _downloadPdf(),
-                        icon: const Icon(Icons.download, color: Colors.white, size: 20),
-                        tooltip: 'Download PDF',
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
           
           // Tap hint overlay (only show initially)
           if (!_showControls && _showHint)
@@ -309,104 +262,32 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     return Container(
       width: double.infinity,
       height: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+      color: Colors.white,
+      child: Stack(
+        children: [
+          // Full-screen PDF viewer
+          Positioned.fill(
+            child: HtmlElementView(viewType: viewType),
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Column(
-          children: [
-            // Header with book info and controls
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[800],
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
+          
+          // Loading overlay
+          if (_isLoading)
+            Positioned.fill(
+              child: Container(
+                color: Colors.white.withOpacity(0.9),
+                child: const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Loading PDF...'),
+                    ],
+                  ),
                 ),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.book.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          'by ${widget.book.author}',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => _openPdfInNewTab(),
-                    icon: const Icon(Icons.open_in_new, color: Colors.white),
-                    tooltip: 'Open in new tab',
-                  ),
-                  IconButton(
-                    onPressed: () => _downloadPdf(),
-                    icon: const Icon(Icons.download, color: Colors.white),
-                    tooltip: 'Download PDF',
-                  ),
-                ],
-              ),
             ),
-            
-            // Native PDF viewer embedded
-            Expanded(
-              child: Stack(
-                children: [
-                  // Embedded PDF iframe
-                  Positioned.fill(
-                    child: HtmlElementView(viewType: viewType),
-                  ),
-                  
-                  // Loading overlay
-                  if (_isLoading)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.white.withOpacity(0.9),
-                        child: const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 16),
-                              Text('Loading PDF...'),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -423,6 +304,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
             ..style.width = '100%'
             ..style.height = '100%'
             ..style.display = 'block'
+            ..style.pointerEvents = 'none' // Allow touch events to pass through
             ..allowFullscreen = true
             ..onLoad.listen((_) {
               // PDF loaded successfully
@@ -490,21 +372,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
 
-  void _openPdfInNewTab() {
-    final fullUrl = _getFullPdfUrl();
-    if (fullUrl != null) {
-      html.window.open(fullUrl, '_blank');
-    }
-  }
-
-  void _downloadPdf() {
-    final fullUrl = _getFullPdfUrl();
-    if (fullUrl != null) {
-      html.AnchorElement(href: fullUrl)
-        ..download = '${widget.book.title}.pdf'
-        ..click();
-    }
-  }
 
   String? _getFullPdfUrl() {
     if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {

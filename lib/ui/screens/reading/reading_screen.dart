@@ -7,7 +7,6 @@ import '../../../core/providers/user_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../models/content/book_model.dart';
 import '../../widgets/reading/reading_viewer.dart';
-import '../../widgets/reading/reading_controls.dart';
 import '../../widgets/common/ai_tip_card.dart';
 
 /// Interactive reading screen with contextual AI features
@@ -26,11 +25,11 @@ class ReadingScreen extends ConsumerStatefulWidget {
 class _ReadingScreenState extends ConsumerState<ReadingScreen> {
   bool _showAiPanel = false;
   String? _selectedText;
+  bool _isReadingMode = false;
 
   @override
   Widget build(BuildContext context) {
     final currentBook = ref.watch(currentBookProvider);
-    final userLibraryBooks = ref.watch(userLibraryBooksProvider);
     final user = ref.watch(authProvider);
 
     // Check if user is authenticated
@@ -38,61 +37,57 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
       return _buildLoginPrompt(context);
     }
 
-    if (widget.bookId != null) {
-      // Load specific book from user's library
-      BookModel? book;
-      if (userLibraryBooks.value != null) {
-        try {
-          final libraryData = userLibraryBooks.value!;
-          final bookData = libraryData.firstWhere((data) => data['book']['id'] == widget.bookId);
-          book = BookModel.fromJson(bookData['book']);
-        } catch (e) {
-          // Book not found in user's library
-          book = null;
-        }
-      }
-      
-      if (book != null) {
+    // If we have a current book and are in reading mode, show the reading interface directly
+    if (currentBook != null && _isReadingMode) {
+      return _buildReadingInterface(currentBook);
+    }
+
+    // Otherwise, show book selection screen
+    final userLibraryBooks = ref.watch(userLibraryBooksProvider);
+    
+    // Handle book loading from URL parameter only when needed
+    if (widget.bookId != null && userLibraryBooks.value != null) {
+      try {
+        final libraryData = userLibraryBooks.value!;
+        final bookData = libraryData.firstWhere((data) => data['book']['id'] == widget.bookId);
+        final book = BookModel.fromJson(bookData['book']);
+        
+        // Set the book once
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          ref.read(currentBookProvider.notifier).state = book;
+          if (mounted) {
+            ref.read(currentBookProvider.notifier).state = book;
+            setState(() {
+              _isReadingMode = true;
+            });
+          }
         });
+      } catch (e) {
+        // Book not found in user's library
       }
     }
 
-    if (currentBook == null) {
-      return _buildSelectBookScreen(context, userLibraryBooks);
-    }
+    return _buildSelectBookScreen(context, userLibraryBooks);
+  }
 
+  Widget _buildReadingInterface(BookModel book) {
     return Scaffold(
       body: Stack(
         children: [
-          // Main reading interface
-          SafeArea(
-            child: Column(
-              children: [
-                // Reading header
-                _buildReadingHeader(context, currentBook),
-                
-                // Content viewer
-                Expanded(
-                  child: ReadingViewer(
-                    book: currentBook,
-                    onTextSelected: _handleTextSelection,
-                    onDefinitionRequest: _handleDefinitionRequest,
-                  ),
-                ),
-                
-                // Reading controls
-                ReadingControls(
-                  book: currentBook,
-                  onAiTipToggle: () => setState(() {
-                    _showAiPanel = !_showAiPanel;
-                  }),
-                  onQuizStart: _startQuiz,
-                ),
-              ],
-            ),
+          // Full-screen reading interface
+          ReadingViewer(
+            book: book,
+            onTextSelected: _handleTextSelection,
+            onDefinitionRequest: _handleDefinitionRequest,
           ),
+          
+          // Floating reading controls (bottom) - now includes close button
+          Positioned(
+            bottom: 20,
+            left: 0,
+            right: 0,
+            child: _buildFloatingReadingControls(book),
+          ),
+          
           
           // AI contextual panel
           if (_showAiPanel)
@@ -190,6 +185,9 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
                   ),
                   onTap: () {
                     ref.read(currentBookProvider.notifier).state = book;
+                    setState(() {
+                      _isReadingMode = true;
+                    });
                   },
                 ),
               );
@@ -268,81 +266,6 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
     );
   }
 
-  Widget _buildReadingHeader(BuildContext context, book) {
-    final theme = Theme.of(context);
-    final progress = book.progress;
-    
-    return Container(
-      padding: const EdgeInsets.all(AppConstants.defaultPadding),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.2),
-          ),
-        ),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      book.title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      book.author,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              IconButton(
-                onPressed: () {
-                  ref.read(currentBookProvider.notifier).state = null;
-                },
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Progress bar
-          Row(
-            children: [
-              Expanded(
-                child: LinearProgressIndicator(
-                  value: book.progressPercentage,
-                  backgroundColor: theme.colorScheme.outline.withOpacity(0.2),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    theme.colorScheme.primary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              
-              Text(
-                '${progress?.currentPage ?? 1}/${book.totalPages}',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildAiPanel(BuildContext context) {
     return Positioned(
@@ -439,6 +362,146 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
     );
   }
 
+
+  Widget _buildFloatingReadingControls(BookModel book) {
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        elevation: 10, // Add elevation to ensure it's on top
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3), // Stronger shadow
+                blurRadius: 20,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // Close button - first in the menu with distinct styling
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isReadingMode = false;
+                  });
+                },
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: const Icon(
+                    Icons.close,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 20),
+              _buildFloatingControlButton(
+                icon: Icons.psychology,
+                label: 'AI Tips',
+                isActive: _showAiPanel,
+                onPressed: () {
+                  setState(() {
+                    _showAiPanel = !_showAiPanel;
+                  });
+                },
+              ),
+              const SizedBox(width: 20),
+              _buildFloatingControlButton(
+                icon: Icons.quiz,
+                label: 'Quiz',
+                onPressed: () {
+                  _startQuiz();
+                },
+              ),
+              const SizedBox(width: 20),
+              _buildFloatingControlButton(
+                icon: Icons.bookmark_add,
+                label: 'Bookmark',
+                onPressed: () {
+                  _addBookmark();
+                },
+              ),
+              const SizedBox(width: 20),
+              _buildFloatingControlButton(
+                icon: Icons.highlight,
+                label: 'Highlight',
+                onPressed: () {
+                  _toggleHighlight();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingControlButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    bool isActive = false,
+    bool isCloseButton = false,
+  }) {
+    final theme = Theme.of(context);
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: onPressed,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: isCloseButton
+                    ? Colors.red.withOpacity(0.9)
+                    : isActive 
+                        ? theme.colorScheme.primary 
+                        : theme.colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(
+                icon, 
+                size: 22,
+                color: isCloseButton
+                    ? Colors.white
+                    : isActive 
+                        ? Colors.white 
+                        : theme.colorScheme.primary,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: isCloseButton ? Colors.red : null,
+          ),
+        ),
+      ],
+    );
+  }
+
   void _handleTextSelection(String text, Offset position) {
     setState(() {
       _selectedText = text;
@@ -457,6 +520,20 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
     // TODO: Navigate to quiz based on current reading position
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Starting quiz for current content')),
+    );
+  }
+
+  void _addBookmark() {
+    // TODO: Add bookmark functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Bookmark added')),
+    );
+  }
+
+  void _toggleHighlight() {
+    // TODO: Toggle highlight mode
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Highlight mode toggled')),
     );
   }
 }

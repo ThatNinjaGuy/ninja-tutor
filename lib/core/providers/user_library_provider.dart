@@ -135,17 +135,19 @@ final userLibraryBooksProvider = FutureProvider.autoDispose<List<Map<String, dyn
   final apiService = ref.watch(apiServiceProvider);
   final authState = ref.watch(authProvider);
   
-  // Watch the userLibraryProvider to invalidate when library changes
-  ref.watch(userLibraryProvider);
+  // Only watch if we need to invalidate, not on every rebuild
+  final userLibraryState = ref.watch(userLibraryProvider);
+  final isUserLibraryLoaded = userLibraryState.maybeWhen(
+    data: (_) => true,
+    orElse: () => false,
+  );
   
-  if (authState?.token == null) {
+  if (authState?.token == null || !isUserLibraryLoaded) {
     return [];
   }
 
   // Set the auth token if available
-  if (authState?.token != null) {
-    apiService.setAuthToken(authState!.token!);
-  }
+  apiService.setAuthToken(authState!.token!);
   
   try {
     final libraryData = await apiService.getUserLibrary();
