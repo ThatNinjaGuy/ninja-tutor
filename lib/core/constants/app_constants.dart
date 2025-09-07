@@ -5,7 +5,7 @@ class AppConstants {
   static const String appVersion = '1.0.0';
   
   // API Configuration
-  static const String baseUrl = 'https://1e6ee738dec9.ngrok-free.app';
+  static const String baseUrl = 'https://6f939ee81272.ngrok-free.app';
   static const String apiVersion = 'api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
   

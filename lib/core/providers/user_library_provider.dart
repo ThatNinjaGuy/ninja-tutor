@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/api/api_service.dart';
 import 'auth_provider.dart';
@@ -102,6 +103,27 @@ class UserLibraryNotifier extends StateNotifier<AsyncValue<Set<String>>> {
     );
   }
 
+  /// Update reading progress for a book
+  Future<void> updateReadingProgress({
+    required String bookId,
+    required int currentPage,
+    required double progressPercentage,
+  }) async {
+    if (_authToken == null) return;
+
+    try {
+      await _apiService.updateReadingProgress(
+        bookId: bookId,
+        currentPage: currentPage,
+        totalPages: null, // Will be calculated on backend
+        readingStatus: progressPercentage >= 1.0 ? 'completed' : 'in_progress',
+      );
+    } catch (e) {
+      // Handle error silently for now
+      // In a real app, you might want to show a snackbar or retry
+    }
+  }
+
   /// Refresh library data
   Future<void> refresh() async {
     await _loadUserLibrary();
@@ -109,18 +131,28 @@ class UserLibraryNotifier extends StateNotifier<AsyncValue<Set<String>>> {
 }
 
 /// Provider for getting user's library books with full details
-final userLibraryBooksProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final userLibraryBooksProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final apiService = ref.watch(apiServiceProvider);
   final authState = ref.watch(authProvider);
   
   // Watch the userLibraryProvider to invalidate when library changes
   ref.watch(userLibraryProvider);
   
-  if (authState?.token == null) return [];
+  if (authState?.token == null) {
+    return [];
+  }
+
+  // Set the auth token if available
+  if (authState?.token != null) {
+    apiService.setAuthToken(authState!.token!);
+  }
   
   try {
-    return await apiService.getUserLibrary();
+    final libraryData = await apiService.getUserLibrary();
+    return libraryData;
   } catch (e) {
+    // Log the error for debugging
+    debugPrint('Error loading user library: $e');
     return [];
   }
 });

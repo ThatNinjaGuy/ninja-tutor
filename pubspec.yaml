@@ -39,8 +39,8 @@ dependencies:
   file_picker: ^6.1.1
   path: ^1.8.3
 
-  # PDF & Documents (syncfusion removed due to intl version conflicts)
-  # Can be added later with proper version resolution
+  # PDF & Documents
+  url_launcher: ^6.2.2
 
   # Internationalization
   flutter_localizations:
