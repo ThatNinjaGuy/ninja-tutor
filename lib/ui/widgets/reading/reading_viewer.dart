@@ -304,7 +304,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
             ..style.width = '100%'
             ..style.height = '100%'
             ..style.display = 'block'
-            ..style.pointerEvents = 'none' // Allow touch events to pass through
+            ..style.pointerEvents = 'auto' // Allow PDF scrolling
             ..allowFullscreen = true
             ..onLoad.listen((_) {
               // PDF loaded successfully

@@ -73,23 +73,38 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Full-screen reading interface
-          ReadingViewer(
-            book: book,
-            onTextSelected: _handleTextSelection,
-            onDefinitionRequest: _handleDefinitionRequest,
+          // Main content in column layout
+          Column(
+            children: [
+              // PDF viewer takes most of the space
+              Expanded(
+                child: ReadingViewer(
+                  book: book,
+                  onTextSelected: _handleTextSelection,
+                  onDefinitionRequest: _handleDefinitionRequest,
+                ),
+              ),
+              
+              // Controls below the PDF
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: _buildReadingControls(book),
+              ),
+            ],
           ),
           
-          // Floating reading controls (bottom) - now includes close button
-          Positioned(
-            bottom: 20,
-            left: 0,
-            right: 0,
-            child: _buildFloatingReadingControls(book),
-          ),
-          
-          
-          // AI contextual panel
+          // AI contextual panel overlay
           if (_showAiPanel)
             _buildAiPanel(context),
         ],
@@ -363,93 +378,72 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
   }
 
 
-  Widget _buildFloatingReadingControls(BookModel book) {
+  Widget _buildReadingControls(BookModel book) {
     return Center(
-      child: Material(
-        color: Colors.transparent,
-        elevation: 10, // Add elevation to ensure it's on top
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(30),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3), // Stronger shadow
-                blurRadius: 20,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              // Close button - first in the menu with distinct styling
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isReadingMode = false;
-                  });
-                },
-                child: Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: const Icon(
-                    Icons.close,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 20),
-              _buildFloatingControlButton(
-                icon: Icons.psychology,
-                label: 'AI Tips',
-                isActive: _showAiPanel,
-                onPressed: () {
-                  setState(() {
-                    _showAiPanel = !_showAiPanel;
-                  });
-                },
-              ),
-              const SizedBox(width: 20),
-              _buildFloatingControlButton(
-                icon: Icons.quiz,
-                label: 'Quiz',
-                onPressed: () {
-                  _startQuiz();
-                },
-              ),
-              const SizedBox(width: 20),
-              _buildFloatingControlButton(
-                icon: Icons.bookmark_add,
-                label: 'Bookmark',
-                onPressed: () {
-                  _addBookmark();
-                },
-              ),
-              const SizedBox(width: 20),
-              _buildFloatingControlButton(
-                icon: Icons.highlight,
-                label: 'Highlight',
-                onPressed: () {
-                  _toggleHighlight();
-                },
-              ),
-            ],
-          ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            // Close button - first in the menu
+            _buildControlButton(
+              icon: Icons.close,
+              label: 'Close',
+              isCloseButton: true,
+              onPressed: () {
+                setState(() {
+                  _isReadingMode = false;
+                });
+              },
+            ),
+            const SizedBox(width: 12),
+            _buildControlButton(
+              icon: Icons.psychology,
+              label: 'AI Tips',
+              isActive: _showAiPanel,
+              onPressed: () {
+                setState(() {
+                  _showAiPanel = !_showAiPanel;
+                });
+              },
+            ),
+            const SizedBox(width: 12),
+            _buildControlButton(
+              icon: Icons.quiz,
+              label: 'Quiz',
+              onPressed: () {
+                _startQuiz();
+              },
+            ),
+            const SizedBox(width: 12),
+            _buildControlButton(
+              icon: Icons.bookmark_add,
+              label: 'Bookmark',
+              onPressed: () {
+                _addBookmark();
+              },
+            ),
+            const SizedBox(width: 12),
+            _buildControlButton(
+              icon: Icons.highlight,
+              label: 'Highlight',
+              onPressed: () {
+                _toggleHighlight();
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildFloatingControlButton({
+  Widget _buildControlButton({
     required IconData icon,
     required String label,
     required VoidCallback onPressed,
@@ -464,18 +458,18 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
         Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(18),
             onTap: onPressed,
             child: Container(
-              width: 40,
-              height: 40,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: isCloseButton
                     ? Colors.red.withOpacity(0.9)
                     : isActive 
                         ? theme.colorScheme.primary 
                         : theme.colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(18),
               ),
               child: Icon(
                 icon, 
