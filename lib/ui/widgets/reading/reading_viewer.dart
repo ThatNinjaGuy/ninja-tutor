@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:html' as html;
+import 'dart:ui_web' as ui_web;
 
 import '../../../models/content/book_model.dart';
 import '../../../core/providers/user_library_provider.dart';
+import '../../../core/constants/app_constants.dart';
 import 'reading_controls_panel.dart';
 
 /// Main reading viewer widget for displaying book content
@@ -285,115 +287,165 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   Widget _buildWebPdfViewer() {
-    // For web platform, we'll show options to open the PDF externally
-    // This avoids complex iframe embedding issues and provides a better user experience
+    // For web platform, embed the PDF directly using iframe with PDF.js
     if (widget.book.fileUrl != null && widget.book.fileUrl!.isNotEmpty) {
-      return _buildPdfViewerInterface();
+      return _buildEmbeddedPdfViewer();
     } else {
       // Fallback content when no PDF URL is available
       return _buildFallbackContent();
     }
   }
 
-  Widget _buildPdfViewerInterface() {
+  Widget _buildEmbeddedPdfViewer() {
+    final fullUrl = _getFullPdfUrl();
+    if (fullUrl == null) return _buildFallbackContent();
+
+    // Create unique view type for this PDF
+    final viewType = 'pdf-viewer-${widget.book.id}';
+    
+    // Register the platform view factory for PDF iframe
+    _registerPdfViewFactory(viewType, fullUrl);
+
     return Container(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.picture_as_pdf,
-            size: 80,
-            color: Colors.red[400],
-          ),
-          const SizedBox(height: 24),
-          Text(
-            widget.book.title,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'by ${widget.book.author}',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-          const SizedBox(height: 32),
-          Text(
-            'PDF Ready to Read',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Click below to open the PDF in a new tab for the best reading experience with full browser PDF features.',
-            style: TextStyle(
-              color: Colors.grey[600],
-              height: 1.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton.icon(
-                onPressed: () => _openPdfInNewTab(),
-                icon: const Icon(Icons.open_in_new),
-                label: const Text('Open PDF'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-              ),
-              const SizedBox(width: 16),
-              OutlinedButton.icon(
-                onPressed: () => _downloadPdf(),
-                icon: const Icon(Icons.download),
-                label: const Text('Download'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue[200]!),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.blue[600], size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'This will open the PDF in your browser\'s built-in PDF viewer with features like zoom, search, and bookmarks.',
-                    style: TextStyle(
-                      color: Colors.blue[800],
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Column(
+          children: [
+            // Header with book info and controls
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[800],
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.book.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'by ${widget.book.author}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => _openPdfInNewTab(),
+                    icon: const Icon(Icons.open_in_new, color: Colors.white),
+                    tooltip: 'Open in new tab',
+                  ),
+                  IconButton(
+                    onPressed: () => _downloadPdf(),
+                    icon: const Icon(Icons.download, color: Colors.white),
+                    tooltip: 'Download PDF',
+                  ),
+                ],
+              ),
+            ),
+            
+            // Native PDF viewer embedded
+            Expanded(
+              child: Stack(
+                children: [
+                  // Embedded PDF iframe
+                  Positioned.fill(
+                    child: HtmlElementView(viewType: viewType),
+                  ),
+                  
+                  // Loading overlay
+                  if (_isLoading)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.white.withOpacity(0.9),
+                        child: const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text('Loading PDF...'),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
+
+  void _registerPdfViewFactory(String viewType, String pdfUrl) {
+    // Register the view factory if not already registered
+    try {
+      ui_web.platformViewRegistry.registerViewFactory(
+        viewType,
+        (int viewId) {
+          final iframe = html.IFrameElement()
+            ..src = pdfUrl
+            ..style.border = 'none'
+            ..style.width = '100%'
+            ..style.height = '100%'
+            ..style.display = 'block'
+            ..allowFullscreen = true
+            ..onLoad.listen((_) {
+              // PDF loaded successfully
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                });
+              }
+            });
+          
+          return iframe;
+        },
+      );
+    } catch (e) {
+      // View factory might already be registered, that's fine
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+
+
 
   Widget _buildFallbackContent() {
     return Container(
@@ -439,17 +491,39 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
 
 
   void _openPdfInNewTab() {
-    if (widget.book.fileUrl != null && widget.book.fileUrl!.isNotEmpty) {
-      html.window.open(widget.book.fileUrl!, '_blank');
+    final fullUrl = _getFullPdfUrl();
+    if (fullUrl != null) {
+      html.window.open(fullUrl, '_blank');
     }
   }
 
   void _downloadPdf() {
-    if (widget.book.fileUrl != null && widget.book.fileUrl!.isNotEmpty) {
-      html.AnchorElement(href: widget.book.fileUrl!)
+    final fullUrl = _getFullPdfUrl();
+    if (fullUrl != null) {
+      html.AnchorElement(href: fullUrl)
         ..download = '${widget.book.title}.pdf'
         ..click();
     }
+  }
+
+  String? _getFullPdfUrl() {
+    if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
+      return null;
+    }
+
+    final fileUrl = widget.book.fileUrl!;
+    
+    // If it's already a full URL (Firebase Storage), return as-is
+    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+      return fileUrl;
+    }
+    
+    // If it's a local relative URL, prefix with backend base URL
+    if (fileUrl.startsWith('/uploads/')) {
+      return '${AppConstants.baseUrl}$fileUrl';
+    }
+    
+    return fileUrl;
   }
 
 
