@@ -403,6 +403,74 @@ class ApiService {
       throw ApiException.fromDioError(e);
     }
   }
+
+  // User Library Management Methods
+
+  /// Add a book to user's personal library
+  Future<Map<String, dynamic>> addBookToLibrary(String bookId) async {
+    try {
+      final response = await _dio.post('/library/add-book', data: {'book_id': bookId});
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Remove a book from user's personal library
+  Future<Map<String, dynamic>> removeBookFromLibrary(String bookId) async {
+    try {
+      final response = await _dio.delete('/library/remove-book/$bookId');
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get user's personal library with reading progress
+  Future<List<Map<String, dynamic>>> getUserLibrary({String? status}) async {
+    try {
+      final queryParams = status != null ? {'status': status} : <String, dynamic>{};
+      final response = await _dio.get('/library/my-books', queryParameters: queryParams);
+      return List<Map<String, dynamic>>.from(response.data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Update reading progress for a book
+  Future<Map<String, dynamic>> updateReadingProgress({
+    required String bookId,
+    required int currentPage,
+    int? totalPages,
+    String? readingStatus,
+    String? notes,
+  }) async {
+    try {
+      final data = <String, dynamic>{
+        'book_id': bookId,
+        'current_page': currentPage,
+      };
+      
+      if (totalPages != null) data['total_pages'] = totalPages;
+      if (readingStatus != null) data['reading_status'] = readingStatus;
+      if (notes != null) data['notes'] = notes;
+
+      final response = await _dio.put('/library/update-progress', data: data);
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Check if a book is in user's library
+  Future<Map<String, dynamic>> checkBookInLibrary(String bookId) async {
+    try {
+      final response = await _dio.get('/library/check-book/$bookId');
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
 }
 
 /// Authentication interceptor

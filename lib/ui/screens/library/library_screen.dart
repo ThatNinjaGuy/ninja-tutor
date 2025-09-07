@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/books_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/user_library_provider.dart';
 import '../../../models/content/book_model.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/library/book_filter.dart';
@@ -57,8 +58,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildBooksGrid(_searchQuery.isNotEmpty ? searchResults : books),
-                _buildSubjectsView(_searchQuery.isNotEmpty ? searchResults : books),
+                _buildMyBooksGrid(),
+                _buildExploreBooksGrid(_searchQuery.isNotEmpty ? searchResults : books),
               ],
             ),
           ),
@@ -92,7 +93,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
         controller: _tabController,
         tabs: const [
           Tab(text: 'My Books'),
-          Tab(text: 'Subjects'),
+          Tab(text: 'Explore Books'),
         ],
       ),
     );
@@ -141,17 +142,86 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
     );
   }
 
-  Widget _buildBooksGrid(AsyncValue<List<BookModel>> booksAsync) {
+  /// Build My Books tab - shows only user's personal library with search and filters
+  Widget _buildMyBooksGrid() {
+    return Consumer(
+      builder: (context, ref, child) {
+        final userLibraryBooks = ref.watch(userLibraryBooksProvider);
+        
+        return userLibraryBooks.when(
+          data: (libraryData) {
+            if (libraryData.isEmpty) {
+              return const LibraryEmptyState(
+                icon: Icons.library_books_outlined,
+                title: 'No Books in Your Library',
+                subtitle: 'Add books from the Explore tab to start your reading journey!',
+                onAddBook: null, // No add button on My Books tab
+              );
+            }
+
+            // Convert library data to BookModel objects
+            final allBooks = libraryData.map((data) {
+              final bookData = data['book'] as Map<String, dynamic>;
+              return BookModel.fromJson(bookData);
+            }).toList();
+
+            // Apply search and filters to user's library books
+            final filteredBooks = _applyFiltersAndSearch(allBooks);
+
+        if (filteredBooks.isEmpty) {
+              return LibraryEmptyState(
+                icon: _searchQuery.isNotEmpty ? Icons.search_off : Icons.filter_list_off,
+                title: _searchQuery.isNotEmpty ? 'No Books Found' : 'No Books Match Filters',
+                subtitle: _searchQuery.isNotEmpty 
+                    ? 'Try a different search term in your library'
+                    : 'Try adjusting your filters to see more books',
+                onAddBook: null,
+          );
+        }
+
+        return GridView.builder(
+          padding: const EdgeInsets.all(AppConstants.defaultPadding),
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: _getMaxCardWidth(context),
+                childAspectRatio: _getChildAspectRatio(context),
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+          ),
+          itemCount: filteredBooks.length,
+          itemBuilder: (context, index) {
+            final book = filteredBooks[index];
+                
+            return BookCard(
+              book: book,
+                  layout: BookCardLayout.grid,
+                  showAddToLibrary: true,
+                  isInLibrary: true, // Always true in My Books tab
+              onTap: () => _openBook(book),
+              onLongPress: () => _showBookOptions(book),
+                  onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) => _buildErrorState(error),
+        );
+      },
+    );
+  }
+
+  /// Build Explore Books tab - shows all available books with add functionality
+  Widget _buildExploreBooksGrid(AsyncValue<List<BookModel>> booksAsync) {
     return booksAsync.when(
       data: (books) {
         if (books.isEmpty) {
           return LibraryEmptyState(
-            icon: _searchQuery.isNotEmpty ? Icons.search_off : Icons.library_books_outlined,
-            title: _searchQuery.isNotEmpty ? 'No Books Found' : 'No Books in Library',
-            subtitle: _searchQuery.isNotEmpty 
-                ? 'Try a different search term' 
-                : 'Add your first book to get started!',
-            onAddBook: _searchQuery.isEmpty ? _showAddBookOptions : null,
+            icon: Icons.explore_outlined,
+            title: _searchQuery.isEmpty ? 'No Books Available' : 'No books found',
+            subtitle: _searchQuery.isEmpty 
+                ? 'Check back later for new books!'
+                : 'Try adjusting your search or filters',
+            onAddBook: null,
           );
         }
 
@@ -164,44 +234,28 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
             mainAxisSpacing: 16,
           ),
           itemCount: books.length,
-          itemBuilder: (context, index) => BookCard(
-            book: books[index],
-            layout: BookCardLayout.grid,
-            onTap: () => _openBook(books[index]),
-            onLongPress: () => _showBookOptions(books[index]),
-          ),
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) => _buildErrorState(error),
-    );
-  }
-
-  Widget _buildSubjectsView(AsyncValue<List<BookModel>> booksAsync) {
-    return booksAsync.when(
-      data: (books) {
-        if (books.isEmpty) {
-          return LibraryEmptyState(
-            icon: Icons.category_outlined,
-            title: 'No Subjects Available',
-            subtitle: 'Add books to see them organized by subject',
-            onAddBook: _showAddBookOptions,
-          );
-        }
-
-        final subjectMap = <String, List<BookModel>>{};
-        for (final book in books) {
-          subjectMap.putIfAbsent(book.subject, () => []).add(book);
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(AppConstants.defaultPadding),
-          itemCount: subjectMap.length,
           itemBuilder: (context, index) {
-            final subject = subjectMap.keys.elementAt(index);
-            final subjectBooks = subjectMap[subject]!;
-
-            return _buildSubjectCard(subject, subjectBooks);
+            return Consumer(
+              builder: (context, ref, child) {
+                final book = books[index];
+                final userLibrary = ref.watch(userLibraryProvider);
+                final isInLibrary = userLibrary.maybeWhen(
+                  data: (libraryBooks) => libraryBooks.contains(book.id),
+                  orElse: () => false,
+                );
+                
+                return BookCard(
+                  book: book,
+                  layout: BookCardLayout.grid,
+                  showAddToLibrary: true,
+                  isInLibrary: isInLibrary,
+                onTap: () => _openBook(book),
+                  onLongPress: () => _showBookOptions(book),
+                  onAddToLibrary: () => _addBookToLibrary(book.id),
+                  onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+                );
+              },
+            );
           },
         );
       },
@@ -211,39 +265,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
   }
 
 
-  Widget _buildSubjectCard(String subject, List<BookModel> books) {
-            return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: _getSubjectColor(subject).withOpacity(0.1),
-          child: Icon(_getSubjectIcon(subject), color: _getSubjectColor(subject)),
-        ),
-        title: Text(subject, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('${books.length} books'),
-                  children: [
-          SizedBox(
-            height: 280, // Further increased height to prevent overflow with larger cards
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.all(16),
-              itemCount: books.length,
-              itemBuilder: (context, index) => Container(
-                width: _getSubjectCardWidth(context), // Responsive width
-                margin: const EdgeInsets.only(right: 16),
-                child: BookCard(
-                  book: books[index],
-                  layout: BookCardLayout.grid,
-                  onTap: () => _openBook(books[index]),
-                  onLongPress: () => _showBookOptions(books[index]),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
 
   Widget _buildErrorState(Object error) {
@@ -301,6 +322,78 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
     );
   }
 
+  /// Add book to user's personal library
+  Future<void> _addBookToLibrary(String bookId) async {
+    final success = await ref.read(userLibraryProvider.notifier).addBookToLibrary(bookId);
+    
+    // Refresh the library books provider to show immediate changes
+    if (success) {
+      ref.invalidate(userLibraryBooksProvider);
+    }
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Book added to your library!' : 'Failed to add book'),
+          backgroundColor: success ? Colors.green : Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// Remove book from user's personal library
+  Future<void> _removeBookFromLibrary(String bookId) async {
+    final success = await ref.read(userLibraryProvider.notifier).removeBookFromLibrary(bookId);
+    
+    // Refresh the library books provider to show immediate changes
+    if (success) {
+      ref.invalidate(userLibraryBooksProvider);
+    }
+    
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Book removed from your library!' : 'Failed to remove book'),
+          backgroundColor: success ? Colors.orange : Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// Apply search query and filters to a list of books
+  List<BookModel> _applyFiltersAndSearch(List<BookModel> books) {
+    List<BookModel> filteredBooks = books;
+
+    // Apply search query
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      filteredBooks = filteredBooks.where((book) {
+        return book.title.toLowerCase().contains(query) ||
+               book.author.toLowerCase().contains(query) ||
+               book.subject.toLowerCase().contains(query) ||
+               (book.description?.toLowerCase().contains(query) ?? false);
+      }).toList();
+    }
+
+    // Apply subject filter
+    if (_selectedSubject != null && _selectedSubject != 'All') {
+      filteredBooks = filteredBooks.where((book) {
+        return book.subject == _selectedSubject;
+      }).toList();
+    }
+
+    // Apply grade filter
+    if (_selectedGrade != null && _selectedGrade != 'All') {
+      filteredBooks = filteredBooks.where((book) {
+        return book.grade == _selectedGrade;
+      }).toList();
+    }
+
+    return filteredBooks;
+  }
+
   // Utility methods for responsive card sizing
   double _getMaxCardWidth(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -334,40 +427,5 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
     }
   }
 
-  double _getSubjectCardWidth(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    
-    // Width for horizontal cards in subject sections (increased for better content fit)
-    if (screenWidth >= AppConstants.desktopBreakpoint) {
-      // Desktop: larger cards for better readability (increased)
-      return 220.0;
-    } else if (screenWidth >= AppConstants.tabletBreakpoint) {
-      // Tablet: medium-sized cards (increased)
-      return 200.0;
-    } else {
-      // Mobile: adequate size for horizontal scroll (increased)
-      return 180.0;
-    }
-  }
-
-  Color _getSubjectColor(String subject) {
-    switch (subject.toLowerCase()) {
-      case 'mathematics': case 'math': return Colors.blue;
-      case 'science': case 'biology': case 'chemistry': case 'physics': return Colors.green;
-      case 'english': case 'literature': return Colors.purple;
-      case 'history': case 'social studies': return Colors.orange;
-      default: return Colors.grey;
-    }
-  }
-
-  IconData _getSubjectIcon(String subject) {
-    switch (subject.toLowerCase()) {
-      case 'mathematics': case 'math': return Icons.calculate;
-      case 'science': case 'biology': case 'chemistry': case 'physics': return Icons.science;
-      case 'english': case 'literature': return Icons.translate;
-      case 'history': case 'social studies': return Icons.public;
-      default: return Icons.book;
-    }
-  }
 
 }

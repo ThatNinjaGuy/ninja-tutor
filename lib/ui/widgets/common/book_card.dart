@@ -23,6 +23,10 @@ class BookCard extends StatelessWidget {
     this.onLongPress,
     this.showProgress = true,
     this.layout = BookCardLayout.full,
+    this.showAddToLibrary = false,
+    this.isInLibrary = false,
+    this.onAddToLibrary,
+    this.onRemoveFromLibrary,
   });
 
   final BookModel book;
@@ -30,6 +34,10 @@ class BookCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final bool showProgress;
   final BookCardLayout layout;
+  final bool showAddToLibrary;
+  final bool isInLibrary;
+  final VoidCallback? onAddToLibrary;
+  final VoidCallback? onRemoveFromLibrary;
 
   @override
   Widget build(BuildContext context) {
@@ -468,21 +476,68 @@ class BookCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   
-                  // Progress percentage
-                  Text(
-                    '${(book.progressPercentage * 100).toInt()}%',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11,
+                  // Progress percentage or Add to Library button
+                  if (showAddToLibrary)
+                    _buildLibraryButton(theme)
+                  else
+                    Text(
+                      '${(book.progressPercentage * 100).toInt()}%',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  /// Build library action button (Add/Remove)
+  Widget _buildLibraryButton(ThemeData theme) {
+    return SizedBox(
+      width: double.infinity,
+      height: 28,
+      child: ElevatedButton(
+        onPressed: isInLibrary ? onRemoveFromLibrary : onAddToLibrary,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isInLibrary 
+              ? theme.colorScheme.error.withOpacity(0.1)
+              : theme.colorScheme.primary.withOpacity(0.1),
+          foregroundColor: isInLibrary 
+              ? theme.colorScheme.error
+              : theme.colorScheme.primary,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isInLibrary ? Icons.remove_circle_outline : Icons.add_circle_outline,
+              size: 14,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                isInLibrary ? 'Remove' : 'Add',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
