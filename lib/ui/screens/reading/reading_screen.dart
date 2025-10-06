@@ -71,8 +71,41 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Main content in column layout
-          Column(
+          // Main content with responsive layout
+          _buildResponsiveLayout(book),
+          
+          // AI contextual panel overlay
+          if (_showAiPanel)
+            _buildAiPanel(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResponsiveLayout(BookModel book) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWideScreen = constraints.maxWidth > 800; // Desktop/tablet landscape
+        
+        if (isWideScreen) {
+          // Wide screen: helper panel on the right side
+          return Row(
+            children: [
+              // PDF viewer takes most space
+              Expanded(
+                child: ReadingViewer(
+                  book: book,
+                  onTextSelected: _handleTextSelection,
+                  onDefinitionRequest: _handleDefinitionRequest,
+                ),
+              ),
+              // Vertical helper panel on the right
+              _buildVerticalHelperPanel(book),
+            ],
+          );
+        } else {
+          // Narrow screen: helper panel at the bottom
+          return Column(
             children: [
               // PDF viewer takes most of the space
               Expanded(
@@ -82,30 +115,140 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
                   onDefinitionRequest: _handleDefinitionRequest,
                 ),
               ),
-              
-              // Controls below the PDF
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
-                ),
-                child: _buildReadingControls(book),
-              ),
+              // Horizontal helper panel at the bottom
+              _buildHorizontalHelperPanel(book),
             ],
+          );
+        }
+      },
+    );
+  }
+
+  /// Vertical helper panel for wide screens (right side)
+  Widget _buildVerticalHelperPanel(BookModel book) {
+    return Container(
+      width: 60, // Thin vertical panel
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border(left: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildCompactControlButton(
+            icon: Icons.close,
+            tooltip: 'Close',
+            isCloseButton: true,
+            onPressed: () => setState(() => _isReadingMode = false),
           ),
-          
-          // AI contextual panel overlay
-          if (_showAiPanel)
-            _buildAiPanel(context),
+          const SizedBox(height: 16),
+          _buildCompactControlButton(
+            icon: Icons.psychology,
+            tooltip: 'AI Tips',
+            isActive: _showAiPanel,
+            onPressed: () => setState(() => _showAiPanel = !_showAiPanel),
+          ),
+          const SizedBox(height: 16),
+          _buildCompactControlButton(
+            icon: Icons.quiz,
+            tooltip: 'Quiz',
+            onPressed: _startQuiz,
+          ),
+          const SizedBox(height: 16),
+          _buildCompactControlButton(
+            icon: Icons.bookmark_add,
+            tooltip: 'Bookmark',
+            onPressed: _addBookmark,
+          ),
+          const SizedBox(height: 16),
+          _buildCompactControlButton(
+            icon: Icons.highlight,
+            tooltip: 'Highlight',
+            onPressed: _toggleHighlight,
+          ),
         ],
+      ),
+    );
+  }
+
+  /// Horizontal helper panel for narrow screens (bottom)
+  Widget _buildHorizontalHelperPanel(BookModel book) {
+    return Container(
+      height: 60, // Thin horizontal panel
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildCompactControlButton(
+            icon: Icons.close,
+            tooltip: 'Close',
+            isCloseButton: true,
+            onPressed: () => setState(() => _isReadingMode = false),
+          ),
+          _buildCompactControlButton(
+            icon: Icons.psychology,
+            tooltip: 'AI Tips',
+            isActive: _showAiPanel,
+            onPressed: () => setState(() => _showAiPanel = !_showAiPanel),
+          ),
+          _buildCompactControlButton(
+            icon: Icons.quiz,
+            tooltip: 'Quiz',
+            onPressed: _startQuiz,
+          ),
+          _buildCompactControlButton(
+            icon: Icons.bookmark_add,
+            tooltip: 'Bookmark',
+            onPressed: _addBookmark,
+          ),
+          _buildCompactControlButton(
+            icon: Icons.highlight,
+            tooltip: 'Highlight',
+            onPressed: _toggleHighlight,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Compact control button with only icons (no labels)
+  Widget _buildCompactControlButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool isActive = false,
+    bool isCloseButton = false,
+    String? tooltip,
+  }) {
+    final theme = Theme.of(context);
+    final color = isCloseButton ? Colors.red : theme.colorScheme.primary;
+    final backgroundColor = isCloseButton 
+        ? Colors.red.withOpacity(0.9)
+        : isActive ? color : color.withOpacity(0.1);
+    
+    return Tooltip(
+      message: tooltip ?? '',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onPressed,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(
+              icon, 
+              size: 20,
+              color: isCloseButton || isActive ? Colors.white : color,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -323,99 +466,6 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
           ),
         ),
       ),
-    );
-  }
-
-
-  Widget _buildReadingControls(BookModel book) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        border: Border(top: BorderSide(color: Colors.grey.shade300)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildControlButton(
-            icon: Icons.close,
-            label: 'Close',
-            isCloseButton: true,
-            onPressed: () => setState(() => _isReadingMode = false),
-          ),
-          _buildControlButton(
-            icon: Icons.psychology,
-            label: 'AI Tips',
-            isActive: _showAiPanel,
-            onPressed: () => setState(() => _showAiPanel = !_showAiPanel),
-          ),
-          _buildControlButton(
-            icon: Icons.quiz,
-            label: 'Quiz',
-            onPressed: _startQuiz,
-          ),
-          _buildControlButton(
-            icon: Icons.bookmark_add,
-            label: 'Bookmark',
-            onPressed: _addBookmark,
-          ),
-          _buildControlButton(
-            icon: Icons.highlight,
-            label: 'Highlight',
-            onPressed: _toggleHighlight,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildControlButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-    bool isActive = false,
-    bool isCloseButton = false,
-  }) {
-    final theme = Theme.of(context);
-    final color = isCloseButton ? Colors.red : theme.colorScheme.primary;
-    final backgroundColor = isCloseButton 
-        ? Colors.red.withOpacity(0.9)
-        : isActive ? color : color.withOpacity(0.1);
-    
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: onPressed,
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Icon(
-                icon, 
-                size: 22,
-                color: isCloseButton || isActive ? Colors.white : color,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            color: isCloseButton ? Colors.red : null,
-          ),
-        ),
-      ],
     );
   }
 
