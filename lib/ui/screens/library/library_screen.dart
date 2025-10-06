@@ -12,6 +12,7 @@ import '../../widgets/library/book_filter.dart';
 import '../../widgets/library/library_empty_state.dart';
 import '../../widgets/library/add_book_bottom_sheet.dart';
 import '../../widgets/library/book_options_sheet.dart';
+import '../../widgets/reading/reading_viewer.dart';
 
 /// Clean and simplified library screen for managing books
 class LibraryScreen extends ConsumerStatefulWidget {
@@ -26,6 +27,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
   String? _selectedSubject = 'All';
   String? _selectedGrade = 'All';
   String _searchQuery = '';
+  
+  // Reading mode state
+  bool _isReadingMode = false;
+  BookModel? _currentReadingBook;
+  bool _showAiPanel = false;
+  String? _selectedText;
 
   @override
   void initState() {
@@ -46,6 +53,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
 
     // Show login prompt if not authenticated
     if (user == null) return _buildLoginPrompt();
+
+    // If in reading mode, show the reading interface
+    if (_isReadingMode && _currentReadingBook != null) {
+      return _buildReadingInterface(_currentReadingBook!);
+    }
 
     return Scaffold(
       appBar: _buildAppBar(),
@@ -300,8 +312,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
   }
 
   void _openBook(BookModel book) {
+    setState(() {
+      _currentReadingBook = book;
+      _isReadingMode = true;
+    });
     ref.read(currentBookProvider.notifier).state = book;
-    // Navigate to reading screen
   }
 
   void _showBookOptions(BookModel book) {
@@ -341,6 +356,322 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
     }
   }
 
+  /// Reading interface - same as reading screen
+  Widget _buildReadingInterface(BookModel book) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Main content with responsive layout
+          _buildResponsiveLayout(book),
+          
+          // AI contextual panel overlay
+          if (_showAiPanel)
+            _buildAiPanel(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResponsiveLayout(BookModel book) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWideScreen = constraints.maxWidth > 800; // Desktop/tablet landscape
+        
+        if (isWideScreen) {
+          // Wide screen: helper panel on the right side
+          return Row(
+            children: [
+              // PDF viewer takes most space
+              Expanded(
+                child: ReadingViewer(
+                  book: book,
+                  onTextSelected: _handleTextSelection,
+                  onDefinitionRequest: _handleDefinitionRequest,
+                ),
+              ),
+              // Vertical helper panel on the right
+              _buildVerticalHelperPanel(book),
+            ],
+          );
+        } else {
+          // Narrow screen: helper panel at the bottom
+          return Column(
+            children: [
+              // PDF viewer takes most of the space
+              Expanded(
+                child: ReadingViewer(
+                  book: book,
+                  onTextSelected: _handleTextSelection,
+                  onDefinitionRequest: _handleDefinitionRequest,
+                ),
+              ),
+              // Horizontal helper panel at the bottom
+              _buildHorizontalHelperPanel(book),
+            ],
+          );
+        }
+      },
+    );
+  }
+
+  /// Vertical helper panel for wide screens (right side)
+  Widget _buildVerticalHelperPanel(BookModel book) {
+    return Container(
+      width: 60, // Thin vertical panel
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border(left: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildCompactControlButton(
+            icon: Icons.close,
+            tooltip: 'Close',
+            isCloseButton: true,
+            onPressed: () => setState(() => _isReadingMode = false),
+          ),
+          const SizedBox(height: 16),
+          _buildCompactControlButton(
+            icon: Icons.psychology,
+            tooltip: 'AI Tips',
+            isActive: _showAiPanel,
+            onPressed: () => setState(() => _showAiPanel = !_showAiPanel),
+          ),
+          const SizedBox(height: 16),
+          _buildCompactControlButton(
+            icon: Icons.quiz,
+            tooltip: 'Quiz',
+            onPressed: _startQuiz,
+          ),
+          const SizedBox(height: 16),
+          _buildCompactControlButton(
+            icon: Icons.bookmark_add,
+            tooltip: 'Bookmark',
+            onPressed: _addBookmark,
+          ),
+          const SizedBox(height: 16),
+          _buildCompactControlButton(
+            icon: Icons.highlight,
+            tooltip: 'Highlight',
+            onPressed: _toggleHighlight,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Horizontal helper panel for narrow screens (bottom)
+  Widget _buildHorizontalHelperPanel(BookModel book) {
+    return Container(
+      height: 60, // Thin horizontal panel
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildCompactControlButton(
+            icon: Icons.close,
+            tooltip: 'Close',
+            isCloseButton: true,
+            onPressed: () => setState(() => _isReadingMode = false),
+          ),
+          _buildCompactControlButton(
+            icon: Icons.psychology,
+            tooltip: 'AI Tips',
+            isActive: _showAiPanel,
+            onPressed: () => setState(() => _showAiPanel = !_showAiPanel),
+          ),
+          _buildCompactControlButton(
+            icon: Icons.quiz,
+            tooltip: 'Quiz',
+            onPressed: _startQuiz,
+          ),
+          _buildCompactControlButton(
+            icon: Icons.bookmark_add,
+            tooltip: 'Bookmark',
+            onPressed: _addBookmark,
+          ),
+          _buildCompactControlButton(
+            icon: Icons.highlight,
+            tooltip: 'Highlight',
+            onPressed: _toggleHighlight,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Compact control button with only icons (no labels)
+  Widget _buildCompactControlButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool isActive = false,
+    bool isCloseButton = false,
+    String? tooltip,
+  }) {
+    final theme = Theme.of(context);
+    final color = isCloseButton ? Colors.red : theme.colorScheme.primary;
+    final backgroundColor = isCloseButton 
+        ? Colors.red.withOpacity(0.9)
+        : isActive ? color : color.withOpacity(0.1);
+    
+    return Tooltip(
+      message: tooltip ?? '',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onPressed,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(
+              icon, 
+              size: 20,
+              color: isCloseButton || isActive ? Colors.white : color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Reading event handlers
+  void _handleTextSelection(String text, Offset position) {
+    setState(() {
+      _selectedText = text;
+      _showAiPanel = true;
+    });
+  }
+
+  void _handleDefinitionRequest(String word) {
+    // TODO: Implement AI definition request
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Definition requested for: $word')),
+    );
+  }
+
+  void _startQuiz() {
+    // TODO: Navigate to quiz based on current reading position
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Starting quiz for current content')),
+    );
+  }
+
+  void _addBookmark() {
+    // TODO: Add bookmark functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Bookmark added')),
+    );
+  }
+
+  void _toggleHighlight() {
+    // TODO: Toggle highlight mode
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Highlight mode toggled')),
+    );
+  }
+
+  // AI Panel (simplified version)
+  Widget _buildAiPanel(BuildContext context) {
+    return Positioned(
+      right: 0,
+      top: 0,
+      bottom: 0,
+      width: MediaQuery.of(context).size.width * 0.35,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(-2, 0),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Panel header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.psychology,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'AI Assistant',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => setState(() {
+                        _showAiPanel = false;
+                      }),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              // AI content
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (_selectedText != null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Definition for "$_selectedText"',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'AI features coming soon!',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   // Utility methods for responsive card sizing
   double _getMaxCardWidth(BuildContext context) {
