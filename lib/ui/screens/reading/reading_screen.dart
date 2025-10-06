@@ -111,48 +111,18 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
   }
 
   Widget _buildSelectBookScreen(BuildContext context, LibraryState libraryState) {
-    final theme = Theme.of(context);
-    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Select a Book to Read'),
         centerTitle: true,
       ),
       body: libraryState.myBooks.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.library_books_outlined,
-                    size: 64,
-                    color: theme.colorScheme.onSurface.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No books in your library',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Add some books from the Library tab to start reading',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.5),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      // Navigate to library tab
-                      ref.read(navigationProvider.notifier).state = 1; // Library tab index
-                    },
-                    icon: const Icon(Icons.library_books),
-                    label: const Text('Go to Library'),
-                  ),
-                ],
-              ),
+          ? _buildEmptyState(
+              icon: Icons.library_books_outlined,
+              title: 'No books in your library',
+              subtitle: 'Add some books from the Library tab to start reading',
+              actionText: 'Go to Library',
+              onAction: () => ref.read(navigationProvider.notifier).state = 1,
             )
           : _buildBookList(libraryState.myBooks),
     );
@@ -197,45 +167,69 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
   }
 
   Widget _buildLoginPrompt(BuildContext context) {
-    final theme = Theme.of(context);
-    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reading'),
         centerTitle: true,
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.login,
-              size: 64,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Please sign in to access your reading library',
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                // Navigate to login screen
-                ref.read(navigationProvider.notifier).state = 0; // Dashboard tab
-              },
-              icon: const Icon(Icons.login),
-              label: const Text('Sign In'),
-            ),
-          ],
-        ),
+      body: _buildEmptyState(
+        icon: Icons.login,
+        title: 'Please sign in to access your reading library',
+        actionText: 'Sign In',
+        onAction: () => ref.read(navigationProvider.notifier).state = 0,
       ),
     );
   }
 
+  /// Reusable empty state widget
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    String? actionText,
+    VoidCallback? onAction,
+  }) {
+    final theme = Theme.of(context);
+    
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 64,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.7),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          if (actionText != null && onAction != null) ...[
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: onAction,
+              icon: Icon(icon),
+              label: Text(actionText),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _buildAiPanel(BuildContext context) {
     return Positioned(
@@ -339,59 +333,38 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
-        border: Border(
-          top: BorderSide(color: Colors.grey.shade300),
-        ),
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-            // Close button - first in the menu
-            _buildControlButton(
-              icon: Icons.close,
-              label: 'Close',
-              isCloseButton: true,
-              onPressed: () {
-                setState(() {
-                  _isReadingMode = false;
-                });
-              },
-            ),
-            const SizedBox(width: 12),
-            _buildControlButton(
-              icon: Icons.psychology,
-              label: 'AI Tips',
-              isActive: _showAiPanel,
-              onPressed: () {
-                setState(() {
-                  _showAiPanel = !_showAiPanel;
-                });
-              },
-            ),
-            const SizedBox(width: 12),
-            _buildControlButton(
-              icon: Icons.quiz,
-              label: 'Quiz',
-              onPressed: () {
-                _startQuiz();
-              },
-            ),
-            const SizedBox(width: 12),
-            _buildControlButton(
-              icon: Icons.bookmark_add,
-              label: 'Bookmark',
-              onPressed: () {
-                _addBookmark();
-              },
-            ),
-            const SizedBox(width: 12),
-            _buildControlButton(
-              icon: Icons.highlight,
-              label: 'Highlight',
-              onPressed: () {
-                _toggleHighlight();
-              },
-            ),
+          _buildControlButton(
+            icon: Icons.close,
+            label: 'Close',
+            isCloseButton: true,
+            onPressed: () => setState(() => _isReadingMode = false),
+          ),
+          _buildControlButton(
+            icon: Icons.psychology,
+            label: 'AI Tips',
+            isActive: _showAiPanel,
+            onPressed: () => setState(() => _showAiPanel = !_showAiPanel),
+          ),
+          _buildControlButton(
+            icon: Icons.quiz,
+            label: 'Quiz',
+            onPressed: _startQuiz,
+          ),
+          _buildControlButton(
+            icon: Icons.bookmark_add,
+            label: 'Bookmark',
+            onPressed: _addBookmark,
+          ),
+          _buildControlButton(
+            icon: Icons.highlight,
+            label: 'Highlight',
+            onPressed: _toggleHighlight,
+          ),
         ],
       ),
     );
@@ -405,6 +378,10 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
     bool isCloseButton = false,
   }) {
     final theme = Theme.of(context);
+    final color = isCloseButton ? Colors.red : theme.colorScheme.primary;
+    final backgroundColor = isCloseButton 
+        ? Colors.red.withOpacity(0.9)
+        : isActive ? color : color.withOpacity(0.1);
     
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -418,21 +395,13 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: isCloseButton
-                    ? Colors.red.withOpacity(0.9)
-                    : isActive 
-                        ? theme.colorScheme.primary 
-                        : theme.colorScheme.primary.withOpacity(0.1),
+                color: backgroundColor,
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Icon(
                 icon, 
                 size: 22,
-                color: isCloseButton
-                    ? Colors.white
-                    : isActive 
-                        ? Colors.white 
-                        : theme.colorScheme.primary,
+                color: isCloseButton || isActive ? Colors.white : color,
               ),
             ),
           ),

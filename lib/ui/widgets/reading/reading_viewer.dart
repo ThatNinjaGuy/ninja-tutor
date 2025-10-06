@@ -31,51 +31,26 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   int _currentPage = 0;
   bool _isLoading = true;
   String? _error;
-  bool _showHint = true;
 
   @override
   void initState() {
     super.initState();
     _loadPdfData();
-    
-    // Hide hint after 5 seconds
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted && !_showControls) {
-        setState(() {
-          _showHint = false;
-        });
-      }
-    });
   }
 
   Future<void> _loadPdfData() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      // Check if we have a valid file URL
-      if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
-        setState(() {
-          _isLoading = false;
-          _error = 'No PDF file available for this book';
-        });
-        return;
-      }
-
-      // For web platform, we'll check if PDF is accessible
-      // The PDF will be embedded directly in the interface
+    if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
       setState(() {
         _isLoading = false;
-        _error = null; // Successfully loaded
+        _error = 'No PDF file available for this book';
       });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = 'Failed to load PDF: $e';
-      });
+      return;
     }
+
+    setState(() {
+      _isLoading = false;
+      _error = null;
+    });
   }
 
   @override
@@ -210,30 +185,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
               ),
             ),
           ),
-          
-          
-          // Tap hint overlay (only show initially)
-          if (!_showControls && _showHint)
-            Positioned(
-              bottom: 100,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Tap to show reading controls',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
