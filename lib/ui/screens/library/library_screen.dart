@@ -3,10 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
-import '../../../core/providers/books_provider.dart';
+import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/app_providers.dart';
-import '../../../core/providers/user_library_provider.dart';
 import '../../../models/content/book_model.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/library/book_filter.dart';
@@ -42,8 +41,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final books = ref.watch(booksApiProvider);
-    final searchResults = ref.watch(bookSearchProvider);
+    final libraryState = ref.watch(unifiedLibraryProvider);
     final user = ref.watch(authProvider);
 
     // Show login prompt if not authenticated
@@ -58,8 +56,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildMyBooksGrid(),
-                _buildExploreBooksGrid(_searchQuery.isNotEmpty ? searchResults : books),
+                _buildMyBooksGrid(libraryState),
+                _buildExploreBooksGrid(libraryState),
               ],
             ),
           ),
@@ -121,7 +119,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
                   ? IconButton(
                       onPressed: () {
                         setState(() => _searchQuery = '');
-                        ref.read(bookSearchProvider.notifier).clearSearch();
+                        ref.read(unifiedLibraryProvider.notifier).clearSearch();
                       },
                       icon: const Icon(Icons.clear),
                     )
@@ -143,136 +141,127 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
   }
 
   /// Build My Books tab - shows only user's personal library with search and filters
-  Widget _buildMyBooksGrid() {
-    return Consumer(
-      builder: (context, ref, child) {
-        final userLibraryBooks = ref.watch(userLibraryBooksProvider);
-        
-        return userLibraryBooks.when(
-          data: (libraryData) {
-            if (libraryData.isEmpty) {
-              return const LibraryEmptyState(
-                icon: Icons.library_books_outlined,
-                title: 'No Books in Your Library',
-                subtitle: 'Add books from the Explore tab to start your reading journey!',
-                onAddBook: null, // No add button on My Books tab
-              );
-            }
+  Widget _buildMyBooksGrid(LibraryState libraryState) {
+    if (libraryState.isLoadingUserLibrary) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-            // Convert library data to BookModel objects
-            final allBooks = libraryData.map((data) {
-              final bookData = data['book'] as Map<String, dynamic>;
-              return BookModel.fromJson(bookData);
-            }).toList();
+    if (libraryState.error != null) {
+      return _buildErrorState(libraryState.error!);
+    }
 
-            // Apply search and filters to user's library books
-            final filteredBooks = _applyFiltersAndSearch(allBooks);
+    if (libraryState.myBooks.isEmpty) {
+      return const LibraryEmptyState(
+        icon: Icons.library_books_outlined,
+        title: 'No Books in Your Library',
+        subtitle: 'Add books from the Explore tab to start your reading journey!',
+        onAddBook: null, // No add button on My Books tab
+      );
+    }
 
-        if (filteredBooks.isEmpty) {
-              return LibraryEmptyState(
-                icon: _searchQuery.isNotEmpty ? Icons.search_off : Icons.filter_list_off,
-                title: _searchQuery.isNotEmpty ? 'No Books Found' : 'No Books Match Filters',
-                subtitle: _searchQuery.isNotEmpty 
-                    ? 'Try a different search term in your library'
-                    : 'Try adjusting your filters to see more books',
-                onAddBook: null,
-          );
-        }
+    // Apply search and filters to user's library books
+    final filteredBooks = ref.read(unifiedLibraryProvider.notifier).filterBooks(
+      books: libraryState.myBooks,
+      searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+      subject: _selectedSubject,
+      grade: _selectedGrade,
+    );
 
-        return GridView.builder(
-          padding: const EdgeInsets.all(AppConstants.defaultPadding),
-              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: _getMaxCardWidth(context),
-                childAspectRatio: _getChildAspectRatio(context),
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-          ),
-          itemCount: filteredBooks.length,
-          itemBuilder: (context, index) {
-            final book = filteredBooks[index];
-                
-            return BookCard(
-              book: book,
-                  layout: BookCardLayout.grid,
-                  showAddToLibrary: true,
-                  isInLibrary: true, // Always true in My Books tab
-              onTap: () => _openBook(book),
-              onLongPress: () => _showBookOptions(book),
-                  onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
-            );
-          },
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => _buildErrorState(error),
+    if (filteredBooks.isEmpty) {
+      return LibraryEmptyState(
+        icon: _searchQuery.isNotEmpty ? Icons.search_off : Icons.filter_list_off,
+        title: _searchQuery.isNotEmpty ? 'No Books Found' : 'No Books Match Filters',
+        subtitle: _searchQuery.isNotEmpty 
+            ? 'Try a different search term in your library'
+            : 'Try adjusting your filters to see more books',
+        onAddBook: null,
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: _getMaxCardWidth(context),
+        childAspectRatio: _getChildAspectRatio(context),
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: filteredBooks.length,
+      itemBuilder: (context, index) {
+        final book = filteredBooks[index];
+            
+        return BookCard(
+          book: book,
+          layout: BookCardLayout.grid,
+          showAddToLibrary: true,
+          isInLibrary: true, // Always true in My Books tab
+          onTap: () => _openBook(book),
+          onLongPress: () => _showBookOptions(book),
+          onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
         );
       },
     );
   }
 
   /// Build Explore Books tab - shows all available books with add functionality
-  Widget _buildExploreBooksGrid(AsyncValue<List<BookModel>> booksAsync) {
-    return booksAsync.when(
-      data: (books) {
-        if (books.isEmpty) {
-          return LibraryEmptyState(
-            icon: Icons.explore_outlined,
-            title: _searchQuery.isEmpty ? 'No Books Available' : 'No books found',
-            subtitle: _searchQuery.isEmpty 
-                ? 'Check back later for new books!'
-                : 'Try adjusting your search or filters',
-            onAddBook: null,
-          );
-        }
+  Widget _buildExploreBooksGrid(LibraryState libraryState) {
+    if (libraryState.isLoadingAllBooks || libraryState.isSearching) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-        return GridView.builder(
-          padding: const EdgeInsets.all(AppConstants.defaultPadding),
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: _getMaxCardWidth(context),
-            childAspectRatio: _getChildAspectRatio(context),
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-          ),
-          itemCount: books.length,
-          itemBuilder: (context, index) {
-            return Consumer(
-              builder: (context, ref, child) {
-                final book = books[index];
-                final userLibrary = ref.watch(userLibraryProvider);
-                final isInLibrary = userLibrary.maybeWhen(
-                  data: (libraryBooks) => libraryBooks.contains(book.id),
-                  orElse: () => false,
-                );
-                
-                return BookCard(
-                  book: book,
-                  layout: BookCardLayout.grid,
-                  showAddToLibrary: true,
-                  isInLibrary: isInLibrary,
-                onTap: () => _openBook(book),
-                  onLongPress: () => _showBookOptions(book),
-                  onAddToLibrary: () => _addBookToLibrary(book.id),
-                  onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
-                );
-              },
-            );
-          },
+    if (libraryState.error != null) {
+      return _buildErrorState(libraryState.error!);
+    }
+
+    final booksToShow = libraryState.exploreBooks;
+
+    if (booksToShow.isEmpty) {
+      return LibraryEmptyState(
+        icon: Icons.explore_outlined,
+        title: _searchQuery.isEmpty ? 'No Books Available' : 'No books found',
+        subtitle: _searchQuery.isEmpty 
+            ? 'Check back later for new books!'
+            : 'Try adjusting your search or filters',
+        onAddBook: null,
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: _getMaxCardWidth(context),
+        childAspectRatio: _getChildAspectRatio(context),
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: booksToShow.length,
+      itemBuilder: (context, index) {
+        final book = booksToShow[index];
+        final isInLibrary = libraryState.isBookInLibrary(book.id);
+        
+        return BookCard(
+          book: book,
+          layout: BookCardLayout.grid,
+          showAddToLibrary: true,
+          isInLibrary: isInLibrary,
+          onTap: () => _openBook(book),
+          onLongPress: () => _showBookOptions(book),
+          onAddToLibrary: () => _addBookToLibrary(book.id),
+          onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) => _buildErrorState(error),
     );
   }
 
 
 
 
-  Widget _buildErrorState(Object error) {
+  Widget _buildErrorState(String error) {
     return LibraryEmptyState(
       icon: Icons.error_outline,
       title: 'Error loading books',
-      subtitle: error.toString(),
-      onAddBook: () => ref.read(booksApiProvider.notifier).refresh(),
+      subtitle: error,
+      onAddBook: () => ref.read(unifiedLibraryProvider.notifier).refresh(),
     );
   }
 
@@ -280,9 +269,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
   void _handleSearchChanged(String value) {
     setState(() => _searchQuery = value);
     if (value.isNotEmpty) {
-      ref.read(bookSearchProvider.notifier).searchBooks(value);
+      ref.read(unifiedLibraryProvider.notifier).searchBooks(value);
     } else {
-      ref.read(bookSearchProvider.notifier).clearSearch();
+      ref.read(unifiedLibraryProvider.notifier).clearSearch();
     }
   }
 
@@ -297,7 +286,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
   }
 
   void _reloadBooksWithFilters() {
-    ref.read(booksApiProvider.notifier).loadBooks(
+    ref.read(unifiedLibraryProvider.notifier).refreshWithFilters(
       subject: _selectedSubject == 'All' ? null : _selectedSubject,
       grade: _selectedGrade == 'All' ? null : _selectedGrade,
     );
@@ -324,12 +313,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
 
   /// Add book to user's personal library
   Future<void> _addBookToLibrary(String bookId) async {
-    final success = await ref.read(userLibraryProvider.notifier).addBookToLibrary(bookId);
-    
-    // Refresh the library books provider to show immediate changes
-    if (success) {
-      ref.invalidate(userLibraryBooksProvider);
-    }
+    final success = await ref.read(unifiedLibraryProvider.notifier).addBookToLibrary(bookId);
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -344,15 +328,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
 
   /// Remove book from user's personal library
   Future<void> _removeBookFromLibrary(String bookId) async {
-    final success = await ref.read(userLibraryProvider.notifier).removeBookFromLibrary(bookId);
+    final success = await ref.read(unifiedLibraryProvider.notifier).removeBookFromLibrary(bookId);
     
-    // Refresh the library books provider to show immediate changes
-    if (success) {
-      ref.invalidate(userLibraryBooksProvider);
-    }
-    
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(success ? 'Book removed from your library!' : 'Failed to remove book'),
           backgroundColor: success ? Colors.orange : Colors.red,
@@ -362,37 +341,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
     }
   }
 
-  /// Apply search query and filters to a list of books
-  List<BookModel> _applyFiltersAndSearch(List<BookModel> books) {
-    List<BookModel> filteredBooks = books;
-
-    // Apply search query
-    if (_searchQuery.isNotEmpty) {
-      final query = _searchQuery.toLowerCase();
-      filteredBooks = filteredBooks.where((book) {
-        return book.title.toLowerCase().contains(query) ||
-               book.author.toLowerCase().contains(query) ||
-               book.subject.toLowerCase().contains(query) ||
-               (book.description?.toLowerCase().contains(query) ?? false);
-      }).toList();
-    }
-
-    // Apply subject filter
-    if (_selectedSubject != null && _selectedSubject != 'All') {
-      filteredBooks = filteredBooks.where((book) {
-        return book.subject == _selectedSubject;
-      }).toList();
-    }
-
-    // Apply grade filter
-    if (_selectedGrade != null && _selectedGrade != 'All') {
-      filteredBooks = filteredBooks.where((book) {
-        return book.grade == _selectedGrade;
-      }).toList();
-    }
-
-    return filteredBooks;
-  }
 
   // Utility methods for responsive card sizing
   double _getMaxCardWidth(BuildContext context) {

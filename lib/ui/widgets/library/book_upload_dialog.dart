@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
-import '../../../core/providers/books_provider.dart';
+import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 
 /// Dialog for uploading books with metadata
@@ -227,7 +227,7 @@ class _BookUploadDialogState extends ConsumerState<BookUploadDialog> {
         'tags': _tagsController.text.trim(),
       };
 
-      await ref.read(booksApiProvider.notifier).uploadBookFromBytes(
+      await ref.read(unifiedLibraryProvider.notifier).uploadBookFromBytes(
         _selectedFile!.bytes!,
         _selectedFile!.name,
         metadata,

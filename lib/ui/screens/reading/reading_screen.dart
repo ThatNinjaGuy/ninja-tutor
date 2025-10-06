@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
-import '../../../core/providers/user_library_provider.dart';
+import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../models/content/book_model.dart';
 import '../../widgets/reading/reading_viewer.dart';
@@ -43,14 +43,12 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
     }
 
     // Otherwise, show book selection screen
-    final userLibraryBooks = ref.watch(userLibraryBooksProvider);
+    final libraryState = ref.watch(unifiedLibraryProvider);
     
     // Handle book loading from URL parameter only when needed
-    if (widget.bookId != null && userLibraryBooks.value != null) {
+    if (widget.bookId != null && libraryState.myBooks.isNotEmpty) {
       try {
-        final libraryData = userLibraryBooks.value!;
-        final bookData = libraryData.firstWhere((data) => data['book']['id'] == widget.bookId);
-        final book = BookModel.fromJson(bookData['book']);
+        final book = libraryState.myBooks.firstWhere((b) => b.id == widget.bookId);
         
         // Set the book once
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -66,7 +64,7 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
       }
     }
 
-    return _buildSelectBookScreen(context, userLibraryBooks);
+    return _buildSelectBookScreen(context, libraryState);
   }
 
   Widget _buildReadingInterface(BookModel book) {
@@ -112,7 +110,7 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
     );
   }
 
-  Widget _buildSelectBookScreen(BuildContext context, AsyncValue<List<Map<String, dynamic>>> userLibraryBooks) {
+  Widget _buildSelectBookScreen(BuildContext context, LibraryState libraryState) {
     final theme = Theme.of(context);
     
     return Scaffold(
@@ -120,10 +118,8 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
         title: const Text('Select a Book to Read'),
         centerTitle: true,
       ),
-      body: userLibraryBooks.when(
-        data: (libraryData) {
-          if (libraryData.isEmpty) {
-            return Center(
+      body: libraryState.myBooks.isEmpty
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -157,87 +153,46 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
                   ),
                 ],
               ),
-            );
-          }
+            )
+          : _buildBookList(libraryState.myBooks),
+    );
+  }
 
-          // Convert library data to BookModel objects
-          final books = libraryData.map((data) {
-            final bookData = data['book'] as Map<String, dynamic>;
-            return BookModel.fromJson(bookData);
-          }).toList();
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(AppConstants.defaultPadding),
-            itemCount: books.length,
-            itemBuilder: (context, index) {
-              final book = books[index];
-              final progress = libraryData[index]['progress'] as Map<String, dynamic>?;
-              final progressPercentage = progress?['progress_percentage'] ?? 0.0;
-              
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  leading: Container(
-                    width: 40,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Icon(
-                      Icons.menu_book,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                  title: Text(book.title),
-                  subtitle: Text('${book.author} • ${book.subject}'),
-                  trailing: Text(
-                    '${(progressPercentage * 100).toInt()}%',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    ref.read(currentBookProvider.notifier).state = book;
-                    setState(() {
-                      _isReadingMode = true;
-                    });
-                  },
-                ),
-              );
+  Widget _buildBookList(List<BookModel> books) {
+    final theme = Theme.of(context);
+    
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      itemCount: books.length,
+      itemBuilder: (context, index) {
+        final book = books[index];
+        
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            leading: Container(
+              width: 40,
+              height: 56,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Icon(
+                Icons.menu_book,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            title: Text(book.title),
+            subtitle: Text('${book.author} • ${book.subject}'),
+            onTap: () {
+              ref.read(currentBookProvider.notifier).state = book;
+              setState(() {
+                _isReadingMode = true;
+              });
             },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: theme.colorScheme.error,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Error loading your library',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                error.toString(),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -379,18 +334,18 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
 
 
   Widget _buildReadingControls(BookModel book) {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(25),
-          border: Border.all(color: Colors.grey.shade300),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border(
+          top: BorderSide(color: Colors.grey.shade300),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
             // Close button - first in the menu
             _buildControlButton(
               icon: Icons.close,
@@ -437,8 +392,7 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen> {
                 _toggleHighlight();
               },
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

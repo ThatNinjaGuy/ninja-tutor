@@ -4,7 +4,7 @@ import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 
 import '../../../models/content/book_model.dart';
-import '../../../core/providers/user_library_provider.dart';
+import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/constants/app_constants.dart';
 import 'reading_controls_panel.dart';
 
@@ -397,7 +397,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   void _updateReadingProgress(int page) {
     // Update reading progress in the backend
     final progressPercentage = page / widget.book.totalPages;
-    ref.read(userLibraryProvider.notifier).updateReadingProgress(
+    ref.read(unifiedLibraryProvider.notifier).updateReadingProgress(
       bookId: widget.book.id,
       currentPage: page,
       progressPercentage: progressPercentage,
