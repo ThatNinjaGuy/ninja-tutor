@@ -416,6 +416,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
 
   /// Vertical helper panel for wide screens (right side)
   Widget _buildVerticalHelperPanel(BookModel book) {
+    final libraryState = ref.watch(unifiedLibraryProvider);
+    final isInLibrary = libraryState.isBookInLibrary(book.id);
+    
     return Container(
       width: 60, // Thin vertical panel
       decoration: BoxDecoration(
@@ -434,9 +437,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
           const SizedBox(height: 16),
           _buildCompactControlButton(
             icon: Icons.psychology,
-            tooltip: 'AI Tips',
+            tooltip: isInLibrary ? 'AI Tips' : 'AI Tips (Add to library first)',
             isActive: _showAiPanel,
-            onPressed: () => setState(() => _showAiPanel = !_showAiPanel),
+            isDisabled: !isInLibrary,
+            onPressed: isInLibrary ? () => setState(() => _showAiPanel = !_showAiPanel) : null,
           ),
           const SizedBox(height: 16),
           _buildCompactControlButton(
@@ -447,14 +451,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
           const SizedBox(height: 16),
           _buildCompactControlButton(
             icon: Icons.bookmark_add,
-            tooltip: 'Bookmark',
-            onPressed: _addBookmark,
+            tooltip: isInLibrary ? 'Bookmark' : 'Bookmark (Add to library first)',
+            isDisabled: !isInLibrary,
+            onPressed: isInLibrary ? _addBookmark : null,
           ),
           const SizedBox(height: 16),
           _buildCompactControlButton(
             icon: Icons.highlight,
-            tooltip: 'Highlight',
-            onPressed: _toggleHighlight,
+            tooltip: isInLibrary ? 'Highlight' : 'Highlight (Add to library first)',
+            isDisabled: !isInLibrary,
+            onPressed: isInLibrary ? _toggleHighlight : null,
           ),
         ],
       ),
@@ -463,6 +469,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
 
   /// Horizontal helper panel for narrow screens (bottom)
   Widget _buildHorizontalHelperPanel(BookModel book) {
+    final libraryState = ref.watch(unifiedLibraryProvider);
+    final isInLibrary = libraryState.isBookInLibrary(book.id);
+    
     return Container(
       height: 60, // Thin horizontal panel
       decoration: BoxDecoration(
@@ -480,9 +489,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
           ),
           _buildCompactControlButton(
             icon: Icons.psychology,
-            tooltip: 'AI Tips',
+            tooltip: isInLibrary ? 'AI Tips' : 'AI Tips (Add to library first)',
             isActive: _showAiPanel,
-            onPressed: () => setState(() => _showAiPanel = !_showAiPanel),
+            isDisabled: !isInLibrary,
+            onPressed: isInLibrary ? () => setState(() => _showAiPanel = !_showAiPanel) : null,
           ),
           _buildCompactControlButton(
             icon: Icons.quiz,
@@ -491,13 +501,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
           ),
           _buildCompactControlButton(
             icon: Icons.bookmark_add,
-            tooltip: 'Bookmark',
-            onPressed: _addBookmark,
+            tooltip: isInLibrary ? 'Bookmark' : 'Bookmark (Add to library first)',
+            isDisabled: !isInLibrary,
+            onPressed: isInLibrary ? _addBookmark : null,
           ),
           _buildCompactControlButton(
             icon: Icons.highlight,
-            tooltip: 'Highlight',
-            onPressed: _toggleHighlight,
+            tooltip: isInLibrary ? 'Highlight' : 'Highlight (Add to library first)',
+            isDisabled: !isInLibrary,
+            onPressed: isInLibrary ? _toggleHighlight : null,
           ),
         ],
       ),
@@ -507,9 +519,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
   /// Compact control button with only icons (no labels)
   Widget _buildCompactControlButton({
     required IconData icon,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     bool isActive = false,
     bool isCloseButton = false,
+    bool isDisabled = false,
     String? tooltip,
   }) {
     final theme = Theme.of(context);
@@ -518,24 +531,31 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with TickerProvid
         ? Colors.red.withOpacity(0.9)
         : isActive ? color : color.withOpacity(0.1);
     
+    final effectiveColor = isDisabled ? Colors.grey : color;
+    final effectiveBackgroundColor = isDisabled 
+        ? Colors.grey.withOpacity(0.1)
+        : backgroundColor;
+    
     return Tooltip(
       message: tooltip ?? '',
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: onPressed,
+          onTap: isDisabled ? null : onPressed,
           child: Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: backgroundColor,
+              color: effectiveBackgroundColor,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(
               icon, 
               size: 20,
-              color: isCloseButton || isActive ? Colors.white : color,
+              color: isDisabled 
+                  ? Colors.grey 
+                  : (isCloseButton || isActive ? Colors.white : effectiveColor),
             ),
           ),
         ),
