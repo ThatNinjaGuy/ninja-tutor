@@ -264,18 +264,22 @@ class QuizResultAdapter extends TypeAdapter<QuizResult> {
       questionResults: (fields[3] as List).cast<QuestionResult>(),
       totalScore: fields[4] as int,
       maxScore: fields[5] as int,
-      startedAt: fields[6] as DateTime,
+      startedAt: fields[6] as DateTime?,
       completedAt: fields[7] as DateTime,
       isPassed: fields[8] as bool,
       attemptNumber: fields[9] as int,
       analytics: (fields[10] as Map).cast<String, dynamic>(),
+      percentageValue: fields[11] as double?,
+      correctAnswersCount: fields[12] as int?,
+      incorrectAnswersCount: fields[13] as int?,
+      timeTakenMinutes: fields[14] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, QuizResult obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -297,7 +301,15 @@ class QuizResultAdapter extends TypeAdapter<QuizResult> {
       ..writeByte(9)
       ..write(obj.attemptNumber)
       ..writeByte(10)
-      ..write(obj.analytics);
+      ..write(obj.analytics)
+      ..writeByte(11)
+      ..write(obj.percentageValue)
+      ..writeByte(12)
+      ..write(obj.correctAnswersCount)
+      ..writeByte(13)
+      ..write(obj.incorrectAnswersCount)
+      ..writeByte(14)
+      ..write(obj.timeTakenMinutes);
   }
 
   @override
@@ -718,33 +730,44 @@ Map<String, dynamic> _$AnswerOptionToJson(AnswerOption instance) =>
 
 QuizResult _$QuizResultFromJson(Map<String, dynamic> json) => QuizResult(
       id: json['id'] as String,
-      quizId: json['quizId'] as String,
-      userId: json['userId'] as String,
-      questionResults: (json['questionResults'] as List<dynamic>)
-          .map((e) => QuestionResult.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      totalScore: (json['totalScore'] as num).toInt(),
-      maxScore: (json['maxScore'] as num).toInt(),
-      startedAt: DateTime.parse(json['startedAt'] as String),
-      completedAt: DateTime.parse(json['completedAt'] as String),
-      isPassed: json['isPassed'] as bool,
-      attemptNumber: (json['attemptNumber'] as num?)?.toInt() ?? 1,
+      quizId: json['quiz_id'] as String,
+      userId: json['user_id'] as String,
+      questionResults: (json['question_results'] as List<dynamic>?)
+              ?.map((e) => QuestionResult.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      totalScore: (json['total_score'] as num).toInt(),
+      maxScore: (json['max_score'] as num).toInt(),
+      startedAt: json['started_at'] == null
+          ? null
+          : DateTime.parse(json['started_at'] as String),
+      completedAt: DateTime.parse(json['completed_at'] as String),
+      isPassed: json['is_passed'] as bool,
+      attemptNumber: (json['attempt_number'] as num?)?.toInt() ?? 1,
       analytics: json['analytics'] as Map<String, dynamic>? ?? const {},
+      percentageValue: (json['percentage'] as num?)?.toDouble(),
+      correctAnswersCount: (json['correct_answers'] as num?)?.toInt(),
+      incorrectAnswersCount: (json['incorrect_answers'] as num?)?.toInt(),
+      timeTakenMinutes: (json['time_taken'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$QuizResultToJson(QuizResult instance) =>
     <String, dynamic>{
       'id': instance.id,
-      'quizId': instance.quizId,
-      'userId': instance.userId,
-      'questionResults': instance.questionResults,
-      'totalScore': instance.totalScore,
-      'maxScore': instance.maxScore,
-      'startedAt': instance.startedAt.toIso8601String(),
-      'completedAt': instance.completedAt.toIso8601String(),
-      'isPassed': instance.isPassed,
-      'attemptNumber': instance.attemptNumber,
+      'quiz_id': instance.quizId,
+      'user_id': instance.userId,
+      'question_results': instance.questionResults,
+      'total_score': instance.totalScore,
+      'max_score': instance.maxScore,
+      'started_at': instance.startedAt?.toIso8601String(),
+      'completed_at': instance.completedAt.toIso8601String(),
+      'is_passed': instance.isPassed,
+      'attempt_number': instance.attemptNumber,
       'analytics': instance.analytics,
+      'percentage': instance.percentageValue,
+      'correct_answers': instance.correctAnswersCount,
+      'incorrect_answers': instance.incorrectAnswersCount,
+      'time_taken': instance.timeTakenMinutes,
     };
 
 QuizSummary _$QuizSummaryFromJson(Map<String, dynamic> json) => QuizSummary(

@@ -160,7 +160,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       onSearchChanged: (value) {
         setState(() => _searchQuery = value);
         if (value.isEmpty) {
-          ref.read(unifiedLibraryProvider.notifier).clearSearch();
+                        ref.read(unifiedLibraryProvider.notifier).clearSearch();
         } else {
           _handleSearchChanged(value);
         }
@@ -199,9 +199,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 );
               }).toList(),
               onChanged: _handleGradeChanged,
-            ),
-          ],
-        ),
+          ),
+        ],
+      ),
       ],
     );
   }
@@ -254,22 +254,22 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     return RefreshIndicator(
       onRefresh: () => ref.read(unifiedLibraryProvider.notifier).refresh(),
       child: GridView.builder(
-        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      padding: const EdgeInsets.all(AppConstants.defaultPadding),
         gridDelegate: ResponsiveGridHelpers.createResponsiveGridDelegate(context),
-        itemCount: filteredBooks.length,
-        itemBuilder: (context, index) {
-          final book = filteredBooks[index];
-              
-          return BookCard(
-            book: book,
-            layout: BookCardLayout.grid,
-            showAddToLibrary: true,
-            isInLibrary: true, // Always true in My Books tab
-            onTap: () => _openBook(book),
-            onLongPress: () => _showBookOptions(book),
-            onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
-          );
-        },
+      itemCount: filteredBooks.length,
+      itemBuilder: (context, index) {
+        final book = filteredBooks[index];
+            
+        return BookCard(
+          book: book,
+          layout: BookCardLayout.grid,
+          showAddToLibrary: true,
+          isInLibrary: true, // Always true in My Books tab
+          onTap: () => _openBook(book),
+          onLongPress: () => _showBookOptions(book),
+          onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+        );
+      },
       ),
     );
   }
@@ -308,24 +308,24 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     return RefreshIndicator(
       onRefresh: () => ref.read(unifiedLibraryProvider.notifier).refresh(),
       child: GridView.builder(
-        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      padding: const EdgeInsets.all(AppConstants.defaultPadding),
         gridDelegate: ResponsiveGridHelpers.createResponsiveGridDelegate(context),
-        itemCount: booksToShow.length,
-        itemBuilder: (context, index) {
-          final book = booksToShow[index];
-          final isInLibrary = libraryState.isBookInLibrary(book.id);
-          
-          return BookCard(
-            book: book,
-            layout: BookCardLayout.grid,
-            showAddToLibrary: true,
-            isInLibrary: isInLibrary,
-            onTap: () => _openBook(book),
-            onLongPress: () => _showBookOptions(book),
-            onAddToLibrary: () => _addBookToLibrary(book.id),
-            onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
-          );
-        },
+      itemCount: booksToShow.length,
+      itemBuilder: (context, index) {
+        final book = booksToShow[index];
+        final isInLibrary = libraryState.isBookInLibrary(book.id);
+        
+        return BookCard(
+          book: book,
+          layout: BookCardLayout.grid,
+          showAddToLibrary: true,
+          isInLibrary: isInLibrary,
+          onTap: () => _openBook(book),
+          onLongPress: () => _showBookOptions(book),
+          onAddToLibrary: () => _addBookToLibrary(book.id),
+          onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+        );
+      },
       ),
     );
   }

@@ -7,8 +7,11 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/quiz_provider.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
-import '../../../models/quiz/quiz_model.dart';
+import '../../../core/providers/app_providers.dart';
+import '../../../models/quiz/quiz_model.dart' as quiz_models;
 import '../../widgets/practice/quiz_session.dart';
+import '../../widgets/practice/question_display.dart';
+import '../../widgets/practice/quiz_review.dart';
 import '../../widgets/common/empty_state.dart';
 
 /// Practice screen for quizzes and assessments
@@ -101,18 +104,18 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
         return RefreshIndicator(
           onRefresh: () => ref.read(userQuizzesProvider.notifier).refresh(),
           child: ListView.builder(
-            padding: const EdgeInsets.all(AppConstants.defaultPadding),
+          padding: const EdgeInsets.all(AppConstants.defaultPadding),
             itemCount: quizzes.length,
-            itemBuilder: (context, index) {
+          itemBuilder: (context, index) {
               final quizSummary = quizzes[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
                 child: _QuizSummaryCard(
                   quiz: quizSummary,
                   onStart: () => _startQuizById(quizSummary.quizId),
-                ),
-              );
-            },
+              ),
+            );
+          },
           ),
         );
       },
@@ -135,9 +138,11 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
 
   Widget _buildQuizResults(BuildContext context) {
     final results = ref.watch(quizResultsProvider);
+    final quizzes = ref.watch(userQuizzesProvider);
 
     return results.when(
       data: (resultList) {
+        
         if (resultList.isEmpty) {
           return const EmptyStateWidget(
             icon: Icons.assessment_outlined,
@@ -146,38 +151,44 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
           );
         }
 
+        // Group results by book
+        final resultsByBook = <String, List<quiz_models.QuizResult>>{};
+        final bookTitles = <String, String>{}; // bookId -> bookTitle
+        for (final result in resultList) {
+          // Find quiz info to get book details
+          final quizInfo = quizzes.whenData((quizList) {
+            try {
+              return quizList.firstWhere((q) => q.quizId == result.quizId);
+            } catch (e) {
+              return null;
+            }
+          }).value;
+          
+          final bookId = quizInfo?.bookId ?? 'unknown';
+          final bookTitle = quizInfo?.bookTitle ?? 'Unknown Book';
+          
+          resultsByBook.putIfAbsent(bookId, () => []).add(result);
+          bookTitles[bookId] = bookTitle;
+        }
+
         return RefreshIndicator(
-          onRefresh: () => ref.read(quizResultsProvider.notifier).refresh(),
+          onRefresh: () async {
+            await ref.read(quizResultsProvider.notifier).refresh();
+            await ref.read(userQuizzesProvider.notifier).refresh();
+          },
           child: ListView.builder(
-            padding: const EdgeInsets.all(AppConstants.defaultPadding),
-            itemCount: resultList.length,
-            itemBuilder: (context, index) {
-              final result = resultList[index];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: _getScoreColor(result.percentage).withOpacity(0.1),
-                    child: Text(
-                      '${(result.percentage * 100).toInt()}%',
-                      style: TextStyle(
-                        color: _getScoreColor(result.percentage),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  title: Text('Quiz ${result.quizId}'),
-                  subtitle: Text(
-                    '${result.correctAnswers}/${result.questionResults.length} correct • '
-                    '${result.completionTimeMinutes} min',
-                  ),
-                  trailing: Icon(
-                    result.isPassed ? Icons.check_circle : Icons.cancel,
-                    color: result.isPassed ? Colors.green : Colors.red,
-                  ),
-                  onTap: () => _viewResult(result),
-                ),
+          padding: const EdgeInsets.all(AppConstants.defaultPadding),
+            itemCount: resultsByBook.length,
+          itemBuilder: (context, index) {
+              final bookId = resultsByBook.keys.elementAt(index);
+              final bookResults = resultsByBook[bookId]!;
+              final bookTitle = bookTitles[bookId]!;
+              
+              return _BookResultsSection(
+                bookTitle: bookTitle,
+                results: bookResults,
+                quizzes: quizzes,
+                onViewAttempt: (result) => _viewAttemptDetails(result),
               );
             },
           ),
@@ -213,73 +224,67 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
       return Center(child: Text('Error loading books: ${libraryState.error}'));
     }
 
-    if (bookList.isEmpty) {
+        if (bookList.isEmpty) {
       return const EmptyStateWidget(
         icon: Icons.auto_awesome_outlined,
         title: AppStrings.noBooksAvailable,
         subtitle: AppStrings.addBooksToGenerateCustomQuizzes,
-      );
-    }
+          );
+        }
 
-    return Padding(
-      padding: const EdgeInsets.all(AppConstants.defaultPadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Generate Custom Quiz',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 16),
+        return Padding(
+          padding: const EdgeInsets.all(AppConstants.defaultPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Generate Custom Quiz',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
 
-          Text(
-            'Select a book and page range to generate a personalized quiz:',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onBackground.withOpacity(0.7),
-            ),
-          ),
-          const SizedBox(height: 24),
+              Text(
+                'Select a book and page range to generate a personalized quiz:',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onBackground.withOpacity(0.7),
+                ),
+              ),
+              const SizedBox(height: 24),
 
-          Expanded(
-            child: ListView.builder(
-              itemCount: bookList.length,
-              itemBuilder: (context, index) {
-                final book = bookList[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    leading: Container(
-                      width: 40,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: bookList.length,
+                  itemBuilder: (context, index) {
+                    final book = bookList[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        leading: Container(
+                          width: 40,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Icon(
+                            Icons.menu_book,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        title: Text(book.title),
+                        subtitle: Text('${book.author} • ${book.totalPages} pages'),
+                        trailing: const Icon(Icons.arrow_forward_ios),
+                        onTap: () => _selectBookForQuiz(book),
                       ),
-                      child: Icon(
-                        Icons.menu_book,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    title: Text(book.title),
-                    subtitle: Text('${book.author} • ${book.totalPages} pages'),
-                    trailing: const Icon(Icons.arrow_forward_ios),
-                    onTap: () => _selectBookForQuiz(book),
-                  ),
-                );
-              },
-            ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Color _getScoreColor(double percentage) {
-    if (percentage >= 0.8) return Colors.green;
-    if (percentage >= 0.6) return Colors.orange;
-    return Colors.red;
+        );
   }
 
   void _startQuizById(String quizId) {
@@ -287,12 +292,65 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
     context.push('/practice/session/$quizId');
   }
 
-  void _viewResult(QuizResult result) {
+  void _viewResult(quiz_models.QuizResult result) {
     // Show result details in a dialog or navigate to result page
     showDialog(
       context: context,
       builder: (context) => _QuizResultDialog(result: result),
     );
+  }
+
+  void _viewAttemptDetails(quiz_models.QuizResult result) async {
+    // Load the full quiz and attempt details for review
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      
+      // Fetch both quiz structure and attempt data
+      final quiz = await apiService.getQuiz(result.quizId);
+      final attemptData = await apiService.getAttemptDetail(result.quizId, result.attemptNumber);
+      
+      if (mounted) {
+        // Build user answers map from attempt data
+        final userAnswers = <String, String>{};
+        final answersDict = attemptData['answers'] as Map<String, dynamic>? ?? {};
+        
+        // The answers dict has structure: {question_id: {selected_options: [option_id], ...}}
+        for (final entry in answersDict.entries) {
+          final questionId = entry.key;
+          final answerData = entry.value as Map<String, dynamic>;
+          final selectedOptions = answerData['selected_options'] as List<dynamic>? ?? [];
+          
+          if (selectedOptions.isNotEmpty) {
+            final optionId = selectedOptions.first.toString();
+            userAnswers[questionId] = optionId;
+          }
+        }
+        
+        print('✅ Built user answers map with ${userAnswers.length} entries');
+        print('Quiz has ${quiz.questions.length} questions');
+        
+        // Show review dialog using common widget
+        showDialog(
+          context: context,
+          builder: (context) => QuizReviewDialog(
+            quiz: quiz,
+            userAnswers: userAnswers,
+            title: 'Review: ${quiz.title}',
+            subtitle: 'Attempt #${result.attemptNumber} • ${result.percentage.toInt()}% • ${result.isPassed ? "Passed ✅" : "Failed ❌"}',
+      ),
+    );
+  }
+    } catch (e) {
+      print('❌ Error loading quiz for review: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading quiz: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _selectBookForQuiz(book) {
@@ -339,7 +397,7 @@ class __GenerateQuizDialogState extends ConsumerState<_GenerateQuizDialog> {
   int startPage = 1;
   int endPage = 10;
   int questionCount = 10;
-  DifficultyLevel difficulty = DifficultyLevel.medium;
+  quiz_models.DifficultyLevel difficulty = quiz_models.DifficultyLevel.medium;
   bool _isGenerating = false;
 
   @override
@@ -355,71 +413,71 @@ class __GenerateQuizDialogState extends ConsumerState<_GenerateQuizDialog> {
       title: Text('Generate Quiz: ${widget.book.title}'),
       content: SingleChildScrollView(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Page range
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    initialValue: startPage.toString(),
-                    decoration: const InputDecoration(labelText: 'Start Page'),
-                    keyboardType: TextInputType.number,
-                    onChanged: (value) {
-                      startPage = int.tryParse(value) ?? 1;
-                    },
-                  ),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Page range
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  initialValue: startPage.toString(),
+                  decoration: const InputDecoration(labelText: 'Start Page'),
+                  keyboardType: TextInputType.number,
+                  onChanged: (value) {
+                    startPage = int.tryParse(value) ?? 1;
+                  },
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: endPage.toString(),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextFormField(
+                  initialValue: endPage.toString(),
                     decoration: InputDecoration(
                       labelText: 'End Page',
                       helperText: 'Max: ${widget.book.totalPages}',
                     ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (value) {
-                      endPage = int.tryParse(value) ?? 10;
-                    },
-                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (value) {
+                    endPage = int.tryParse(value) ?? 10;
+                  },
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
 
-            // Question count
-            TextFormField(
-              initialValue: questionCount.toString(),
+          // Question count
+          TextFormField(
+            initialValue: questionCount.toString(),
               decoration: const InputDecoration(
                 labelText: 'Number of Questions',
                 helperText: 'Recommended: 5-15',
               ),
-              keyboardType: TextInputType.number,
-              onChanged: (value) {
-                questionCount = int.tryParse(value) ?? 10;
-              },
-            ),
-            const SizedBox(height: 16),
+            keyboardType: TextInputType.number,
+            onChanged: (value) {
+              questionCount = int.tryParse(value) ?? 10;
+            },
+          ),
+          const SizedBox(height: 16),
 
-            // Difficulty
-            DropdownButtonFormField<DifficultyLevel>(
-              value: difficulty,
-              decoration: const InputDecoration(labelText: 'Difficulty'),
-              items: DifficultyLevel.values.map((level) {
-                return DropdownMenuItem(
-                  value: level,
-                  child: Text(level.name.toUpperCase()),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    difficulty = value;
-                  });
-                }
-              },
-            ),
+          // Difficulty
+            DropdownButtonFormField<quiz_models.DifficultyLevel>(
+            value: difficulty,
+            decoration: const InputDecoration(labelText: 'Difficulty'),
+              items: quiz_models.DifficultyLevel.values.map((level) {
+              return DropdownMenuItem(
+                value: level,
+                child: Text(level.name.toUpperCase()),
+              );
+            }).toList(),
+            onChanged: (value) {
+              if (value != null) {
+                setState(() {
+                  difficulty = value;
+                });
+              }
+            },
+          ),
 
             if (_isGenerating) ...[
               const SizedBox(height: 24),
@@ -512,7 +570,7 @@ class __GenerateQuizDialogState extends ConsumerState<_GenerateQuizDialog> {
 class _QuizResultDialog extends StatelessWidget {
   const _QuizResultDialog({required this.result});
 
-  final QuizResult result;
+  final quiz_models.QuizResult result;
 
   @override
   Widget build(BuildContext context) {
@@ -663,7 +721,7 @@ class _QuizSummaryCard extends StatelessWidget {
     this.onStart,
   });
 
-  final QuizSummary quiz;
+  final quiz_models.QuizSummary quiz;
   final VoidCallback? onStart;
 
   @override
@@ -755,7 +813,7 @@ class _QuizSummaryCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         _InfoRow(
                           icon: Icons.star,
-                          text: 'Best: ${(quiz.bestScore * 100).toInt()}%',
+                          text: 'Best: ${quiz.bestScore.toInt()}%',
                         ),
                       ],
                     ],
@@ -823,3 +881,303 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
+
+/// Card for displaying quiz attempt results with quiz and book info
+class _AttemptResultCard extends StatelessWidget {
+  const _AttemptResultCard({
+    required this.result,
+    this.quizTitle,
+    this.bookTitle,
+    this.onTap,
+  });
+
+  final quiz_models.QuizResult result;
+  final String? quizTitle;
+  final String? bookTitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final percentage = result.percentage.toDouble();
+    final scoreColor = _getScoreColor(percentage / 100); // Convert to 0-1 range for color only
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: AppConstants.cardElevation,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Score circle
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: scoreColor.withOpacity(0.1),
+                  border: Border.all(
+                    color: scoreColor,
+                    width: 2,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '$percentage%',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: scoreColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Icon(
+                      result.isPassed ? Icons.check : Icons.close,
+                      color: scoreColor,
+                      size: 16,
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(width: 16),
+              
+              // Quiz info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Quiz title
+                    Text(
+                      quizTitle ?? 'Quiz ${result.quizId.substring(0, 8)}...',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    
+                    // Book title
+                    if (bookTitle != null)
+                      Text(
+                        bookTitle!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    const SizedBox(height: 8),
+                    
+                    // Stats row
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.quiz_outlined,
+                          size: 14,
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${result.correctAnswers}/${result.correctAnswers + result.incorrectAnswers}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        
+                        Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${result.completionTimeMinutes} min',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        
+                        // Attempt number
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Attempt #${result.attemptNumber}',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Chevron icon for navigation hint
+              Icon(
+                Icons.chevron_right,
+                color: theme.colorScheme.onSurface.withOpacity(0.3),
+                size: 24,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getScoreColor(double percentage) {
+    if (percentage >= 0.8) return Colors.green;
+    if (percentage >= 0.6) return Colors.orange;
+    return Colors.red;
+  }
+}
+
+/// Section showing all quiz attempts grouped by book
+class _BookResultsSection extends StatelessWidget {
+  const _BookResultsSection({
+    required this.bookTitle,
+    required this.results,
+    required this.quizzes,
+    this.onViewAttempt,
+  });
+
+  final String bookTitle;
+  final List<quiz_models.QuizResult> results;
+  final AsyncValue<List<quiz_models.QuizSummary>> quizzes;
+  final Function(quiz_models.QuizResult)? onViewAttempt;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    // Calculate stats for this book
+    final totalAttempts = results.length;
+    final bestScore = results.isEmpty 
+        ? 0.0 
+        : results.map((r) => r.percentage).reduce((a, b) => a > b ? a : b);
+    final passedCount = results.where((r) => r.isPassed).length;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: AppConstants.cardElevation,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+      ),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            Icons.menu_book,
+            color: theme.colorScheme.primary,
+            size: 20,
+          ),
+        ),
+        title: Text(
+          bookTitle,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            children: [
+              _MiniStat(
+                icon: Icons.quiz,
+                text: '$totalAttempts attempts',
+              ),
+              const SizedBox(width: 16),
+              _MiniStat(
+                icon: Icons.star,
+                text: '${bestScore.toInt()}% best',
+              ),
+              const SizedBox(width: 16),
+              _MiniStat(
+                icon: Icons.check_circle,
+                text: '$passedCount passed',
+              ),
+            ],
+          ),
+        ),
+        children: results.map((result) {
+          // Find quiz info
+          final quizInfo = quizzes.whenData((quizList) {
+            try {
+              return quizList.firstWhere((q) => q.quizId == result.quizId);
+            } catch (e) {
+              return null;
+            }
+          }).value;
+          
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: _AttemptResultCard(
+              result: result,
+              quizTitle: quizInfo?.title,
+              bookTitle: null, // Don't show book title since it's grouped
+              onTap: () => onViewAttempt?.call(result),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+/// Mini stat widget for book section subtitle
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({
+    required this.icon,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          size: 14,
+          color: theme.colorScheme.onSurface.withOpacity(0.6),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// Removed _QuizReviewDialog - now using common QuizReviewDialog from quiz_review.dart

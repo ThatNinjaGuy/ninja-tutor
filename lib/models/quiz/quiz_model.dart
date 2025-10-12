@@ -489,47 +489,77 @@ class QuizResult extends Equatable {
   final String id;
   
   @HiveField(1)
+  @JsonKey(name: 'quiz_id')
   final String quizId;
   
   @HiveField(2)
+  @JsonKey(name: 'user_id')
   final String userId;
   
   @HiveField(3)
+  @JsonKey(name: 'question_results', defaultValue: [])
   final List<QuestionResult> questionResults;
   
   @HiveField(4)
+  @JsonKey(name: 'total_score')
   final int totalScore;
   
   @HiveField(5)
+  @JsonKey(name: 'max_score')
   final int maxScore;
   
   @HiveField(6)
-  final DateTime startedAt;
+  @JsonKey(name: 'started_at')
+  final DateTime? startedAt;
   
   @HiveField(7)
+  @JsonKey(name: 'completed_at')
   final DateTime completedAt;
   
   @HiveField(8)
+  @JsonKey(name: 'is_passed')
   final bool isPassed;
   
   @HiveField(9)
+  @JsonKey(name: 'attempt_number')
   final int attemptNumber;
   
   @HiveField(10)
   final Map<String, dynamic> analytics; // Performance analytics
   
+  // Backend provides these directly
+  @HiveField(11)
+  @JsonKey(name: 'percentage')
+  final double? percentageValue;
+  
+  @HiveField(12)
+  @JsonKey(name: 'correct_answers')
+  final int? correctAnswersCount;
+  
+  @HiveField(13)
+  @JsonKey(name: 'incorrect_answers')
+  final int? incorrectAnswersCount;
+  
+  @HiveField(14)
+  @JsonKey(name: 'time_taken')
+  final int? timeTakenMinutes;
+  
   const QuizResult({
     required this.id,
     required this.quizId,
     required this.userId,
-    required this.questionResults,
+    this.questionResults = const [],
     required this.totalScore,
     required this.maxScore,
-    required this.startedAt,
+    this.startedAt,
     required this.completedAt,
     required this.isPassed,
     this.attemptNumber = 1,
     this.analytics = const {},
+    this.percentageValue,
+    this.correctAnswersCount,
+    this.incorrectAnswersCount,
+    this.timeTakenMinutes,
   });
   
   factory QuizResult.fromJson(Map<String, dynamic> json) => 
@@ -537,18 +567,19 @@ class QuizResult extends Equatable {
   
   Map<String, dynamic> toJson() => _$QuizResultToJson(this);
   
-  /// Calculate percentage score
-  double get percentage => maxScore > 0 ? totalScore / maxScore : 0.0;
+  /// Calculate percentage score (use backend value if available, otherwise calculate)
+  double get percentage => percentageValue ?? (maxScore > 0 ? totalScore / maxScore : 0.0);
   
-  /// Calculate completion time in minutes
-  int get completionTimeMinutes => completedAt.difference(startedAt).inMinutes;
+  /// Calculate completion time in minutes (use backend value if available, otherwise calculate)
+  int get completionTimeMinutes => timeTakenMinutes ?? 
+      (startedAt != null ? completedAt.difference(startedAt!).inMinutes : 0);
   
-  /// Get number of correct answers
-  int get correctAnswers => 
+  /// Get number of correct answers (use backend value if available, otherwise calculate)
+  int get correctAnswers => correctAnswersCount ?? 
       questionResults.where((q) => q.isCorrect).length;
   
-  /// Get number of incorrect answers
-  int get incorrectAnswers => 
+  /// Get number of incorrect answers (use backend value if available, otherwise calculate)
+  int get incorrectAnswers => incorrectAnswersCount ?? 
       questionResults.where((q) => !q.isCorrect).length;
   
   QuizResult copyWith({
@@ -563,6 +594,10 @@ class QuizResult extends Equatable {
     bool? isPassed,
     int? attemptNumber,
     Map<String, dynamic>? analytics,
+    double? percentageValue,
+    int? correctAnswersCount,
+    int? incorrectAnswersCount,
+    int? timeTakenMinutes,
   }) {
     return QuizResult(
       id: id ?? this.id,
@@ -576,6 +611,10 @@ class QuizResult extends Equatable {
       isPassed: isPassed ?? this.isPassed,
       attemptNumber: attemptNumber ?? this.attemptNumber,
       analytics: analytics ?? this.analytics,
+      percentageValue: percentageValue ?? this.percentageValue,
+      correctAnswersCount: correctAnswersCount ?? this.correctAnswersCount,
+      incorrectAnswersCount: incorrectAnswersCount ?? this.incorrectAnswersCount,
+      timeTakenMinutes: timeTakenMinutes ?? this.timeTakenMinutes,
     );
   }
   
@@ -592,6 +631,10 @@ class QuizResult extends Equatable {
         isPassed,
         attemptNumber,
         analytics,
+        percentageValue,
+        correctAnswersCount,
+        incorrectAnswersCount,
+        timeTakenMinutes,
       ];
 }
 

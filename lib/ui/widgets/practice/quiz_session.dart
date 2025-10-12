@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/quiz_provider.dart';
 import '../../../models/quiz/quiz_model.dart';
 import 'question_display.dart';
 import 'quiz_results.dart';
+import 'quiz_review.dart';
 
 /// Quiz session widget for taking quizzes
 class QuizSession extends ConsumerStatefulWidget {
@@ -123,30 +125,67 @@ class _QuizSessionState extends ConsumerState<QuizSession> {
     setState(() => _isSubmitting = true);
 
     try {
-      // Calculate score locally
+      // Build answers for backend submission
+      final answers = <Map<String, dynamic>>[];
       int correctAnswers = 0;
+      
       for (final question in _quiz!.questions) {
         final userOptionId = _userAnswers[question.id];
+        bool isCorrect = false;
+        
         if (userOptionId != null) {
           final selectedOption = question.options.firstWhere(
             (opt) => opt.id == userOptionId,
             orElse: () => question.options.first,
           );
-          if (selectedOption.isCorrect) {
+          isCorrect = selectedOption.isCorrect;
+          if (isCorrect) {
             correctAnswers++;
           }
+          
+          // Build answer for backend
+          answers.add({
+            'question_id': question.id,
+            'selected_options': [userOptionId],
+            'user_answer': selectedOption.text,
+            'is_correct': isCorrect,
+            'points_earned': isCorrect ? question.points : 0,
+            'max_points': question.points,
+            'time_spent': DateTime.now().difference(_questionStartTimes[question.id] ?? _quizStartTime).inSeconds,
+          });
+        } else {
+          // Unanswered question
+          answers.add({
+            'question_id': question.id,
+            'selected_options': [],
+            'user_answer': '',
+            'is_correct': false,
+            'points_earned': 0,
+            'max_points': question.points,
+            'time_spent': 0,
+          });
         }
       }
+
+      // Submit to backend for persistence
+      final apiService = ref.read(apiServiceProvider);
+      final timeTakenMinutes = DateTime.now().difference(_quizStartTime).inMinutes;
+      
+      await apiService.submitQuizAttempt(
+        quizId: widget.sessionId,
+        answers: answers,
+        timeTaken: timeTakenMinutes,
+      );
+
+      // Refresh quiz results provider to show new attempt
+      ref.read(quizResultsProvider.notifier).refresh();
+      ref.read(userQuizzesProvider.notifier).refresh(); // Update best score
 
       setState(() {
         _finalScore = correctAnswers;
         _showResults = true;
         _isSubmitting = false;
       });
-
-      // TODO: Submit to backend for persistence
-      // final apiService = ref.read(apiServiceProvider);
-      // await apiService.submitQuiz(widget.sessionId, answers);
       
     } catch (e) {
       setState(() => _isSubmitting = false);
@@ -162,10 +201,18 @@ class _QuizSessionState extends ConsumerState<QuizSession> {
   }
 
   void _reviewQuestions() {
-    setState(() {
-      _showResults = false;
-      _currentQuestionIndex = 0;
-    });
+    // Show quiz review using the common widget
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => QuizReviewWidget(
+          quiz: _quiz!,
+          userAnswers: _userAnswers,
+          title: 'Review: ${_quiz!.title}',
+          subtitle: 'Score: ${_finalScore}/${_quiz!.questions.length} • ${(_finalScore! / _quiz!.questions.length * 100).toInt()}%',
+          onClose: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
   }
 
   void _retakeQuiz() {

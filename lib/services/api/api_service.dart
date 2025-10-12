@@ -358,6 +358,16 @@ class ApiService {
     }
   }
 
+  /// Get attempt detail for review
+  Future<Map<String, dynamic>> getAttemptDetail(String quizId, int attemptNumber) async {
+    try {
+      final response = await _dio.get('/user-quiz/attempt/$quizId/$attemptNumber');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   /// Submit quiz answers
   Future<quiz.QuizResult> submitQuiz(String quizId, List<quiz.QuestionResult> answers) async {
     try {
