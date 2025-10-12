@@ -49,9 +49,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 
   void _handleTabChange() {
-    if (_tabController.index == 1) {
-      // Explore Books tab - load all books only when this tab is opened
-      ref.read(unifiedLibraryProvider.notifier).ensureAllBooksLoaded();
+    // Only load when tab change is complete (not during animation)
+    if (!_tabController.indexIsChanging) {
+      if (_tabController.index == 1) {
+        // Explore Books tab - load all books only when this tab is opened
+        ref.read(unifiedLibraryProvider.notifier).ensureAllBooksLoaded();
+      }
     }
   }
 

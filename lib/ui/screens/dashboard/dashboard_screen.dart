@@ -175,7 +175,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           IconButton(
             onPressed: () => context.push(AppRoutes.settings),
             icon: Icon(
-              Icons.settings_outlined,
+              Icons.account_circle_outlined,
               color: theme.colorScheme.onBackground.withOpacity(0.7),
             ),
           ),

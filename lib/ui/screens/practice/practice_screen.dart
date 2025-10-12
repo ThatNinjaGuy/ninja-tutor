@@ -30,24 +30,82 @@ class PracticeScreen extends ConsumerStatefulWidget {
 class _PracticeScreenState extends ConsumerState<PracticeScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
+  bool _hasLoadedAvailableQuizzes = false;
+  bool _hasLoadedResults = false;
+  bool _hasLoadedGenerateBooks = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     
-    // Load My Books and user quizzes
+    // Add tab listener for lazy loading
+    _tabController.addListener(_handleTabChange);
+    
+    // Load data for the initial tab (index 0)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
-      ref.read(userQuizzesProvider.notifier).loadQuizzes();
-      ref.read(quizResultsProvider.notifier).loadResults();
+      _loadDataForTab(0);
     });
+  }
+  
+  void _handleTabChange() {
+    if (!_tabController.indexIsChanging) {
+      _loadDataForTab(_tabController.index);
+    }
+  }
+  
+  void _loadDataForTab(int index) {
+    switch (index) {
+      case 0: // Available Quizzes tab
+        if (!_hasLoadedAvailableQuizzes) {
+          ref.read(userQuizzesProvider.notifier).loadQuizzes();
+          _hasLoadedAvailableQuizzes = true;
+        }
+        break;
+      case 1: // Results tab
+        if (!_hasLoadedResults) {
+          ref.read(quizResultsProvider.notifier).loadResults();
+          ref.read(userQuizzesProvider.notifier).loadQuizzes(); // Needed for quiz info
+          _hasLoadedResults = true;
+        }
+        break;
+      case 2: // Generate tab
+        if (!_hasLoadedGenerateBooks) {
+          ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
+          _hasLoadedGenerateBooks = true;
+        }
+        break;
+    }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+  
+  // Utility methods for color coding (static so child widgets can use them)
+  static Color _getScoreColorStatic(double percentage) {
+    if (percentage >= 0.8) return Colors.green;
+    if (percentage >= 0.6) return Colors.orange;
+    return Colors.red;
+  }
+  
+  static Color _getDifficultyColorStatic(String difficulty) {
+    switch (difficulty.toLowerCase()) {
+      case 'beginner':
+        return Colors.green;
+      case 'easy':
+        return Colors.lightGreen;
+      case 'medium':
+        return Colors.orange;
+      case 'hard':
+        return Colors.red;
+      case 'expert':
+        return Colors.purple;
+      default:
+        return Colors.orange;
+    }
   }
 
   @override
@@ -575,7 +633,7 @@ class _QuizResultDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scoreColor = _getScoreColor(result.percentage);
+    final scoreColor = _PracticeScreenState._getScoreColorStatic(result.percentage);
 
     return AlertDialog(
       title: const Text('Quiz Results'),
@@ -674,12 +732,6 @@ class _QuizResultDialog extends StatelessWidget {
       ],
     );
   }
-
-  Color _getScoreColor(double percentage) {
-    if (percentage >= 0.8) return Colors.green;
-    if (percentage >= 0.6) return Colors.orange;
-    return Colors.red;
-  }
 }
 
 class _StatRow extends StatelessWidget {
@@ -727,7 +779,7 @@ class _QuizSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final difficultyColor = _getDifficultyColor(quiz.difficulty);
+    final difficultyColor = _PracticeScreenState._getDifficultyColorStatic(quiz.difficulty);
 
     return Card(
       elevation: AppConstants.cardElevation,
@@ -831,23 +883,6 @@ class _QuizSummaryCard extends StatelessWidget {
       ),
     );
   }
-
-  Color _getDifficultyColor(String difficulty) {
-    switch (difficulty.toLowerCase()) {
-      case 'beginner':
-        return Colors.green;
-      case 'easy':
-        return Colors.lightGreen;
-      case 'medium':
-        return Colors.orange;
-      case 'hard':
-        return Colors.red;
-      case 'expert':
-        return Colors.purple;
-      default:
-        return Colors.orange;
-    }
-  }
 }
 
 class _InfoRow extends StatelessWidget {
@@ -900,7 +935,7 @@ class _AttemptResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final percentage = result.percentage.toDouble();
-    final scoreColor = _getScoreColor(percentage / 100); // Convert to 0-1 range for color only
+    final scoreColor = _PracticeScreenState._getScoreColorStatic(percentage / 100); // Convert to 0-1 range for color only
     
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1039,12 +1074,6 @@ class _AttemptResultCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Color _getScoreColor(double percentage) {
-    if (percentage >= 0.8) return Colors.green;
-    if (percentage >= 0.6) return Colors.orange;
-    return Colors.red;
   }
 }
 

@@ -114,26 +114,36 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
 
   /// Ensure My Books are loaded (for My Books tab)
   Future<void> ensureMyBooksLoaded() async {
-    if (state.userLibraryBooks.isNotEmpty) return; // Already loaded
+    if (state.userLibraryBooks.isNotEmpty) {
+      debugPrint('📦 My Books already cached (${state.userLibraryBooks.length} books), skipping fetch');
+      return; // Already loaded
+    }
     
     if (_authToken == null) {
+      debugPrint('⏳ Auth token not ready, will load My Books when auth completes');
       _shouldLoadOnAuth = true;
       state = state.copyWith(isLoadingUserLibrary: true);
       return;
     }
     
+    debugPrint('🔄 Fetching My Books from API...');
     await _loadUserLibrary();
   }
 
   /// Ensure All Books are loaded (for Explore tab)
   Future<void> ensureAllBooksLoaded() async {
-    if (state.allBooks.isNotEmpty) return; // Already loaded
+    if (state.allBooks.isNotEmpty) {
+      debugPrint('📦 All Books already cached (${state.allBooks.length} books), skipping fetch');
+      return; // Already loaded
+    }
     
     if (_authToken == null) {
+      debugPrint('⚠️ Cannot load All Books - auth token not available');
       state = state.copyWith(isLoadingAllBooks: true);
       return;
     }
     
+    debugPrint('🔄 Fetching All Books from API...');
     await _loadAllBooks();
   }
 
@@ -175,11 +185,14 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         limit: limit,
       );
       
+      debugPrint('✅ All Books loaded and cached: ${books.length} items');
+      
       state = state.copyWith(
         allBooks: books,
         isLoadingAllBooks: false,
       );
     } catch (e, stackTrace) {
+      debugPrint('❌ Error loading All Books: $e');
       // Don't set error state for auth errors - dialog will handle it
       if (e is ApiException && e.isAuthError) {
         state = state.copyWith(isLoadingAllBooks: false);
@@ -208,12 +221,15 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         return BookModel.fromJson(bookData);
       }).toList();
       
+      debugPrint('✅ My Books loaded and cached: ${userBooks.length} items');
+      
       state = state.copyWith(
         userLibraryBookIds: bookIds,
         userLibraryBooks: userBooks,
         isLoadingUserLibrary: false,
       );
     } catch (e, stackTrace) {
+      debugPrint('❌ Error loading My Books: $e');
       // Don't set error state for auth errors - dialog will handle it
       if (e is ApiException && e.isAuthError) {
         state = state.copyWith(isLoadingUserLibrary: false);

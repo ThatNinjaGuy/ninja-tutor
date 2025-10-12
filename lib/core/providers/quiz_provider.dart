@@ -21,15 +21,21 @@ final quizGenerationProvider = StateNotifierProvider<QuizGenerationNotifier, Asy
 
 /// Notifier for managing user quizzes
 class UserQuizzesNotifier extends StateNotifier<AsyncValue<List<QuizSummary>>> {
-  UserQuizzesNotifier(this.ref) : super(const AsyncValue.loading()) {
-    loadQuizzes();
-  }
+  UserQuizzesNotifier(this.ref) : super(const AsyncValue.data([]));
 
   final Ref ref;
+  bool _hasLoaded = false;
 
-  /// Load user's quizzes from backend
-  Future<void> loadQuizzes({String? bookId}) async {
+  /// Load user's quizzes from backend (with caching)
+  Future<void> loadQuizzes({String? bookId, bool forceRefresh = false}) async {
+    // Skip if already loaded and not forcing refresh
+    if (_hasLoaded && !forceRefresh && state.hasValue && state.value!.isNotEmpty) {
+      debugPrint('📦 Quizzes already cached, skipping fetch');
+      return;
+    }
+
     try {
+      debugPrint('🔄 Fetching quizzes from API...');
       state = const AsyncValue.loading();
       
       final apiService = ref.read(apiServiceProvider);
@@ -40,15 +46,17 @@ class UserQuizzesNotifier extends StateNotifier<AsyncValue<List<QuizSummary>>> {
       }).toList();
       
       state = AsyncValue.data(quizzes);
+      _hasLoaded = true;
+      debugPrint('✅ Quizzes loaded and cached: ${quizzes.length} items');
     } catch (e, stack) {
       debugPrint('Error loading quizzes: $e');
       state = AsyncValue.error(e, stack);
     }
   }
 
-  /// Refresh quizzes
+  /// Refresh quizzes (force reload)
   Future<void> refresh({String? bookId}) async {
-    await loadQuizzes(bookId: bookId);
+    await loadQuizzes(bookId: bookId, forceRefresh: true);
   }
 
   /// Delete a quiz
@@ -72,15 +80,21 @@ class UserQuizzesNotifier extends StateNotifier<AsyncValue<List<QuizSummary>>> {
 
 /// Notifier for managing quiz results
 class QuizResultsNotifier extends StateNotifier<AsyncValue<List<QuizResult>>> {
-  QuizResultsNotifier(this.ref) : super(const AsyncValue.loading()) {
-    loadResults();
-  }
+  QuizResultsNotifier(this.ref) : super(const AsyncValue.data([]));
 
   final Ref ref;
+  bool _hasLoaded = false;
 
-  /// Load quiz results from backend
-  Future<void> loadResults({String? quizId}) async {
+  /// Load quiz results from backend (with caching)
+  Future<void> loadResults({String? quizId, bool forceRefresh = false}) async {
+    // Skip if already loaded and not forcing refresh
+    if (_hasLoaded && !forceRefresh && state.hasValue && state.value!.isNotEmpty) {
+      debugPrint('📦 Results already cached, skipping fetch');
+      return;
+    }
+
     try {
+      debugPrint('🔄 Fetching results from API...');
       state = const AsyncValue.loading();
       
       final apiService = ref.read(apiServiceProvider);
@@ -91,15 +105,17 @@ class QuizResultsNotifier extends StateNotifier<AsyncValue<List<QuizResult>>> {
       }).toList();
       
       state = AsyncValue.data(results);
+      _hasLoaded = true;
+      debugPrint('✅ Results loaded and cached: ${results.length} items');
     } catch (e, stack) {
       debugPrint('Error loading quiz results: $e');
       state = AsyncValue.error(e, stack);
     }
   }
 
-  /// Refresh results
+  /// Refresh results (force reload)
   Future<void> refresh({String? quizId}) async {
-    await loadResults(quizId: quizId);
+    await loadResults(quizId: quizId, forceRefresh: true);
   }
 
   /// Submit a quiz attempt
