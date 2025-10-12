@@ -3,14 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../models/content/book_model.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/common/responsive_grid_helpers.dart';
+import '../../widgets/common/empty_state.dart';
 import '../../widgets/library/book_filter.dart';
-import '../../widgets/library/library_empty_state.dart';
 import '../../widgets/library/add_book_bottom_sheet.dart';
 import '../../widgets/library/book_options_sheet.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
@@ -66,14 +67,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
     if (isInitialLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Library')),
+        appBar: AppBar(title: const Text(AppStrings.library)),
         body: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text('Loading your library...'),
+              Text(AppStrings.loadingYourLibrary),
             ],
           ),
         ),
@@ -101,19 +102,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   Widget _buildLoginPrompt() {
     return Scaffold(
-      appBar: AppBar(title: const Text('Library')),
-      body: LibraryEmptyState(
+      appBar: AppBar(title: const Text(AppStrings.library)),
+      body: EmptyStateWidget(
         icon: Icons.library_books_outlined,
-        title: 'Please log in to access your library',
-        subtitle: 'Your books and reading progress will be saved across devices',
-        onAddBook: () => context.go('/login'),
+        title: AppStrings.pleaseLogin,
+        subtitle: AppStrings.booksWillBeSaved,
+        actionText: AppStrings.signIn,
+        onAction: () => context.go('/login'),
       ),
     );
   }
 
   AppBar _buildAppBar() {
     return AppBar(
-      title: const Text('Library'),
+      title: const Text(AppStrings.library),
       actions: [
         IconButton(
           onPressed: _showAddBookOptions,
@@ -123,8 +125,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       bottom: TabBar(
         controller: _tabController,
         tabs: const [
-          Tab(text: 'My Books'),
-          Tab(text: 'Explore Books'),
+          Tab(text: AppStrings.myBooks),
+          Tab(text: AppStrings.exploreBooks),
         ],
       ),
     );
@@ -182,7 +184,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Loading your books...'),
+            Text(AppStrings.loadingYourBooks),
           ],
         ),
       );
@@ -193,11 +195,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     }
 
     if (libraryState.myBooks.isEmpty) {
-      return const LibraryEmptyState(
+      return const EmptyStateWidget(
         icon: Icons.library_books_outlined,
-        title: 'No Books in Your Library',
-        subtitle: 'Add books from the Explore tab to start your reading journey!',
-        onAddBook: null, // No add button on My Books tab
+        title: AppStrings.noBooksInLibrary,
+        subtitle: AppStrings.addBooksFromExplore,
       );
     }
 
@@ -210,13 +211,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     );
 
     if (filteredBooks.isEmpty) {
-      return LibraryEmptyState(
+      return EmptyStateWidget(
         icon: _searchQuery.isNotEmpty ? Icons.search_off : Icons.filter_list_off,
-        title: _searchQuery.isNotEmpty ? 'No Books Found' : 'No Books Match Filters',
+        title: _searchQuery.isNotEmpty ? AppStrings.noBooksFound : AppStrings.noBooksmatchFilters,
         subtitle: _searchQuery.isNotEmpty 
-            ? 'Try a different search term in your library'
-            : 'Try adjusting your filters to see more books',
-        onAddBook: null,
+            ? AppStrings.tryDifferentSearch
+            : AppStrings.tryAdjustingFilters,
       );
     }
 
@@ -252,7 +252,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           children: [
             const CircularProgressIndicator(),
             const SizedBox(height: 16),
-            Text(libraryState.isSearching ? 'Searching books...' : 'Loading books...'),
+            Text(libraryState.isSearching ? AppStrings.searchingBooks : AppStrings.loadingBooks),
           ],
         ),
       );
@@ -265,13 +265,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     final booksToShow = libraryState.exploreBooks;
 
     if (booksToShow.isEmpty) {
-      return LibraryEmptyState(
+      return EmptyStateWidget(
         icon: Icons.explore_outlined,
-        title: _searchQuery.isEmpty ? 'No Books Available' : 'No books found',
+        title: _searchQuery.isEmpty ? AppStrings.noBooksAvailable : AppStrings.noBooksFound,
         subtitle: _searchQuery.isEmpty 
-            ? 'Check back later for new books!'
-            : 'Try adjusting your search or filters',
-        onAddBook: null,
+            ? AppStrings.checkBackLater
+            : AppStrings.tryAdjustingFilters,
       );
     }
 
@@ -304,11 +303,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
 
   Widget _buildErrorState(String error) {
-    return LibraryEmptyState(
+    return EmptyStateWidget(
       icon: Icons.error_outline,
-      title: 'Error loading books',
+      title: AppStrings.errorLoadingBooks,
       subtitle: error,
-      onAddBook: () => ref.read(unifiedLibraryProvider.notifier).refresh(),
+      actionText: AppStrings.retry,
+      onAction: () => ref.read(unifiedLibraryProvider.notifier).refresh(),
     );
   }
 
@@ -368,7 +368,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? 'Book added to your library!' : 'Failed to add book'),
+          content: Text(success ? AppStrings.bookAddedToLibrary : AppStrings.failedToAddBook),
           backgroundColor: success ? Colors.green : Colors.red,
           duration: const Duration(seconds: 2),
         ),
@@ -383,7 +383,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? 'Book removed from your library!' : 'Failed to remove book'),
+          content: Text(success ? AppStrings.bookRemovedFromLibrary : AppStrings.failedToRemoveBook),
           backgroundColor: success ? Colors.orange : Colors.red,
           duration: const Duration(seconds: 2),
         ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/content/book_model.dart';
 import '../../../core/providers/unified_library_provider.dart';
+import '../../../core/constants/app_constants.dart';
 import 'reading_viewer.dart';
 
 /// Mixin providing shared reading interface functionality
@@ -51,7 +52,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   Widget _buildResponsiveLayout(BookModel book) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isWideScreen = constraints.maxWidth > 800; // Desktop/tablet landscape
+        final isWideScreen = constraints.maxWidth > AppConstants.wideScreenBreakpoint;
         
         if (isWideScreen) {
           // Wide screen: helper panel on the right side
@@ -96,7 +97,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     final isInLibrary = libraryState.isBookInLibrary(book.id);
     
     return Container(
-      width: 60, // Thin vertical panel
+      width: AppConstants.readingPanelWidthVertical,
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
         border: Border(left: BorderSide(color: Colors.grey.shade300)),
@@ -149,7 +150,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     final isInLibrary = libraryState.isBookInLibrary(book.id);
     
     return Container(
-      height: 60, // Thin horizontal panel
+      height: AppConstants.readingPanelHeightHorizontal,
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
         border: Border(top: BorderSide(color: Colors.grey.shade300)),
@@ -217,18 +218,18 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppConstants.controlButtonBorderRadius),
           onTap: isDisabled ? null : onPressed,
           child: Container(
-            width: 40,
-            height: 40,
+            width: AppConstants.controlButtonSize,
+            height: AppConstants.controlButtonSize,
             decoration: BoxDecoration(
               color: effectiveBackgroundColor,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(AppConstants.controlButtonBorderRadius),
             ),
             child: Icon(
               icon, 
-              size: 20,
+              size: AppConstants.controlButtonIconSize,
               color: isDisabled 
                   ? Colors.grey 
                   : (isCloseButton || isActive ? Colors.white : effectiveColor),
@@ -245,7 +246,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       right: 0,
       top: 0,
       bottom: 0,
-      width: MediaQuery.of(context).size.width * 0.35,
+      width: MediaQuery.of(context).size.width * AppConstants.aiPanelWidthPercentage,
       child: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
@@ -343,30 +344,22 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
 
   void _handleDefinitionRequest(String word) {
     // TODO: Implement AI definition request
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Definition requested for: $word')),
-    );
+    // Placeholder for when AI service is implemented
   }
 
   void _startQuiz() {
     // TODO: Navigate to quiz based on current reading position
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Starting quiz for current content')),
-    );
+    // Placeholder for when quiz generation is implemented
   }
 
   void _addBookmark() {
     // TODO: Add bookmark functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Bookmark added')),
-    );
+    // Placeholder for when bookmark service is implemented
   }
 
   void _toggleHighlight() {
     // TODO: Toggle highlight mode
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Highlight mode toggled')),
-    );
+    // Placeholder for when highlight service is implemented
   }
 }
 

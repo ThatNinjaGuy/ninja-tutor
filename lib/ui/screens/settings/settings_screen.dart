@@ -567,61 +567,49 @@ class SettingsScreen extends ConsumerWidget {
 
   void _selectLanguage(BuildContext context, WidgetRef ref) {
     // TODO: Show language selection dialog
-    print('Select language');
   }
 
   void _selectAiResponseSpeed(BuildContext context, WidgetRef ref) {
     // TODO: Show AI speed selection dialog
-    print('Select AI response speed');
   }
 
   void _configureAiSuggestions(BuildContext context, WidgetRef ref) {
     // TODO: Show AI suggestions configuration
-    print('Configure AI suggestions');
   }
 
   void _configureStudyReminders(BuildContext context, WidgetRef ref) {
     // TODO: Show study reminders configuration
-    print('Configure study reminders');
   }
 
   void _viewStorageUsage(BuildContext context, WidgetRef ref) {
     // TODO: Show storage usage details
-    print('View storage usage');
   }
 
   void _syncData(BuildContext context, WidgetRef ref) {
     // TODO: Implement data sync
-    print('Sync data');
   }
 
   void _exportData(BuildContext context, WidgetRef ref) {
     // TODO: Implement data export
-    print('Export data');
   }
 
   void _clearCache(BuildContext context, WidgetRef ref) {
     // TODO: Implement cache clearing
-    print('Clear cache');
   }
 
   void _viewPrivacyPolicy(BuildContext context) {
     // TODO: Show privacy policy
-    print('View privacy policy');
   }
 
   void _viewTermsOfService(BuildContext context) {
     // TODO: Show terms of service
-    print('View terms of service');
   }
 
   void _viewHelpSupport(BuildContext context) {
     // TODO: Show help and support
-    print('View help and support');
   }
 
   void _rateApp(BuildContext context) {
     // TODO: Open app store rating
-    print('Rate app');
   }
 }

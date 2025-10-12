@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Quiz session widget for taking quizzes
-class QuizSession extends StatefulWidget {
+class QuizSession extends StatelessWidget {
   const QuizSession({
     super.key,
     required this.sessionId,
@@ -10,15 +10,10 @@ class QuizSession extends StatefulWidget {
   final String sessionId;
 
   @override
-  State<QuizSession> createState() => _QuizSessionState();
-}
-
-class _QuizSessionState extends State<QuizSession> {
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Quiz Session ${widget.sessionId}'),
+        title: Text('Quiz Session $sessionId'),
       ),
       body: const Center(
         child: Text(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../models/note/note_model.dart';
 import '../../widgets/notes/note_card.dart';
@@ -43,7 +44,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notes'),
+        title: const Text(AppStrings.notes),
         actions: [
           IconButton(
             onPressed: _toggleSearch,
@@ -70,10 +71,10 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: 'All Notes'),
-            Tab(text: 'Highlights'),
-            Tab(text: 'Bookmarks'),
-            Tab(text: 'Collections'),
+            Tab(text: AppStrings.allNotes),
+            Tab(text: AppStrings.highlights),
+            Tab(text: AppStrings.bookmarks),
+            Tab(text: AppStrings.collections),
           ],
         ),
       ),
@@ -175,8 +176,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
         if (noteList.isEmpty) {
           return const EmptyStateWidget(
             icon: Icons.sticky_note_2_outlined,
-            title: 'No Notes Yet',
-            subtitle: 'Start reading and take notes to see them here',
+            title: AppStrings.noNotesYet,
+            subtitle: AppStrings.startReadingTakeNotes,
           );
         }
 
@@ -185,8 +186,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
         if (filteredNotes.isEmpty) {
           return const EmptyStateWidget(
             icon: Icons.search_off,
-            title: 'No Notes Found',
-            subtitle: 'Try adjusting your search or filters',
+            title: AppStrings.noNotesFound,
+            subtitle: AppStrings.tryAdjustingFilters,
           );
         }
 
@@ -199,11 +200,11 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
           children: [
             const Icon(Icons.error_outline, size: 64),
             const SizedBox(height: 16),
-            Text('Error loading notes: $error'),
+            Text('${AppStrings.errorLoadingNotes}: $error'),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => ref.refresh(allNotesProvider),
-              child: const Text('Retry'),
+              child: const Text(AppStrings.retry),
             ),
           ],
         ),
@@ -219,8 +220,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
         if (highlights.isEmpty) {
           return const EmptyStateWidget(
             icon: Icons.highlight_outlined,
-            title: 'No Highlights',
-            subtitle: 'Highlight text while reading to see them here',
+            title: AppStrings.noHighlights,
+            subtitle: AppStrings.highlightWhileReading,
           );
         }
 
@@ -229,7 +230,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Center(
-        child: Text('Error loading highlights: $error'),
+        child: Text('${AppStrings.errorLoadingHighlights}: $error'),
       ),
     );
   }
@@ -242,8 +243,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
         if (bookmarks.isEmpty) {
           return const EmptyStateWidget(
             icon: Icons.bookmark_outline,
-            title: 'No Bookmarks',
-            subtitle: 'Bookmark pages while reading to see them here',
+            title: AppStrings.noBookmarks,
+            subtitle: AppStrings.bookmarkWhileReading,
           );
         }
 
@@ -252,7 +253,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Center(
-        child: Text('Error loading bookmarks: $error'),
+        child: Text('${AppStrings.errorLoadingBookmarks}: $error'),
       ),
     );
   }
@@ -260,7 +261,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
   Widget _buildCollections(BuildContext context) {
     // Mock collections for now
     return const Center(
-      child: Text('Collections feature coming soon!'),
+      child: Text(AppStrings.collectionsComingSoon),
     );
   }
 
@@ -399,12 +400,12 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
 
   void _openNote(NoteModel note) {
     // TODO: Navigate to note detail screen
-    print('Opening note: ${note.id}');
+    // Placeholder: Will navigate to note detail when implemented
   }
 
   void _editNote(NoteModel note) {
     // TODO: Edit note
-    print('Editing note: ${note.id}');
+    // Placeholder: Will show edit dialog when implemented
   }
 
   void _deleteNote(NoteModel note) {
@@ -421,8 +422,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              // TODO: Delete note
-              print('Deleting note: ${note.id}');
+              // TODO: Delete note - will be implemented with API integration
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
@@ -538,8 +538,7 @@ class __CreateNoteDialogState extends State<_CreateNoteDialog> {
       return;
     }
 
-    // TODO: Create actual note
-    print('Creating note: ${_contentController.text}');
+    // TODO: Create actual note - will be implemented with API integration
     Navigator.pop(context);
   }
 }

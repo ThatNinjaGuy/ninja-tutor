@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -47,7 +48,7 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
     if (libraryState.isLoadingUserLibrary && libraryState.myBooks.isEmpty) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Select a Book to Read'),
+          title: const Text(AppStrings.selectBookToRead),
           centerTitle: true,
         ),
         body: const Center(
@@ -56,7 +57,7 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text('Loading your books...'),
+              Text(AppStrings.loadingYourBooks),
             ],
           ),
         ),
@@ -86,16 +87,16 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
   Widget _buildSelectBookScreen(BuildContext context, LibraryState libraryState) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Select a Book to Read'),
+        title: const Text(AppStrings.selectBookToRead),
         centerTitle: true,
       ),
       body: libraryState.myBooks.isEmpty
           ? EmptyStateWidget(
               icon: Icons.library_books_outlined,
-              title: 'No books in your library',
-              subtitle: 'Add some books from the Library tab to start reading',
-              actionText: 'Go to Library',
-              onAction: () => ref.read(navigationProvider.notifier).state = 1,
+              title: AppStrings.noBooks,
+              subtitle: AppStrings.addBooksFromLibrary,
+              actionText: AppStrings.goToLibrary,
+              onAction: () => ref.read(navigationProvider.notifier).state = 3,
             )
           : _buildBookList(libraryState.myBooks),
     );
@@ -140,14 +141,14 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
   Widget _buildLoginPrompt(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reading'),
+        title: const Text(AppStrings.reading),
         centerTitle: true,
       ),
       body: EmptyStateWidget(
         icon: Icons.login,
-        title: 'Please sign in to access your reading library',
+        title: AppStrings.pleaseSignIn,
         subtitle: '',
-        actionText: 'Sign In',
+        actionText: AppStrings.signIn,
         onAction: () => ref.read(navigationProvider.notifier).state = 0,
       ),
     );

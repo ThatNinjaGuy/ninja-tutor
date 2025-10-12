@@ -42,6 +42,15 @@ class AppConstants {
   static const int maxAiContextLength = 2000;
   static const Duration aiResponseTimeout = Duration(seconds: 10);
   static const int maxConcurrentAiRequests = 3;
+  
+  // Reading Interface Constants
+  static const double wideScreenBreakpoint = 800.0;
+  static const double readingPanelWidthVertical = 60.0;
+  static const double readingPanelHeightHorizontal = 60.0;
+  static const double aiPanelWidthPercentage = 0.35;
+  static const double controlButtonSize = 40.0;
+  static const double controlButtonIconSize = 20.0;
+  static const double controlButtonBorderRadius = 20.0;
 }
 
 /// Route names for navigation

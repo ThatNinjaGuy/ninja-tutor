@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../models/quiz/quiz_model.dart';
@@ -49,12 +50,12 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Practice'),
+        title: const Text(AppStrings.practice),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: 'Available'),
-            Tab(text: 'My Results'),
+            Tab(text: AppStrings.available),
+            Tab(text: AppStrings.myResults),
             Tab(text: 'Generate'),
           ],
         ),
@@ -86,8 +87,8 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
     if (bookList.isEmpty) {
       return const EmptyStateWidget(
         icon: Icons.quiz_outlined,
-        title: 'No Quizzes Available',
-        subtitle: 'Add books to generate practice quizzes',
+        title: AppStrings.noQuizzesAvailable,
+        subtitle: AppStrings.addBooksToGenerateQuizzes,
       );
     }
 
@@ -119,8 +120,8 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
         if (resultList.isEmpty) {
           return const EmptyStateWidget(
             icon: Icons.assessment_outlined,
-            title: 'No Results Yet',
-            subtitle: 'Complete some quizzes to see your progress',
+            title: AppStrings.noResultsYet,
+            subtitle: AppStrings.completeQuizzes,
           );
         }
 
@@ -181,8 +182,8 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
     if (bookList.isEmpty) {
       return const EmptyStateWidget(
         icon: Icons.auto_awesome_outlined,
-        title: 'No Books Available',
-        subtitle: 'Add books to generate custom quizzes',
+        title: AppStrings.noBooksAvailable,
+        subtitle: AppStrings.addBooksToGenerateCustomQuizzes,
       );
     }
 
@@ -267,13 +268,11 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
   }
 
   void _startQuiz(QuizModel quiz) {
-    // Navigate to quiz session
-    print('Starting quiz: ${quiz.title}');
+    // TODO: Navigate to quiz session when implemented
   }
 
   void _viewResult(QuizResult result) {
-    // Navigate to result details
-    print('Viewing result: ${result.id}');
+    // TODO: Navigate to result details when implemented
   }
 
   void _selectBookForQuiz(book) {
@@ -386,7 +385,6 @@ class __GenerateQuizDialogState extends State<_GenerateQuizDialog> {
   }
 
   void _generateQuiz() {
-    // TODO: Implement quiz generation
-    print('Generating quiz: pages $startPage-$endPage, $questionCount questions, $difficulty');
+    // TODO: Implement quiz generation with AI service
   }
 }

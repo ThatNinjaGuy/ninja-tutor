@@ -25,30 +25,10 @@ class MainNavigation extends ConsumerWidget {
         currentIndex: currentIndex,
         onTap: (index) {
           ref.read(navigationProvider.notifier).state = index;
-          _navigateToIndex(context, index);
+          NavigationHelper.navigateToIndex(context, index);
         },
       ),
     );
-  }
-
-  void _navigateToIndex(BuildContext context, int index) {
-    switch (index) {
-      case 0:
-        context.go(AppRoutes.dashboard);
-        break;
-      case 1:
-        context.go(AppRoutes.reading);
-        break;
-      case 2:
-        context.go(AppRoutes.practice);
-        break;
-      case 3:
-        context.go(AppRoutes.library);
-        break;
-      case 4:
-        context.go(AppRoutes.notes);
-        break;
-    }
   }
 }
 
@@ -242,7 +222,7 @@ class _SideNavigation extends ConsumerWidget {
             selectedIndex: currentIndex,
             onDestinationSelected: (index) {
               ref.read(navigationProvider.notifier).state = index;
-              _navigateToIndex(context, index);
+              NavigationHelper.navigateToIndex(context, index);
             },
             backgroundColor: theme.colorScheme.surface,
             destinations: const [
@@ -287,8 +267,12 @@ class _SideNavigation extends ConsumerWidget {
       ),
     );
   }
+}
 
-  void _navigateToIndex(BuildContext context, int index) {
+/// Helper class for navigation logic
+class NavigationHelper {
+  /// Navigate to a specific tab index
+  static void navigateToIndex(BuildContext context, int index) {
     switch (index) {
       case 0:
         context.go(AppRoutes.dashboard);

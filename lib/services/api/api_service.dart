@@ -9,10 +9,14 @@ import '../../models/note/note_model.dart';
 
 /// API service for network requests and AI integrations
 class ApiService {
+  // Singleton pattern
+  static final ApiService _instance = ApiService._internal();
+  factory ApiService() => _instance;
+  
   late final Dio _dio;
   String? _authToken;
 
-  ApiService() {
+  ApiService._internal() {
     _initializeDio();
   }
 

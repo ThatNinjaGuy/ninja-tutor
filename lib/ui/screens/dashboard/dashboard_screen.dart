@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/theme/app_theme.dart';
@@ -92,7 +93,7 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  user?.name ?? 'Student',
+                  user?.name ?? AppStrings.student,
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -135,7 +136,7 @@ class DashboardScreen extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Your Progress',
+          AppStrings.yourProgress,
           style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -195,8 +196,8 @@ class DashboardScreen extends ConsumerWidget {
     if (books.isEmpty) {
       return _buildEmptyState(
         context,
-        'No Books Yet',
-        'Add your first book to get started!',
+        AppStrings.noBooksYet,
+        AppStrings.addFirstBook,
         Icons.library_books_outlined,
         () => context.push(AppRoutes.library),
       );
@@ -213,14 +214,14 @@ class DashboardScreen extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Continue Reading',
+              AppStrings.continueReading,
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             TextButton(
               onPressed: () => context.push(AppRoutes.library),
-              child: const Text('View All'),
+              child: const Text(AppStrings.viewAll),
             ),
           ],
         ),
@@ -256,7 +257,7 @@ class DashboardScreen extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'AI Recommendations',
+          AppStrings.aiRecommendations,
           style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -288,7 +289,7 @@ class DashboardScreen extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Quick Actions',
+          AppStrings.quickActions,
           style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -354,7 +355,7 @@ class DashboardScreen extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Recent Activity',
+          AppStrings.recentActivity,
           style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -436,9 +437,9 @@ class DashboardScreen extends ConsumerWidget {
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
+    if (hour < 12) return AppStrings.goodMorning;
+    if (hour < 17) return AppStrings.goodAfternoon;
+    return AppStrings.goodEvening;
   }
 }
 
