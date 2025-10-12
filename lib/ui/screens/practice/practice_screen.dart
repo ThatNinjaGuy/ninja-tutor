@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/unified_library_provider.dart';
 import '../../../models/quiz/quiz_model.dart';
 import '../../widgets/practice/quiz_card.dart';
 import '../../widgets/practice/quiz_session.dart';
+import '../../widgets/common/empty_state.dart';
 
 /// Practice screen for quizzes and assessments
 class PracticeScreen extends ConsumerStatefulWidget {
@@ -70,40 +72,41 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
 
   Widget _buildAvailableQuizzes(BuildContext context) {
     final theme = Theme.of(context);
-    final books = ref.watch(booksProvider);
+    final libraryState = ref.watch(unifiedLibraryProvider);
+    final bookList = libraryState.myBooks;
 
-    return books.when(
-      data: (bookList) {
-        if (bookList.isEmpty) {
-          return _buildEmptyState(
-            'No Quizzes Available',
-            'Add books to generate practice quizzes',
-            Icons.quiz_outlined,
-          );
-        }
+    if (libraryState.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-        // Mock quizzes for demonstration
-        final mockQuizzes = _generateMockQuizzes(bookList);
+    if (libraryState.error != null) {
+      return Center(child: Text('Error loading books: ${libraryState.error}'));
+    }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(AppConstants.defaultPadding),
-          itemCount: mockQuizzes.length,
-          itemBuilder: (context, index) {
-            final quiz = mockQuizzes[index];
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: QuizCard(
-                quiz: quiz,
-                onStart: () => _startQuiz(quiz),
-              ),
-            );
-          },
+    if (bookList.isEmpty) {
+      return const EmptyStateWidget(
+        icon: Icons.quiz_outlined,
+        title: 'No Quizzes Available',
+        subtitle: 'Add books to generate practice quizzes',
+      );
+    }
+
+    // Mock quizzes for demonstration
+    final mockQuizzes = _generateMockQuizzes(bookList);
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      itemCount: mockQuizzes.length,
+      itemBuilder: (context, index) {
+        final quiz = mockQuizzes[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: QuizCard(
+            quiz: quiz,
+            onStart: () => _startQuiz(quiz),
+          ),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) => Center(
-        child: Text('Error loading quizzes: $error'),
-      ),
     );
   }
 
@@ -114,10 +117,10 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
     return results.when(
       data: (resultList) {
         if (resultList.isEmpty) {
-          return _buildEmptyState(
-            'No Results Yet',
-            'Complete some quizzes to see your progress',
-            Icons.assessment_outlined,
+          return const EmptyStateWidget(
+            icon: Icons.assessment_outlined,
+            title: 'No Results Yet',
+            subtitle: 'Complete some quizzes to see your progress',
           );
         }
 
@@ -164,112 +167,76 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
 
   Widget _buildGenerateQuiz(BuildContext context) {
     final theme = Theme.of(context);
-    final books = ref.watch(booksProvider);
+    final libraryState = ref.watch(unifiedLibraryProvider);
+    final bookList = libraryState.myBooks;
 
-    return books.when(
-      data: (bookList) {
-        if (bookList.isEmpty) {
-          return _buildEmptyState(
-            'No Books Available',
-            'Add books to generate custom quizzes',
-            Icons.auto_awesome_outlined,
-          );
-        }
+    if (libraryState.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-        return Padding(
-          padding: const EdgeInsets.all(AppConstants.defaultPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Generate Custom Quiz',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
+    if (libraryState.error != null) {
+      return Center(child: Text('Error loading books: ${libraryState.error}'));
+    }
 
-              Text(
-                'Select a book and page range to generate a personalized quiz:',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onBackground.withOpacity(0.7),
-                ),
-              ),
-              const SizedBox(height: 24),
+    if (bookList.isEmpty) {
+      return const EmptyStateWidget(
+        icon: Icons.auto_awesome_outlined,
+        title: 'No Books Available',
+        subtitle: 'Add books to generate custom quizzes',
+      );
+    }
 
-              Expanded(
-                child: ListView.builder(
-                  itemCount: bookList.length,
-                  itemBuilder: (context, index) {
-                    final book = bookList[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        leading: Container(
-                          width: 40,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Icon(
-                            Icons.menu_book,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        title: Text(book.title),
-                        subtitle: Text('${book.author} • ${book.totalPages} pages'),
-                        trailing: const Icon(Icons.arrow_forward_ios),
-                        onTap: () => _selectBookForQuiz(book),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Generate Custom Quiz',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) => Center(
-        child: Text('Error loading books: $error'),
-      ),
-    );
-  }
+          const SizedBox(height: 16),
 
-  Widget _buildEmptyState(String title, String subtitle, IconData icon) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 64,
-              color: theme.colorScheme.onBackground.withOpacity(0.4),
+          Text(
+            'Select a book and page range to generate a personalized quiz:',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onBackground.withOpacity(0.7),
             ),
-            const SizedBox(height: 16),
+          ),
+          const SizedBox(height: 24),
 
-            Text(
-              title,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: bookList.length,
+              itemBuilder: (context, index) {
+                final book = bookList[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    leading: Container(
+                      width: 40,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Icon(
+                        Icons.menu_book,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    title: Text(book.title),
+                    subtitle: Text('${book.author} • ${book.totalPages} pages'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: () => _selectBookForQuiz(book),
+                  ),
+                );
+              },
             ),
-            const SizedBox(height: 8),
-
-            Text(
-              subtitle,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onBackground.withOpacity(0.7),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

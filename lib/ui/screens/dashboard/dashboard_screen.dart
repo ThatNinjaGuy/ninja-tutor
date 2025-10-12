@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../models/content/book_model.dart';
+import '../../../models/user/user_model.dart';
 import '../../widgets/common/progress_card.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/common/ai_tip_card.dart';
@@ -17,7 +20,8 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final user = ref.watch(currentUserProvider);
-    final books = ref.watch(booksProvider);
+    final libraryState = ref.watch(unifiedLibraryProvider);
+    final books = libraryState.myBooks;
     
     return Scaffold(
       body: SafeArea(
@@ -42,7 +46,7 @@ class DashboardScreen extends ConsumerWidget {
                   const SizedBox(height: 24),
                   
                   // Continue reading
-                  _buildContinueReading(context, ref, books.value),
+                  _buildContinueReading(context, ref, books),
                   
                   const SizedBox(height: 24),
                   
@@ -67,7 +71,7 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAppBar(BuildContext context, WidgetRef ref, user) {
+  Widget _buildAppBar(BuildContext context, WidgetRef ref, UserModel? user) {
     final theme = Theme.of(context);
     final isDarkMode = ref.watch(themeModeProvider);
     
@@ -119,7 +123,7 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildProgressSection(BuildContext context, WidgetRef ref, user) {
+  Widget _buildProgressSection(BuildContext context, WidgetRef ref, UserModel? user) {
     final theme = Theme.of(context);
     final progress = user?.progress;
     
@@ -185,10 +189,10 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildContinueReading(BuildContext context, WidgetRef ref, books) {
+  Widget _buildContinueReading(BuildContext context, WidgetRef ref, List<BookModel> books) {
     final theme = Theme.of(context);
     
-    if (books == null || books.isEmpty) {
+    if (books.isEmpty) {
       return _buildEmptyState(
         context,
         'No Books Yet',

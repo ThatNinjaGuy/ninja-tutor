@@ -6,6 +6,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../models/note/note_model.dart';
 import '../../widgets/notes/note_card.dart';
 import '../../widgets/notes/note_filter.dart';
+import '../../widgets/common/empty_state.dart';
 
 /// Notes screen for managing highlights and annotations
 class NotesScreen extends ConsumerStatefulWidget {
@@ -172,20 +173,20 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
     return notes.when(
       data: (noteList) {
         if (noteList.isEmpty) {
-          return _buildEmptyState(
-            'No Notes Yet',
-            'Start reading and take notes to see them here',
-            Icons.sticky_note_2_outlined,
+          return const EmptyStateWidget(
+            icon: Icons.sticky_note_2_outlined,
+            title: 'No Notes Yet',
+            subtitle: 'Start reading and take notes to see them here',
           );
         }
 
         final filteredNotes = _filterNotes(noteList);
 
         if (filteredNotes.isEmpty) {
-          return _buildEmptyState(
-            'No Notes Found',
-            'Try adjusting your search or filters',
-            Icons.search_off,
+          return const EmptyStateWidget(
+            icon: Icons.search_off,
+            title: 'No Notes Found',
+            subtitle: 'Try adjusting your search or filters',
           );
         }
 
@@ -216,10 +217,10 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
         final highlights = noteList.where((note) => note.isHighlight).toList();
         
         if (highlights.isEmpty) {
-          return _buildEmptyState(
-            'No Highlights',
-            'Highlight text while reading to see them here',
-            Icons.highlight_outlined,
+          return const EmptyStateWidget(
+            icon: Icons.highlight_outlined,
+            title: 'No Highlights',
+            subtitle: 'Highlight text while reading to see them here',
           );
         }
 
@@ -239,10 +240,10 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
         final bookmarks = noteList.where((note) => note.type == NoteType.bookmark).toList();
         
         if (bookmarks.isEmpty) {
-          return _buildEmptyState(
-            'No Bookmarks',
-            'Bookmark pages while reading to see them here',
-            Icons.bookmark_outline,
+          return const EmptyStateWidget(
+            icon: Icons.bookmark_outline,
+            title: 'No Bookmarks',
+            subtitle: 'Bookmark pages while reading to see them here',
           );
         }
 
@@ -306,43 +307,6 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
           ),
         );
       },
-    );
-  }
-
-  Widget _buildEmptyState(String title, String subtitle, IconData icon) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 64,
-              color: theme.colorScheme.onBackground.withOpacity(0.4),
-            ),
-            const SizedBox(height: 16),
-
-            Text(
-              title,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            Text(
-              subtitle,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onBackground.withOpacity(0.7),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
