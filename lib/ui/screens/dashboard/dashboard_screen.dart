@@ -39,9 +39,13 @@ class DashboardScreen extends ConsumerWidget {
             // App bar
             SliverAppBar(
               floating: true,
-              backgroundColor: theme.colorScheme.background,
+              snap: true,
+              backgroundColor: theme.colorScheme.surface,
               elevation: 0,
-              flexibleSpace: _buildAppBar(context, ref, user.value),
+              expandedHeight: 80,
+              flexibleSpace: FlexibleSpaceBar(
+                background: _buildAppBar(context, ref, user.value),
+              ),
             ),
             
             // Main content

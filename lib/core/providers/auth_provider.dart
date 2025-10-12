@@ -1,10 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../constants/app_constants.dart';
 import '../constants/app_strings.dart';
 import '../../services/api/api_service.dart';
+import '../../services/storage/secure_storage_service.dart';
 
 /// Simple user data class for basic auth info
 class SimpleUser {
@@ -96,11 +97,13 @@ final authProvider = StateNotifierProvider<AuthNotifier, SimpleUser?>((ref) {
 
 class AuthNotifier extends StateNotifier<SimpleUser?> {
   AuthNotifier(this._ref) : super(null) {
-    _loadUser();
+    _setupAuthStateListener();
     _setupAuthErrorCallback();
   }
 
   final Ref _ref;
+  final _firebaseAuth = FirebaseAuth.instance;
+  final _secureStorage = SecureStorageService();
 
   void _setupAuthErrorCallback() {
     ApiService().onAuthError = _handleAuthError;
@@ -119,124 +122,176 @@ class AuthNotifier extends StateNotifier<SimpleUser?> {
     );
   }
 
-  Future<void> _loadUser() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('simple_user');
-      if (userJson != null) {
-        final userData = Map<String, dynamic>.from(
-          Uri.splitQueryString(userJson),
-        );
-        final user = SimpleUser.fromJson(userData);
-        
-        // Set token in API service
-        if (user.token != null) {
-          ApiService().setAuthToken(user.token!);
-          
-          // Validate token with backend
-          final isValid = await validateToken();
-          if (isValid) {
-            state = user;
-          } else {
-            // Token is invalid, clear it
-            await logout();
+  void _setupAuthStateListener() {
+    // Listen to Firebase auth state changes
+    _firebaseAuth.authStateChanges().listen((User? firebaseUser) async {
+      if (firebaseUser != null) {
+        try {
+          // User is signed in, get ID token
+          final token = await firebaseUser.getIdToken();
+          if (token != null) {
+            // Set token in API service
+            ApiService().setAuthToken(token);
+            
+            // Sync user with backend (creates Firestore document if doesn't exist)
+            try {
+              final apiService = ApiService();
+              final userProfile = await apiService.syncUser();
+              
+              // Update state with backend user data
+              state = SimpleUser(
+                id: userProfile['id'] as String,
+                name: userProfile['name'] as String,
+                email: userProfile['email'] as String,
+                token: token,
+              );
+              
+              debugPrint('User synced with backend: ${userProfile['email']}');
+            } catch (e) {
+              debugPrint('Error syncing user with backend: $e');
+              // Fall back to Firebase user data
+              state = SimpleUser(
+                id: firebaseUser.uid,
+                name: firebaseUser.displayName ?? 'User',
+                email: firebaseUser.email ?? '',
+                token: token,
+              );
+            }
+            
+            // Save to secure storage
+            await _secureStorage.saveToken(token);
+            await _secureStorage.saveUserId(firebaseUser.uid);
+            
+            debugPrint('User authenticated: ${firebaseUser.email}');
           }
-        } else {
-          state = user;
+        } catch (e) {
+          debugPrint('Error in auth state listener: $e');
         }
+      } else {
+        // User is signed out
+        state = null;
+        ApiService().clearAuthToken();
+        await _secureStorage.clearAll();
+        debugPrint('User signed out');
       }
-    } catch (e) {
-      debugPrint('Error loading user: $e');
-      // If there's an error loading, clear the state
-      state = null;
-    }
-  }
-
-  /// Validate the current auth token with backend
-  Future<bool> validateToken() async {
-    if (state?.token == null) return false;
-    
-    try {
-      final apiService = ApiService();
-      await apiService.getUserProfile();
-      return true;
-    } catch (e) {
-      if (e is ApiException && e.isAuthError) {
-        return false;
-      }
-      // For other errors (network, etc.), assume token is still valid
-      return true;
-    }
+    });
   }
 
   Future<void> login(String email, String password) async {
-    final apiService = ApiService();
-    
-    // Login to backend
-    final loginResponse = await apiService.login(email, password);
-    
-    // Set the auth token
-    final token = loginResponse['access_token'] as String?;
-    if (token != null) {
-      apiService.setAuthToken(token);
-      
-      // Get user profile
-      final profileResponse = await apiService.getUserProfile();
-      
-      // Create simple user
-      final user = SimpleUser(
-        id: profileResponse['id'] as String,
-        name: profileResponse['name'] as String,
-        email: profileResponse['email'] as String,
-        token: token,
+    try {
+      // Sign in with Firebase Authentication
+      await _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
       
-      // Save to SharedPreferences
-      await _saveUser(user);
-      
-      state = user;
-      
-      // Hide login dialog and clear return route
+      // Token will be automatically handled by authStateChanges listener
+      // Hide login dialog
       _ref.read(authStateProvider.notifier).hideLoginDialog();
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase login error: ${e.code} - ${e.message}');
+      
+      String errorMessage;
+      switch (e.code) {
+        case 'user-not-found':
+          errorMessage = 'No user found with this email.';
+          break;
+        case 'wrong-password':
+          errorMessage = 'Incorrect password.';
+          break;
+        case 'invalid-email':
+          errorMessage = 'Invalid email address.';
+          break;
+        case 'user-disabled':
+          errorMessage = 'This account has been disabled.';
+          break;
+        case 'too-many-requests':
+          errorMessage = 'Too many failed attempts. Please try again later.';
+          break;
+        default:
+          errorMessage = e.message ?? 'Login failed';
+      }
+      
+      throw ApiException(
+        statusCode: 401,
+        message: errorMessage,
+      );
+    } catch (e) {
+      debugPrint('Unexpected login error: $e');
+      throw ApiException(
+        statusCode: 500,
+        message: 'An unexpected error occurred. Please try again.',
+      );
     }
   }
 
   Future<void> register(String name, String email, String password) async {
-    final apiService = ApiService();
-    
-    // Register to backend
-    await apiService.register(
-      name: name,
-      email: email,
-      password: password,
-    );
-    
-    // Don't auto-login after registration
-    // User should login manually
+    try {
+      // Create user with Firebase Authentication
+      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      // Update display name
+      await credential.user?.updateDisplayName(name);
+      await credential.user?.reload();
+      
+      debugPrint('User registered successfully: $email');
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase registration error: ${e.code} - ${e.message}');
+      
+      String errorMessage;
+      switch (e.code) {
+        case 'weak-password':
+          errorMessage = 'Password is too weak. Please use a stronger password.';
+          break;
+        case 'email-already-in-use':
+          errorMessage = 'An account already exists with this email.';
+          break;
+        case 'invalid-email':
+          errorMessage = 'Invalid email address.';
+          break;
+        case 'operation-not-allowed':
+          errorMessage = 'Email/password accounts are not enabled.';
+          break;
+        default:
+          errorMessage = e.message ?? 'Registration failed';
+      }
+      
+      throw ApiException(
+        statusCode: 400,
+        message: errorMessage,
+      );
+    } catch (e) {
+      debugPrint('Unexpected registration error: $e');
+      throw ApiException(
+        statusCode: 500,
+        message: 'An unexpected error occurred. Please try again.',
+      );
+    }
   }
 
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('simple_user');
-    await prefs.remove(AppConstants.authTokenKey);
-    
-    // Clear API token
-    final apiService = ApiService();
-    apiService.clearAuthToken();
-    
-    state = null;
-    
-    // Hide login dialog if showing
-    _ref.read(authStateProvider.notifier).hideLoginDialog();
-  }
-
-  Future<void> _saveUser(SimpleUser user) async {
-    final prefs = await SharedPreferences.getInstance();
-    final userData = user.toJson();
-    final userString = userData.entries
-        .map((e) => '${e.key}=${e.value}')
-        .join('&');
-    await prefs.setString('simple_user', userString);
-    await prefs.setString(AppConstants.authTokenKey, user.token ?? '');
+    try {
+      // Sign out from Firebase
+      await _firebaseAuth.signOut();
+      
+      // Clear secure storage
+      await _secureStorage.clearAll();
+      
+      // Clear API token
+      ApiService().clearAuthToken();
+      
+      // Update state
+      state = null;
+      
+      // Hide login dialog if showing
+      _ref.read(authStateProvider.notifier).hideLoginDialog();
+      
+      debugPrint('User logged out successfully');
+    } catch (e) {
+      debugPrint('Error during logout: $e');
+    }
   }
 }

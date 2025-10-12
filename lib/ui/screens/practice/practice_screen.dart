@@ -43,7 +43,6 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final authUser = ref.watch(authProvider);
 
     // Show login prompt if not authenticated
@@ -59,6 +58,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppStrings.practice),
+        elevation: 0,
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -80,7 +80,6 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
   }
 
   Widget _buildAvailableQuizzes(BuildContext context) {
-    final theme = Theme.of(context);
     final libraryState = ref.watch(unifiedLibraryProvider);
     final bookList = libraryState.myBooks;
 

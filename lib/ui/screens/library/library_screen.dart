@@ -11,7 +11,7 @@ import '../../../models/content/book_model.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/common/responsive_grid_helpers.dart';
 import '../../widgets/common/empty_state.dart';
-import '../../widgets/library/book_filter.dart';
+import '../../widgets/common/search_filter_bar.dart';
 import '../../widgets/library/add_book_bottom_sheet.dart';
 import '../../widgets/library/book_options_sheet.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
@@ -120,10 +120,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   AppBar _buildAppBar() {
     return AppBar(
       title: const Text(AppStrings.library),
+      elevation: 0,
       actions: [
         IconButton(
           onPressed: _showAddBookOptions,
           icon: const Icon(Icons.add),
+          tooltip: 'Add Book',
         ),
       ],
       bottom: TabBar(
@@ -137,45 +139,55 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 
   Widget _buildSearchAndFilters() {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(AppConstants.defaultPadding),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
-        ),
-      ),
-      child: Column(
-        children: [
-          // Search bar
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'Search books...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      onPressed: () {
-                        setState(() => _searchQuery = '');
-                        ref.read(unifiedLibraryProvider.notifier).clearSearch();
-                      },
-                      icon: const Icon(Icons.clear),
-                    )
-                  : null,
+    return SearchFilterBar(
+      searchHint: 'Search books...',
+      searchQuery: _searchQuery,
+      onSearchChanged: (value) {
+        setState(() => _searchQuery = value);
+        if (value.isEmpty) {
+          ref.read(unifiedLibraryProvider.notifier).clearSearch();
+        } else {
+          _handleSearchChanged(value);
+        }
+      },
+      filterWidgets: [
+        ResponsiveFilterRow(
+          children: [
+            DropdownButtonFormField<String>(
+              value: _selectedSubject,
+              decoration: const InputDecoration(
+                labelText: 'Subject',
+                prefixIcon: Icon(Icons.subject),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                isDense: true,
+              ),
+              items: _getSubjects().map((subject) {
+                return DropdownMenuItem(
+                  value: subject,
+                  child: Text(subject, style: const TextStyle(fontSize: 14)),
+                );
+              }).toList(),
+              onChanged: _handleSubjectChanged,
             ),
-            onChanged: _handleSearchChanged,
-          ),
-          const SizedBox(height: 16),
-          // Filters
-          BookFilter(
-            selectedSubject: _selectedSubject,
-            selectedGrade: _selectedGrade,
-            onSubjectChanged: _handleSubjectChanged,
-            onGradeChanged: _handleGradeChanged,
-          ),
-        ],
-      ),
+            DropdownButtonFormField<String>(
+              value: _selectedGrade,
+              decoration: const InputDecoration(
+                labelText: 'Grade',
+                prefixIcon: Icon(Icons.school),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                isDense: true,
+              ),
+              items: _getGrades().map((gradeEntry) {
+                return DropdownMenuItem(
+                  value: gradeEntry['value'],
+                  child: Text(gradeEntry['display']!, style: const TextStyle(fontSize: 14)),
+                );
+              }).toList(),
+              onChanged: _handleGradeChanged,
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -395,4 +407,37 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     }
   }
 
+  List<String> _getSubjects() {
+    return [
+      'All',
+      'Mathematics',
+      'Science',
+      'English',
+      'History',
+      'Geography',
+      'Computer Science',
+      'Art',
+      'Music',
+      'General'
+    ];
+  }
+
+  List<Map<String, String>> _getGrades() {
+    return [
+      {'value': 'All', 'display': 'All'},
+      {'value': '1', 'display': 'Grade 1'},
+      {'value': '2', 'display': 'Grade 2'},
+      {'value': '3', 'display': 'Grade 3'},
+      {'value': '4', 'display': 'Grade 4'},
+      {'value': '5', 'display': 'Grade 5'},
+      {'value': '6', 'display': 'Grade 6'},
+      {'value': '7', 'display': 'Grade 7'},
+      {'value': '8', 'display': 'Grade 8'},
+      {'value': '9', 'display': 'Grade 9'},
+      {'value': '10', 'display': 'Grade 10'},
+      {'value': '11', 'display': 'Grade 11'},
+      {'value': '12', 'display': 'Grade 12'},
+      {'value': 'College', 'display': 'College'},
+    ];
+  }
 }

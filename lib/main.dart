@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/navigation/app_router.dart';
@@ -15,6 +16,24 @@ import 'ui/widgets/auth/login_dialog.dart';
 void main() async {
   // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase with a try-catch to handle configuration issues
+  try {
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: "AIzaSyBFFgz60xAwAIKhMscJ8fs2mmViPW3I8fw",
+        authDomain: "ninja-tutor-44dec.firebaseapp.com",
+        projectId: "ninja-tutor-44dec",
+        storageBucket: "ninja-tutor-44dec.firebasestorage.app",
+        messagingSenderId: "764764156207",
+        appId: "1:764764156207:web:ccdb1c1b0863e00b4071da",
+        measurementId: "G-7EVSYMCZ9Y"
+      ),
+    );
+  } catch (e) {
+    debugPrint('Firebase initialization error: $e');
+    // Continue without Firebase for now - auth will fail gracefully
+  }
 
   // Initialize Hive for local storage
   await HiveService.initialize();

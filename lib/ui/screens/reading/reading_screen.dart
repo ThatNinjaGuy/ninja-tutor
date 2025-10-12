@@ -10,6 +10,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../models/content/book_model.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../widgets/common/search_filter_bar.dart';
 
 /// Interactive reading screen with contextual AI features
 class ReadingScreen extends ConsumerStatefulWidget {
@@ -26,6 +27,9 @@ class ReadingScreen extends ConsumerStatefulWidget {
 
 class _ReadingScreenState extends ConsumerState<ReadingScreen> 
     with ReadingInterfaceMixin {
+  
+  String _searchQuery = '';
+  String? _selectedSubject;
 
   @override
   Widget build(BuildContext context) {
@@ -90,6 +94,7 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
       appBar: AppBar(
         title: const Text(AppStrings.selectBookToRead),
         centerTitle: true,
+        elevation: 0,
       ),
       body: libraryState.myBooks.isEmpty
           ? EmptyStateWidget(
@@ -99,12 +104,90 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
               actionText: AppStrings.goToLibrary,
               onAction: () => ref.read(navigationProvider.notifier).state = 3,
             )
-          : _buildBookList(libraryState.myBooks),
+          : Column(
+              children: [
+                _buildSearchAndFilters(),
+                Expanded(child: _buildBookList(_getFilteredBooks(libraryState.myBooks))),
+              ],
+            ),
     );
+  }
+
+  Widget _buildSearchAndFilters() {
+    return SearchFilterBar(
+      searchHint: 'Search books...',
+      searchQuery: _searchQuery,
+      onSearchChanged: (value) {
+        setState(() => _searchQuery = value);
+      },
+      filterWidgets: [
+        DropdownButtonFormField<String>(
+          value: _selectedSubject,
+          decoration: const InputDecoration(
+            labelText: 'Subject',
+            prefixIcon: Icon(Icons.subject),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            isDense: true,
+          ),
+          items: _getSubjects().map((subject) {
+            return DropdownMenuItem(
+              value: subject,
+              child: Text(subject, style: const TextStyle(fontSize: 14)),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() => _selectedSubject = value);
+          },
+        ),
+      ],
+    );
+  }
+
+  List<BookModel> _getFilteredBooks(List<BookModel> books) {
+    var filtered = books;
+
+    // Filter by search query
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((book) {
+        final searchLower = _searchQuery.toLowerCase();
+        return book.title.toLowerCase().contains(searchLower) ||
+               book.author.toLowerCase().contains(searchLower);
+      }).toList();
+    }
+
+    // Filter by subject
+    if (_selectedSubject != null && _selectedSubject != 'All') {
+      filtered = filtered.where((book) => book.subject == _selectedSubject).toList();
+    }
+
+    return filtered;
+  }
+
+  List<String> _getSubjects() {
+    return [
+      'All',
+      'Mathematics',
+      'Science',
+      'English',
+      'History',
+      'Geography',
+      'Computer Science',
+      'Art',
+      'Music',
+      'General'
+    ];
   }
 
   Widget _buildBookList(List<BookModel> books) {
     final theme = Theme.of(context);
+    
+    if (books.isEmpty) {
+      return const EmptyStateWidget(
+        icon: Icons.search_off,
+        title: 'No books found',
+        subtitle: 'Try adjusting your search or filters',
+      );
+    }
     
     return ListView.builder(
       padding: const EdgeInsets.all(AppConstants.defaultPadding),
@@ -129,6 +212,12 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
             ),
             title: Text(book.title),
             subtitle: Text('${book.author} • ${book.subject}'),
+            trailing: Text(
+              '${book.totalPages} pages',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
             onTap: () {
               ref.read(currentBookProvider.notifier).state = book;
               setReadingMode(true);

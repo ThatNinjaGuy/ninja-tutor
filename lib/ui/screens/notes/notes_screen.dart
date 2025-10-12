@@ -8,8 +8,8 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../models/note/note_model.dart';
 import '../../widgets/notes/note_card.dart';
-import '../../widgets/notes/note_filter.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../widgets/common/search_filter_bar.dart';
 
 /// Notes screen for managing highlights and annotations
 class NotesScreen extends ConsumerStatefulWidget {
@@ -41,7 +41,6 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final authUser = ref.watch(authProvider);
     final notes = ref.watch(allNotesProvider);
 
@@ -53,13 +52,16 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppStrings.notes),
+        elevation: 0,
         actions: [
           IconButton(
             onPressed: _toggleSearch,
             icon: const Icon(Icons.search),
+            tooltip: 'Search',
           ),
           PopupMenuButton<String>(
             onSelected: _handleMenuAction,
+            tooltip: 'More options',
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'export',
@@ -113,69 +115,74 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
   }
 
   Widget _buildSearchAndFilters(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(AppConstants.defaultPadding),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.2),
-          ),
-        ),
-      ),
-      child: Column(
-        children: [
-          // Search bar
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'Search notes...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _searchQuery = '';
-                        });
-                      },
-                      icon: const Icon(Icons.clear),
-                    )
-                  : null,
+    return SearchFilterBar(
+      searchHint: 'Search notes...',
+      searchQuery: _searchQuery,
+      onSearchChanged: (value) {
+        setState(() => _searchQuery = value);
+      },
+      filterWidgets: [
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<NoteType>(
+                value: _selectedType,
+                decoration: const InputDecoration(
+                  labelText: 'Type',
+                  prefixIcon: Icon(Icons.filter_list),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  isDense: true,
+                ),
+                items: [
+                  const DropdownMenuItem<NoteType>(
+                    value: null,
+                    child: Text('All Types', style: TextStyle(fontSize: 14)),
+                  ),
+                  ...NoteType.values.map((type) {
+                    return DropdownMenuItem(
+                      value: type,
+                      child: Text(_getNoteTypeName(type), style: const TextStyle(fontSize: 14)),
+                    );
+                  }),
+                ],
+                onChanged: (type) {
+                  setState(() => _selectedType = type);
+                },
+              ),
             ),
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
-            },
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Filters
-          NoteFilter(
-            selectedType: _selectedType,
-            selectedTag: _selectedTag,
-            showFavoritesOnly: _showFavoritesOnly,
-            onTypeChanged: (type) {
-              setState(() {
-                _selectedType = type;
-              });
-            },
-            onTagChanged: (tag) {
-              setState(() {
-                _selectedTag = tag;
-              });
-            },
-            onFavoritesToggled: (favoritesOnly) {
-              setState(() {
-                _showFavoritesOnly = favoritesOnly;
-              });
-            },
-          ),
-        ],
-      ),
+            const SizedBox(width: 12),
+            FilterChip(
+              label: const Text('Favorites', style: TextStyle(fontSize: 12)),
+              selected: _showFavoritesOnly,
+              onSelected: (value) {
+                setState(() => _showFavoritesOnly = value);
+              },
+              avatar: Icon(
+                _showFavoritesOnly ? Icons.favorite : Icons.favorite_border,
+                size: 16,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
+  }
+
+  String _getNoteTypeName(NoteType type) {
+    switch (type) {
+      case NoteType.highlight:
+        return 'Highlight';
+      case NoteType.text:
+        return 'Note';
+      case NoteType.drawing:
+        return 'Drawing';
+      case NoteType.bookmark:
+        return 'Bookmark';
+      case NoteType.question:
+        return 'Question';
+      case NoteType.summary:
+        return 'Summary';
+    }
   }
 
   Widget _buildAllNotes(BuildContext context, AsyncValue<List<NoteModel>> notes) {

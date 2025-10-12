@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../models/content/book_model.dart';
@@ -102,6 +103,16 @@ class ApiService {
   }
 
   // User endpoints
+
+  /// Sync Firebase user with backend
+  Future<Map<String, dynamic>> syncUser() async {
+    try {
+      final response = await _dio.post('/auth/sync-user');
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
 
   /// Get user profile
   Future<Map<String, dynamic>> getUserProfile() async {
@@ -487,12 +498,23 @@ class _AuthInterceptor extends Interceptor {
   final ApiService _apiService;
 
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    if (_apiService._authToken != null) {
-      options.headers['Authorization'] = 'Bearer ${_apiService._authToken}';
+  Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+    // Get current Firebase user
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    
+    if (firebaseUser != null) {
+      try {
+        // Get fresh ID token (Firebase SDK caches and auto-refreshes if expired)
+        final token = await firebaseUser.getIdToken(false); // Don't force refresh every time
+        if (token != null) {
+          options.headers['Authorization'] = 'Bearer $token';
+          _apiService.setAuthToken(token);
+        }
+      } catch (e) {
+        debugPrint('Error getting Firebase token: $e');
+      }
     }
-    // Always add ngrok header to skip browser warning
-    // options.headers['ngrok-skip-browser-warning'] = 'true';
+    
     super.onRequest(options, handler);
   }
 }

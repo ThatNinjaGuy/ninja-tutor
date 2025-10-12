@@ -9,6 +9,7 @@ import '../../models/note/note_model.dart';
 import '../../models/quiz/quiz_model.dart';
 import '../../services/storage/hive_service.dart';
 import '../../services/api/api_service.dart';
+import 'auth_provider.dart';
 
 /// Shared Preferences provider
 final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) async {
@@ -25,10 +26,12 @@ final apiServiceProvider = Provider<ApiService>((ref) {
   return ApiService();
 });
 
-/// Current user provider
+/// Current user provider - syncs with Firebase auth state
 final currentUserProvider = StateNotifierProvider<UserNotifier, AsyncValue<UserModel?>>((ref) {
   final hiveService = ref.watch(hiveServiceProvider);
-  return UserNotifier(hiveService);
+  final apiService = ref.watch(apiServiceProvider);
+  final authUser = ref.watch(authProvider);
+  return UserNotifier(hiveService, apiService, authUser);
 });
 
 /// User preferences provider
@@ -105,18 +108,68 @@ final errorProvider = StateProvider<String?>((ref) => null);
 
 /// User Notifier
 class UserNotifier extends StateNotifier<AsyncValue<UserModel?>> {
-  UserNotifier(this._hiveService) : super(const AsyncValue.loading()) {
+  UserNotifier(this._hiveService, this._apiService, this._authUser) : super(const AsyncValue.loading()) {
     _loadUser();
   }
 
   final HiveService _hiveService;
+  final ApiService _apiService;
+  final SimpleUser? _authUser;
 
   Future<void> _loadUser() async {
+    // If no Firebase auth user, return null
+    if (_authUser == null) {
+      state = const AsyncValue.data(null);
+      return;
+    }
+
     try {
-      final user = await _hiveService.getUser();
+      // Try to load from local Hive first for fast load
+      final localUser = await _hiveService.getUser();
+      if (localUser != null && localUser.id == _authUser!.id) {
+        state = AsyncValue.data(localUser);
+        return;
+      }
+      
+      // If not in Hive or different user, fetch from backend
+      await _fetchAndSyncUser();
+    } catch (e) {
+      // If Hive fails, try fetching from backend
+      try {
+        await _fetchAndSyncUser();
+      } catch (e2) {
+        state = AsyncValue.error(e2, StackTrace.current);
+      }
+    }
+  }
+
+  Future<void> _fetchAndSyncUser() async {
+    try {
+      // Fetch user profile from backend
+      final profileData = await _apiService.getUserProfile();
+      
+      // Convert to UserModel
+      final user = UserModel.fromJson(profileData);
+      
+      // Save to Hive for offline access
+      await _hiveService.saveUser(user);
+      
       state = AsyncValue.data(user);
     } catch (e) {
-      state = AsyncValue.error(e, StackTrace.current);
+      // If backend fails, create minimal user from auth data
+      final minimalUser = UserModel(
+        id: _authUser!.id,
+        name: _authUser!.name,
+        email: _authUser!.email,
+        createdAt: DateTime.now(),
+        lastActiveAt: DateTime.now(),
+        preferences: const UserPreferences(
+          readingPreferences: ReadingPreferences(),
+        ),
+        progress: const UserProgress(),
+      );
+      
+      state = AsyncValue.data(minimalUser);
     }
   }
 
@@ -136,6 +189,10 @@ class UserNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     } catch (e) {
       state = AsyncValue.error(e, StackTrace.current);
     }
+  }
+  
+  Future<void> refresh() async {
+    await _loadUser();
   }
 }
 

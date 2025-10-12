@@ -19,6 +19,7 @@ build/
 
 # Dependency caching
 .pub-cache/
+node_modules/
 
 # Android-specific
 android/local.properties
@@ -54,8 +55,11 @@ web/
 #!web/icons/
 
 # Generated files
-lib/generated_plugin_registrant.dart
 lib/**.g.dart
 
-# Local files
-Based on my earlier researches in the above discus.md
+# Firebase
+firebase-debug.log
+*-debug.log
+
+# Package manager files
+package-lock.json
