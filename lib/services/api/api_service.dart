@@ -15,6 +15,9 @@ class ApiService {
   
   late final Dio _dio;
   String? _authToken;
+  
+  /// Callback for authentication errors (401/403)
+  Function(ApiException)? onAuthError;
 
   ApiService._internal() {
     _initializeDio();
@@ -499,6 +502,19 @@ class _ErrorInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     debugPrint('API Error: ${err.message}');
+    
+    // Check for authentication errors (401/403)
+    final statusCode = err.response?.statusCode;
+    if (statusCode == 401 || statusCode == 403) {
+      final apiException = ApiException.fromDioError(err);
+      
+      // Trigger auth error callback if set
+      final apiService = ApiService();
+      if (apiService.onAuthError != null) {
+        apiService.onAuthError!(apiException);
+      }
+    }
+    
     super.onError(err, handler);
   }
 }
@@ -520,6 +536,7 @@ class ApiException implements Exception {
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
         message = 'Connection timeout. Please check your internet connection.';
+        statusCode = null;
         break;
       case DioExceptionType.badResponse:
         statusCode = dioError.response?.statusCode;
@@ -528,8 +545,10 @@ class ApiException implements Exception {
         break;
       case DioExceptionType.cancel:
         message = 'Request was cancelled';
+        statusCode = null;
         break;
       case DioExceptionType.unknown:
+        statusCode = null;
         if (dioError.error is SocketException) {
           message = 'No internet connection';
         } else {
@@ -538,6 +557,7 @@ class ApiException implements Exception {
         break;
       default:
         message = 'An error occurred';
+        statusCode = null;
     }
 
     return ApiException(
@@ -557,6 +577,15 @@ class ApiException implements Exception {
   final String message;
   final int? statusCode;
   final dynamic data;
+
+  /// Check if this is an authentication error (401 or 403)
+  bool get isAuthError => isUnauthorized || isForbidden;
+  
+  /// Check if this is a 401 Unauthorized error
+  bool get isUnauthorized => statusCode == 401;
+  
+  /// Check if this is a 403 Forbidden error
+  bool get isForbidden => statusCode == 403;
 
   @override
   String toString() => 'ApiException: $message';

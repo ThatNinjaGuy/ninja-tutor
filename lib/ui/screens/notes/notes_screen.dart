@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../models/note/note_model.dart';
 import '../../widgets/notes/note_card.dart';
 import '../../widgets/notes/note_filter.dart';
@@ -40,7 +42,13 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final authUser = ref.watch(authProvider);
     final notes = ref.watch(allNotesProvider);
+
+    // Show login prompt if not authenticated
+    if (authUser == null) {
+      return _buildLoginPrompt(context);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -428,6 +436,23 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
             child: const Text('Delete'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoginPrompt(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text(AppStrings.notes)),
+      body: EmptyStateWidget(
+        icon: Icons.sticky_note_2_outlined,
+        title: AppStrings.pleaseLogin,
+        subtitle: AppStrings.booksWillBeSaved,
+        actionText: AppStrings.signIn,
+        onAction: () {
+          // Save current route to return to after login
+          ref.read(authStateProvider.notifier).setReturnRoute(AppRoutes.notes);
+          context.go('/login');
+        },
       ),
     );
   }

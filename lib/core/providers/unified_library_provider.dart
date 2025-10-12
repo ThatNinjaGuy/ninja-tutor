@@ -116,10 +116,15 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         isLoadingAllBooks: false,
       );
     } catch (e, stackTrace) {
-      state = state.copyWith(
-        isLoadingAllBooks: false,
-        error: e.toString(),
-      );
+      // Don't set error state for auth errors - dialog will handle it
+      if (e is ApiException && e.isAuthError) {
+        state = state.copyWith(isLoadingAllBooks: false);
+      } else {
+        state = state.copyWith(
+          isLoadingAllBooks: false,
+          error: e.toString(),
+        );
+      }
     }
   }
 
@@ -145,10 +150,15 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         isLoadingUserLibrary: false,
       );
     } catch (e, stackTrace) {
-      state = state.copyWith(
-        isLoadingUserLibrary: false,
-        error: e.toString(),
-      );
+      // Don't set error state for auth errors - dialog will handle it
+      if (e is ApiException && e.isAuthError) {
+        state = state.copyWith(isLoadingUserLibrary: false);
+      } else {
+        state = state.copyWith(
+          isLoadingUserLibrary: false,
+          error: e.toString(),
+        );
+      }
     }
   }
 
@@ -169,10 +179,15 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         isSearching: false,
       );
     } catch (e, stackTrace) {
-      state = state.copyWith(
-        isSearching: false,
-        error: e.toString(),
-      );
+      // Don't set error state for auth errors - dialog will handle it
+      if (e is ApiException && e.isAuthError) {
+        state = state.copyWith(isSearching: false);
+      } else {
+        state = state.copyWith(
+          isSearching: false,
+          error: e.toString(),
+        );
+      }
     }
   }
 
@@ -203,6 +218,10 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
       return true;
     } catch (e) {
       debugPrint('Error adding book to library: $e');
+      // Auth errors are handled by interceptor - just return false
+      if (e is ApiException && e.isAuthError) {
+        return false;
+      }
       return false;
     }
   }
@@ -226,6 +245,10 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
       return true;
     } catch (e) {
       debugPrint('Error removing book from library: $e');
+      // Auth errors are handled by interceptor - just return false
+      if (e is ApiException && e.isAuthError) {
+        return false;
+      }
       return false;
     }
   }

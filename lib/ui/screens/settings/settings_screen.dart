@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/auth_provider.dart';
 
 /// Simple user preferences for fallback
@@ -115,13 +116,13 @@ class SettingsScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        user?.name ?? 'Guest User',
+                        user?.name ?? AppStrings.notSignedIn,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
-                        user?.email ?? 'Not signed in',
+                        user?.email ?? AppStrings.loginToAccess,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurface.withOpacity(0.7),
                         ),
@@ -130,10 +131,16 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
                 
-                IconButton(
-                  onPressed: () => _editProfile(context, ref),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
+                if (user != null)
+                  IconButton(
+                    onPressed: () => _editProfile(context, ref),
+                    icon: const Icon(Icons.edit_outlined),
+                  )
+                else
+                  ElevatedButton(
+                    onPressed: () => context.go('/login'),
+                    child: const Text(AppStrings.signIn),
+                  ),
               ],
             ),
           ],
@@ -541,24 +548,24 @@ class SettingsScreen extends ConsumerWidget {
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Sign Out'),
+              child: const Text(AppStrings.signOut),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: const Text(AppStrings.cancel),
           ),
           ElevatedButton(
             onPressed: () {
               // Update user profile logic would go here
               Navigator.of(context).pop();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Profile updated successfully!')),
+                const SnackBar(content: Text(AppStrings.profileUpdatedSuccessfully)),
               );
             },
-            child: const Text('Save'),
+            child: const Text(AppStrings.save),
           ),
         ],
       ),

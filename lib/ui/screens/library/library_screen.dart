@@ -108,7 +108,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         title: AppStrings.pleaseLogin,
         subtitle: AppStrings.booksWillBeSaved,
         actionText: AppStrings.signIn,
-        onAction: () => context.go('/login'),
+        onAction: () {
+          // Save current route to return to after login
+          ref.read(authStateProvider.notifier).setReturnRoute(AppRoutes.library);
+          context.go('/login');
+        },
       ),
     );
   }

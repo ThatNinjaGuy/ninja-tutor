@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
@@ -147,9 +148,13 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
       body: EmptyStateWidget(
         icon: Icons.login,
         title: AppStrings.pleaseSignIn,
-        subtitle: '',
+        subtitle: AppStrings.booksWillBeSaved,
         actionText: AppStrings.signIn,
-        onAction: () => ref.read(navigationProvider.notifier).state = 0,
+        onAction: () {
+          // Save current route to return to after login
+          ref.read(authStateProvider.notifier).setReturnRoute(AppRoutes.reading);
+          context.go('/login');
+        },
       ),
     );
   }

@@ -17,7 +17,9 @@ class MainNavigation extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currentIndex = ref.watch(navigationProvider);
+    // Determine current index from actual route location, not from state
+    final location = GoRouterState.of(context).uri.path;
+    final currentIndex = _getIndexFromLocation(location);
     
     return Scaffold(
       body: child,
@@ -29,6 +31,16 @@ class MainNavigation extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  /// Get navigation index from current route location
+  int _getIndexFromLocation(String location) {
+    if (location.startsWith('/dashboard')) return 0;
+    if (location.startsWith('/reading')) return 1;
+    if (location.startsWith('/practice')) return 2;
+    if (location.startsWith('/library')) return 3;
+    if (location.startsWith('/notes')) return 4;
+    return 0; // Default to dashboard
   }
 }
 
@@ -211,7 +223,9 @@ class _SideNavigation extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currentIndex = ref.watch(navigationProvider);
+    // Determine current index from actual route location
+    final location = GoRouterState.of(context).uri.path;
+    final currentIndex = _getIndexFromLocation(location);
     final theme = Theme.of(context);
     
     return Scaffold(
@@ -266,6 +280,16 @@ class _SideNavigation extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Get navigation index from current route location
+  int _getIndexFromLocation(String location) {
+    if (location.startsWith('/dashboard')) return 0;
+    if (location.startsWith('/reading')) return 1;
+    if (location.startsWith('/practice')) return 2;
+    if (location.startsWith('/library')) return 3;
+    if (location.startsWith('/notes')) return 4;
+    return 0; // Default to dashboard
   }
 }
 

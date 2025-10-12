@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../services/api/api_service.dart';
 
 /// Login screen for user authentication
 class LoginScreen extends ConsumerStatefulWidget {
@@ -39,13 +41,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       
       if (mounted) {
-        context.go(AppRoutes.dashboard);
+        // Check if there's a return route saved
+        final authState = ref.read(authStateProvider);
+        final returnRoute = authState.returnRoute;
+        
+        // Clear the return route
+        ref.read(authStateProvider.notifier).hideLoginDialog();
+        
+        if (returnRoute != null && returnRoute.isNotEmpty) {
+          // Navigate back to the intended route
+          context.go(returnRoute);
+        } else {
+          // Default to dashboard
+          context.go(AppRoutes.dashboard);
+        }
       }
     } catch (e) {
       if (mounted) {
+        final errorMessage = e is ApiException 
+            ? e.message 
+            : '${AppStrings.loginFailed}: ${e.toString()}';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Login failed: ${e.toString()}'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
           ),
         );
@@ -94,7 +112,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Sign in to your account',
+                        AppStrings.signInToAccount,
                         style: theme.textTheme.bodyLarge?.copyWith(
                           color: colorScheme.onSurface.withOpacity(0.7),
                         ),
@@ -108,15 +126,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
-                          labelText: 'Email',
+                          labelText: AppStrings.email,
                           prefixIcon: Icon(Icons.email_outlined),
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please enter your email';
+                            return AppStrings.pleaseEnterEmail;
                           }
                           if (!value.contains('@')) {
-                            return 'Please enter a valid email';
+                            return AppStrings.pleaseEnterValidEmail;
                           }
                           return null;
                         },
@@ -130,7 +148,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         textInputAction: TextInputAction.done,
                         onFieldSubmitted: (_) => _handleLogin(),
                         decoration: InputDecoration(
-                          labelText: 'Password',
+                          labelText: AppStrings.password,
                           prefixIcon: const Icon(Icons.lock_outlined),
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -143,7 +161,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please enter your password';
+                            return AppStrings.pleaseEnterPassword;
                           }
                           return null;
                         },
@@ -159,7 +177,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 width: 20,
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Text('Sign In'),
+                            : const Text(AppStrings.signIn),
                       ),
                       const SizedBox(height: 16),
 
@@ -168,7 +186,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onPressed: () {
                           context.push('/register');
                         },
-                        child: const Text("Don't have an account? Sign up"),
+                        child: const Text(AppStrings.dontHaveAccount),
                       ),
                     ],
                   ),

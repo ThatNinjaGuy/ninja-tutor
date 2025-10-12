@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/unified_library_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../models/quiz/quiz_model.dart';
 import '../../widgets/practice/quiz_card.dart';
 import '../../widgets/practice/quiz_session.dart';
@@ -42,6 +44,12 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final authUser = ref.watch(authProvider);
+
+    // Show login prompt if not authenticated
+    if (authUser == null) {
+      return _buildLoginPrompt(context);
+    }
 
     // If sessionId is provided, show quiz session
     if (widget.sessionId != null) {
@@ -280,6 +288,23 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
     showDialog(
       context: context,
       builder: (context) => _GenerateQuizDialog(book: book),
+    );
+  }
+
+  Widget _buildLoginPrompt(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text(AppStrings.practice)),
+      body: EmptyStateWidget(
+        icon: Icons.quiz_outlined,
+        title: AppStrings.pleaseLogin,
+        subtitle: AppStrings.booksWillBeSaved,
+        actionText: AppStrings.signIn,
+        onAction: () {
+          // Save current route to return to after login
+          ref.read(authStateProvider.notifier).setReturnRoute(AppRoutes.practice);
+          context.go('/login');
+        },
+      ),
     );
   }
 }

@@ -6,12 +6,14 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/unified_library_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/content/book_model.dart';
 import '../../../models/user/user_model.dart';
 import '../../widgets/common/progress_card.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/common/ai_tip_card.dart';
+import '../../widgets/common/empty_state.dart';
 
 /// Dashboard screen showing user overview and recommendations
 class DashboardScreen extends ConsumerWidget {
@@ -20,9 +22,15 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final authUser = ref.watch(authProvider);
     final user = ref.watch(currentUserProvider);
     final libraryState = ref.watch(unifiedLibraryProvider);
     final books = libraryState.myBooks;
+    
+    // Show login prompt if not authenticated
+    if (authUser == null) {
+      return _buildLoginPrompt(context, ref);
+    }
     
     return Scaffold(
       body: SafeArea(
@@ -440,6 +448,23 @@ class DashboardScreen extends ConsumerWidget {
     if (hour < 12) return AppStrings.goodMorning;
     if (hour < 17) return AppStrings.goodAfternoon;
     return AppStrings.goodEvening;
+  }
+
+  Widget _buildLoginPrompt(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      appBar: AppBar(title: const Text(AppStrings.dashboard)),
+      body: EmptyStateWidget(
+        icon: Icons.dashboard_outlined,
+        title: AppStrings.pleaseLogin,
+        subtitle: AppStrings.booksWillBeSaved,
+        actionText: AppStrings.signIn,
+        onAction: () {
+          // Save current route to return to after login
+          ref.read(authStateProvider.notifier).setReturnRoute(AppRoutes.dashboard);
+          context.go('/login');
+        },
+      ),
+    );
   }
 }
 

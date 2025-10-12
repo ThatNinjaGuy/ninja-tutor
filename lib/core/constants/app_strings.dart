@@ -132,6 +132,13 @@ class AppStrings {
   static const String pleaseSignIn = 'Please sign in to access your reading library';
   static const String pleaseLogin = 'Please log in to access your library';
   static const String booksWillBeSaved = 'Your books and reading progress will be saved across devices';
+  static const String sessionExpired = 'Your session has expired';
+  static const String pleaseLoginAgain = 'Please log in again to continue';
+  static const String authenticationRequired = 'Authentication Required';
+  static const String loginToAccess = 'Please log in to access this feature';
+  static const String invalidCredentials = 'Invalid email or password';
+  static const String loginSuccessful = 'Login successful!';
+  static const String notSignedIn = 'Not signed in';
   
   // Contextual Messages
   static const String definitionRequested = 'Definition requested for';

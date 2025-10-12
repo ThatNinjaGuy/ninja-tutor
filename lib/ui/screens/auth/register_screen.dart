@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../services/api/api_service.dart';
 
 /// Registration screen for new user signup
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -48,7 +50,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Account created successfully!'),
+            content: Text(AppStrings.accountCreatedSuccessfully),
             backgroundColor: Colors.green,
           ),
         );
@@ -58,9 +60,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final errorMessage = e is ApiException 
+            ? e.message 
+            : '${AppStrings.registrationFailed}: ${e.toString()}';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Registration failed: ${e.toString()}'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
           ),
         );
@@ -109,7 +114,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Create your account',
+                        AppStrings.createYourAccount,
                         style: theme.textTheme.bodyLarge?.copyWith(
                           color: colorScheme.onSurface.withOpacity(0.7),
                         ),
@@ -123,15 +128,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         textInputAction: TextInputAction.next,
                         textCapitalization: TextCapitalization.words,
                         decoration: const InputDecoration(
-                          labelText: 'Full Name',
+                          labelText: AppStrings.fullName,
                           prefixIcon: Icon(Icons.person_outlined),
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please enter your name';
+                            return AppStrings.pleaseEnterName;
                           }
                           if (value.trim().length < 2) {
-                            return 'Name must be at least 2 characters';
+                            return AppStrings.nameTooShort;
                           }
                           return null;
                         },
@@ -144,15 +149,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
-                          labelText: 'Email',
+                          labelText: AppStrings.email,
                           prefixIcon: Icon(Icons.email_outlined),
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please enter your email';
+                            return AppStrings.pleaseEnterEmail;
                           }
                           if (!value.contains('@') || !value.contains('.')) {
-                            return 'Please enter a valid email';
+                            return AppStrings.pleaseEnterValidEmail;
                           }
                           return null;
                         },
@@ -165,7 +170,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         obscureText: _obscurePassword,
                         textInputAction: TextInputAction.next,
                         decoration: InputDecoration(
-                          labelText: 'Password',
+                          labelText: AppStrings.password,
                           prefixIcon: const Icon(Icons.lock_outlined),
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -178,10 +183,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please enter a password';
+                            return AppStrings.pleaseEnterPassword;
                           }
                           if (value.length < 6) {
-                            return 'Password must be at least 6 characters';
+                            return AppStrings.passwordTooShort;
                           }
                           return null;
                         },
@@ -195,7 +200,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         textInputAction: TextInputAction.done,
                         onFieldSubmitted: (_) => _handleRegister(),
                         decoration: InputDecoration(
-                          labelText: 'Confirm Password',
+                          labelText: AppStrings.confirmPassword,
                           prefixIcon: const Icon(Icons.lock_outlined),
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -208,10 +213,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please confirm your password';
+                            return AppStrings.pleaseConfirmPassword;
                           }
                           if (value != _passwordController.text) {
-                            return 'Passwords do not match';
+                            return AppStrings.passwordsDoNotMatch;
                           }
                           return null;
                         },
@@ -227,7 +232,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 width: 20,
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Text('Create Account'),
+                            : const Text(AppStrings.createAccount),
                       ),
                       const SizedBox(height: 16),
 
@@ -236,7 +241,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         onPressed: () {
                           context.go('/login');
                         },
-                        child: const Text('Already have an account? Sign in'),
+                        child: const Text(AppStrings.alreadyHaveAccount),
                       ),
                     ],
                   ),
