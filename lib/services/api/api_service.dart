@@ -289,16 +289,25 @@ class ApiService {
   }
 
   /// Generate quiz from content
-  Future<quiz.QuizModel> generateQuiz(String bookId, List<int> pageRange) async {
+  Future<Map<String, dynamic>> generateQuiz({
+    required String bookId,
+    required int startPage,
+    required int endPage,
+    required int questionCount,
+    required String difficulty,
+    String? subject,
+    List<String>? questionTypes,
+  }) async {
     try {
       final response = await _dio.post('/quizzes/generate', data: {
         'book_id': bookId,
-        'page_range': pageRange,
-        'question_count': 10,
-        'difficulty': 'medium',
-        'question_types': ['multiple_choice'],
+        'page_range': [startPage, endPage],
+        'question_count': questionCount,
+        'difficulty': difficulty,
+        if (subject != null) 'subject': subject,
+        'question_types': questionTypes ?? ['multipleChoice'],
       });
-      return quiz.QuizModel.fromJson(response.data);
+      return response.data;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
@@ -484,6 +493,212 @@ class ApiService {
   Future<Map<String, dynamic>> checkBookInLibrary(String bookId) async {
     try {
       final response = await _dio.get('/library/check-book/$bookId');
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  // User Preferences endpoints
+
+  /// Update user app preferences
+  Future<Map<String, dynamic>> updatePreferences(Map<String, dynamic> preferences) async {
+    try {
+      final response = await _dio.put('/auth/preferences', data: preferences);
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Update user reading preferences
+  Future<Map<String, dynamic>> updateReadingPreferences(Map<String, dynamic> preferences) async {
+    try {
+      final response = await _dio.put('/auth/reading-preferences', data: preferences);
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Upload user avatar
+  Future<Map<String, dynamic>> uploadAvatar(List<int> bytes, String fileName) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(bytes, filename: fileName),
+      });
+      final response = await _dio.post('/auth/upload-avatar', data: formData);
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  // Quiz endpoints
+
+  /// Get user's quiz collection
+  Future<List<Map<String, dynamic>>> getUserQuizzes({String? bookId}) async {
+    try {
+      final queryParams = bookId != null ? {'book_id': bookId} : <String, dynamic>{};
+      final response = await _dio.get('/user-quiz/my-quizzes', queryParameters: queryParams);
+      return List<Map<String, dynamic>>.from(response.data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Submit quiz attempt
+  Future<Map<String, dynamic>> submitQuizAttempt({
+    required String quizId,
+    required List<Map<String, dynamic>> answers,
+    required int timeTaken,
+  }) async {
+    try {
+      final response = await _dio.post('/user-quiz/submit-attempt', data: {
+        'quiz_id': quizId,
+        'answers': answers,
+        'time_taken': timeTaken,
+      });
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get quiz results
+  Future<List<Map<String, dynamic>>> getQuizResults({String? quizId}) async {
+    try {
+      final queryParams = quizId != null ? {'quiz_id': quizId} : <String, dynamic>{};
+      final response = await _dio.get('/user-quiz/results', queryParameters: queryParams);
+      return List<Map<String, dynamic>>.from(response.data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Delete quiz from user's collection
+  Future<void> deleteUserQuiz(String quizId) async {
+    try {
+      await _dio.delete('/user-quiz/$quizId');
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  // Dashboard endpoints
+
+  /// Get dashboard overview data
+  Future<Map<String, dynamic>> getDashboardOverview() async {
+    try {
+      final response = await _dio.get('/dashboard/overview');
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get practice suggestions
+  Future<Map<String, dynamic>> getPracticeSuggestions() async {
+    try {
+      final response = await _dio.get('/dashboard/practice-suggestions');
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get reading analytics for a book
+  Future<Map<String, dynamic>> getReadingAnalytics(String bookId) async {
+    try {
+      final response = await _dio.get('/dashboard/reading-analytics/$bookId');
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  // Enhanced AI endpoints
+
+  /// Get AI-powered definition
+  Future<Map<String, dynamic>> getAiDefinition(
+    String text,
+    String context, {
+    String? bookId,
+    int? pageNumber,
+  }) async {
+    try {
+      final response = await _dio.post('/ai/definition', data: {
+        'text': text,
+        'context': context,
+        if (bookId != null) 'book_id': bookId,
+        if (pageNumber != null) 'page_number': pageNumber,
+      });
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get AI explanation
+  Future<Map<String, dynamic>> getAiExplanation(
+    String concept,
+    String context, {
+    String? bookId,
+  }) async {
+    try {
+      final response = await _dio.post('/ai/explanation', data: {
+        'concept': concept,
+        'context': context,
+        if (bookId != null) 'book_id': bookId,
+      });
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get contextual study tips
+  Future<Map<String, dynamic>> getStudyTips(String bookId, int currentPage) async {
+    try {
+      final response = await _dio.post(
+        '/ai/study-tips',
+        queryParameters: {
+          'book_id': bookId,
+          'current_page': currentPage,
+        },
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  // Enhanced Notes endpoints
+
+  /// Get all notes for current user
+  Future<List<Map<String, dynamic>>> getAllNotes() async {
+    try {
+      final response = await _dio.get('/notes/all');
+      return List<Map<String, dynamic>>.from(response.data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get favorite notes
+  Future<List<Map<String, dynamic>>> getFavoriteNotes() async {
+    try {
+      final response = await _dio.get('/notes/favorites');
+      return List<Map<String, dynamic>>.from(response.data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Toggle note favorite status
+  Future<Map<String, dynamic>> toggleNoteFavorite(String noteId) async {
+    try {
+      final response = await _dio.put('/notes/$noteId/favorite');
       return response.data;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);

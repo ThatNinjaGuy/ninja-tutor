@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -81,16 +82,10 @@ final allNotesProvider = StateNotifierProvider<AllNotesNotifier, AsyncValue<List
   return AllNotesNotifier(hiveService);
 });
 
-/// Quiz provider
+/// Quiz provider (old - for backward compatibility)
 final quizProvider = StateNotifierProvider.family<QuizNotifier, AsyncValue<QuizModel?>, String>((ref, quizId) {
   final apiService = ref.watch(apiServiceProvider);
   return QuizNotifier(apiService, quizId);
-});
-
-/// Quiz results provider
-final quizResultsProvider = StateNotifierProvider<QuizResultsNotifier, AsyncValue<List<QuizResult>>>((ref) {
-  final hiveService = ref.watch(hiveServiceProvider);
-  return QuizResultsNotifier(hiveService);
 });
 
 /// Reading progress provider
@@ -102,7 +97,8 @@ final readingProgressProvider = StateNotifierProvider.family<ReadingProgressNoti
 /// Theme mode provider
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, bool>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return ThemeModeNotifier(prefs.value);
+  final apiService = ref.watch(apiServiceProvider);
+  return ThemeModeNotifier(prefs.value, apiService);
 });
 
 /// Search provider
@@ -396,7 +392,14 @@ class QuizNotifier extends StateNotifier<AsyncValue<QuizModel?>> {
   Future<void> generateQuiz(String bookId, List<int> pageRange) async {
     try {
       state = const AsyncValue.loading();
-      final quiz = await _apiService.generateQuiz(bookId, pageRange);
+      final quizData = await _apiService.generateQuiz(
+        bookId: bookId,
+        startPage: pageRange[0],
+        endPage: pageRange[1],
+        questionCount: 10,
+        difficulty: 'medium',
+      );
+      final quiz = QuizModel.fromJson(quizData);
       state = AsyncValue.data(quiz);
     } catch (e) {
       state = AsyncValue.error(e, StackTrace.current);
@@ -473,11 +476,12 @@ class ReadingProgressNotifier extends StateNotifier<ReadingProgress?> {
 
 /// Theme Mode Notifier
 class ThemeModeNotifier extends StateNotifier<bool> {
-  ThemeModeNotifier(this._prefs) : super(false) {
+  ThemeModeNotifier(this._prefs, this._apiService) : super(false) {
     _loadThemeMode();
   }
 
   final SharedPreferences? _prefs;
+  final ApiService _apiService;
 
   void _loadThemeMode() {
     if (_prefs != null) {
@@ -486,9 +490,24 @@ class ThemeModeNotifier extends StateNotifier<bool> {
   }
 
   Future<void> toggleTheme() async {
-    state = !state;
+    final newValue = !state;
+    state = newValue;
+    
+    // Save to local SharedPreferences
     if (_prefs != null) {
-      await _prefs!.setBool(AppConstants.themeKey, state);
+      await _prefs!.setBool(AppConstants.themeKey, newValue);
+    }
+    
+    // Sync to backend
+    try {
+      await _apiService.updatePreferences({
+        'is_dark_mode': newValue,
+      });
+      debugPrint('Theme preference synced to backend: is_dark_mode=$newValue');
+    } catch (e) {
+      debugPrint('Failed to sync theme preference to backend: $e');
+      // Don't fail the toggle if backend sync fails
+      // User experience is maintained with local storage
     }
   }
 }

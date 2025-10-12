@@ -566,16 +566,16 @@ QuizModel _$QuizModelFromJson(Map<String, dynamic> json) => QuizModel(
       id: json['id'] as String,
       title: json['title'] as String,
       description: json['description'] as String?,
-      bookId: json['bookId'] as String,
+      bookId: json['book_id'] as String,
       subject: json['subject'] as String,
-      pageRange: (json['pageRange'] as List<dynamic>)
+      pageRange: (json['page_range'] as List<dynamic>)
           .map((e) => (e as num).toInt())
           .toList(),
       questions: (json['questions'] as List<dynamic>)
           .map((e) => QuestionModel.fromJson(e as Map<String, dynamic>))
           .toList(),
       settings: QuizSettings.fromJson(json['settings'] as Map<String, dynamic>),
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: DateTime.parse(json['created_at'] as String),
       type: $enumDecode(_$QuizTypeEnumMap, json['type']),
       difficulty: $enumDecode(_$DifficultyLevelEnumMap, json['difficulty']),
       tags:
@@ -588,12 +588,12 @@ Map<String, dynamic> _$QuizModelToJson(QuizModel instance) => <String, dynamic>{
       'id': instance.id,
       'title': instance.title,
       'description': instance.description,
-      'bookId': instance.bookId,
+      'book_id': instance.bookId,
       'subject': instance.subject,
-      'pageRange': instance.pageRange,
+      'page_range': instance.pageRange,
       'questions': instance.questions,
       'settings': instance.settings,
-      'createdAt': instance.createdAt.toIso8601String(),
+      'created_at': instance.createdAt.toIso8601String(),
       'type': _$QuizTypeEnumMap[instance.type]!,
       'difficulty': _$DifficultyLevelEnumMap[instance.difficulty]!,
       'tags': instance.tags,
@@ -619,11 +619,11 @@ const _$DifficultyLevelEnumMap = {
 
 QuizSettings _$QuizSettingsFromJson(Map<String, dynamic> json) => QuizSettings(
       timeLimit: (json['timeLimit'] as num?)?.toInt(),
-      shuffleQuestions: json['shuffleQuestions'] as bool? ?? false,
-      shuffleAnswers: json['shuffleAnswers'] as bool? ?? false,
+      shuffleQuestions: json['shuffle_questions'] as bool? ?? false,
+      shuffleAnswers: json['shuffle_options'] as bool? ?? false,
       showFeedback: json['showFeedback'] as bool? ?? true,
-      allowReview: json['allowReview'] as bool? ?? true,
-      showCorrectAnswers: json['showCorrectAnswers'] as bool? ?? true,
+      allowReview: json['allow_retakes'] as bool? ?? true,
+      showCorrectAnswers: json['show_results_immediately'] as bool? ?? true,
       maxAttempts: (json['maxAttempts'] as num?)?.toInt() ?? 3,
       passingScore: (json['passingScore'] as num?)?.toDouble() ?? 0.7,
     );
@@ -631,11 +631,11 @@ QuizSettings _$QuizSettingsFromJson(Map<String, dynamic> json) => QuizSettings(
 Map<String, dynamic> _$QuizSettingsToJson(QuizSettings instance) =>
     <String, dynamic>{
       'timeLimit': instance.timeLimit,
-      'shuffleQuestions': instance.shuffleQuestions,
-      'shuffleAnswers': instance.shuffleAnswers,
+      'shuffle_questions': instance.shuffleQuestions,
+      'shuffle_options': instance.shuffleAnswers,
       'showFeedback': instance.showFeedback,
-      'allowReview': instance.allowReview,
-      'showCorrectAnswers': instance.showCorrectAnswers,
+      'allow_retakes': instance.allowReview,
+      'show_results_immediately': instance.showCorrectAnswers,
       'maxAttempts': instance.maxAttempts,
       'passingScore': instance.passingScore,
     };
@@ -643,17 +643,17 @@ Map<String, dynamic> _$QuizSettingsToJson(QuizSettings instance) =>
 QuestionModel _$QuestionModelFromJson(Map<String, dynamic> json) =>
     QuestionModel(
       id: json['id'] as String,
-      question: json['question'] as String,
+      question: json['question_text'] as String,
       type: $enumDecode(_$QuestionTypeEnumMap, json['type']),
       options: (json['options'] as List<dynamic>?)
               ?.map((e) => AnswerOption.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
-      correctAnswer: json['correctAnswer'] as String?,
-      correctAnswers: (json['correctAnswers'] as List<dynamic>?)
+      correctAnswer: json['correct_answer'] as String?,
+      correctAnswers: (json['correct_answers'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
-          const [],
+          [],
       explanation: json['explanation'] as String?,
       points: (json['points'] as num?)?.toInt() ?? 1,
       difficulty:
@@ -661,28 +661,28 @@ QuestionModel _$QuestionModelFromJson(Map<String, dynamic> json) =>
               DifficultyLevel.medium,
       hints:
           (json['hints'] as List<dynamic>?)?.map((e) => e as String).toList() ??
-              const [],
-      imageUrl: json['imageUrl'] as String?,
-      audioUrl: json['audioUrl'] as String?,
+              [],
+      imageUrl: json['image_url'] as String?,
+      audioUrl: json['audio_url'] as String?,
       tags:
           (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ??
-              const [],
+              [],
     );
 
 Map<String, dynamic> _$QuestionModelToJson(QuestionModel instance) =>
     <String, dynamic>{
       'id': instance.id,
-      'question': instance.question,
+      'question_text': instance.question,
       'type': _$QuestionTypeEnumMap[instance.type]!,
       'options': instance.options,
-      'correctAnswer': instance.correctAnswer,
-      'correctAnswers': instance.correctAnswers,
+      'correct_answer': instance.correctAnswer,
+      'correct_answers': instance.correctAnswers,
       'explanation': instance.explanation,
       'points': instance.points,
       'difficulty': _$DifficultyLevelEnumMap[instance.difficulty]!,
       'hints': instance.hints,
-      'imageUrl': instance.imageUrl,
-      'audioUrl': instance.audioUrl,
+      'image_url': instance.imageUrl,
+      'audio_url': instance.audioUrl,
       'tags': instance.tags,
     };
 
@@ -702,18 +702,18 @@ const _$QuestionTypeEnumMap = {
 AnswerOption _$AnswerOptionFromJson(Map<String, dynamic> json) => AnswerOption(
       id: json['id'] as String,
       text: json['text'] as String,
-      isCorrect: json['isCorrect'] as bool,
+      isCorrect: json['is_correct'] as bool,
       explanation: json['explanation'] as String?,
-      imageUrl: json['imageUrl'] as String?,
+      imageUrl: json['image_url'] as String?,
     );
 
 Map<String, dynamic> _$AnswerOptionToJson(AnswerOption instance) =>
     <String, dynamic>{
       'id': instance.id,
       'text': instance.text,
-      'isCorrect': instance.isCorrect,
+      'is_correct': instance.isCorrect,
       'explanation': instance.explanation,
-      'imageUrl': instance.imageUrl,
+      'image_url': instance.imageUrl,
     };
 
 QuizResult _$QuizResultFromJson(Map<String, dynamic> json) => QuizResult(
@@ -745,6 +745,37 @@ Map<String, dynamic> _$QuizResultToJson(QuizResult instance) =>
       'isPassed': instance.isPassed,
       'attemptNumber': instance.attemptNumber,
       'analytics': instance.analytics,
+    };
+
+QuizSummary _$QuizSummaryFromJson(Map<String, dynamic> json) => QuizSummary(
+      quizId: json['quiz_id'] as String,
+      bookId: json['book_id'] as String,
+      bookTitle: json['book_title'] as String,
+      title: json['title'] as String,
+      subject: json['subject'] as String,
+      difficulty: json['difficulty'] as String,
+      questionCount: (json['question_count'] as num).toInt(),
+      totalAttempts: (json['total_attempts'] as num).toInt(),
+      bestScore: (json['best_score'] as num).toDouble(),
+      lastAttemptDate: json['last_attempt_date'] == null
+          ? null
+          : DateTime.parse(json['last_attempt_date'] as String),
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+
+Map<String, dynamic> _$QuizSummaryToJson(QuizSummary instance) =>
+    <String, dynamic>{
+      'quiz_id': instance.quizId,
+      'book_id': instance.bookId,
+      'book_title': instance.bookTitle,
+      'title': instance.title,
+      'subject': instance.subject,
+      'difficulty': instance.difficulty,
+      'question_count': instance.questionCount,
+      'total_attempts': instance.totalAttempts,
+      'best_score': instance.bestScore,
+      'last_attempt_date': instance.lastAttemptDate?.toIso8601String(),
+      'created_at': instance.createdAt.toIso8601String(),
     };
 
 QuestionResult _$QuestionResultFromJson(Map<String, dynamic> json) =>

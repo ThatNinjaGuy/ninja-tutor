@@ -18,12 +18,14 @@ class QuizModel extends Equatable {
   final String? description;
   
   @HiveField(3)
+  @JsonKey(name: 'book_id')
   final String bookId;
   
   @HiveField(4)
   final String subject;
   
   @HiveField(5)
+  @JsonKey(name: 'page_range')
   final List<int> pageRange; // [startPage, endPage]
   
   @HiveField(6)
@@ -33,6 +35,7 @@ class QuizModel extends Equatable {
   final QuizSettings settings;
   
   @HiveField(8)
+  @JsonKey(name: 'created_at')
   final DateTime createdAt;
   
   @HiveField(9)
@@ -179,18 +182,22 @@ class QuizSettings extends Equatable {
   final int? timeLimit; // in minutes, null for unlimited
   
   @HiveField(1)
+  @JsonKey(name: 'shuffle_questions')
   final bool shuffleQuestions;
   
   @HiveField(2)
+  @JsonKey(name: 'shuffle_options')
   final bool shuffleAnswers;
   
   @HiveField(3)
   final bool showFeedback; // Immediate feedback after each question
   
   @HiveField(4)
+  @JsonKey(name: 'allow_retakes')
   final bool allowReview; // Can review answers before submitting
   
   @HiveField(5)
+  @JsonKey(name: 'show_results_immediately')
   final bool showCorrectAnswers; // Show correct answers after completion
   
   @HiveField(6)
@@ -261,6 +268,7 @@ class QuestionModel extends Equatable {
   final String id;
   
   @HiveField(1)
+  @JsonKey(name: 'question_text')
   final String question;
   
   @HiveField(2)
@@ -270,9 +278,11 @@ class QuestionModel extends Equatable {
   final List<AnswerOption> options; // For MCQ
   
   @HiveField(4)
+  @JsonKey(name: 'correct_answer')
   final String? correctAnswer; // For short answer/essay
   
   @HiveField(5)
+  @JsonKey(name: 'correct_answers', defaultValue: [])
   final List<String> correctAnswers; // For multiple correct answers
   
   @HiveField(6)
@@ -285,15 +295,19 @@ class QuestionModel extends Equatable {
   final DifficultyLevel difficulty;
   
   @HiveField(9)
+  @JsonKey(defaultValue: [])
   final List<String> hints;
   
   @HiveField(10)
+  @JsonKey(name: 'image_url')
   final String? imageUrl; // Question image
   
   @HiveField(11)
+  @JsonKey(name: 'audio_url')
   final String? audioUrl; // Question audio
   
   @HiveField(12)
+  @JsonKey(defaultValue: [])
   final List<String> tags; // Learning objectives
   
   const QuestionModel({
@@ -421,12 +435,14 @@ class AnswerOption extends Equatable {
   final String text;
   
   @HiveField(2)
+  @JsonKey(name: 'is_correct')
   final bool isCorrect;
   
   @HiveField(3)
   final String? explanation; // Why this answer is correct/incorrect
   
   @HiveField(4)
+  @JsonKey(name: 'image_url')
   final String? imageUrl;
   
   const AnswerOption({
@@ -576,6 +592,72 @@ class QuizResult extends Equatable {
         isPassed,
         attemptNumber,
         analytics,
+      ];
+}
+
+/// Lightweight quiz summary from backend (for listing quizzes)
+@JsonSerializable()
+class QuizSummary extends Equatable {
+  @JsonKey(name: 'quiz_id')
+  final String quizId;
+  
+  @JsonKey(name: 'book_id')
+  final String bookId;
+  
+  @JsonKey(name: 'book_title')
+  final String bookTitle;
+  
+  final String title;
+  final String subject;
+  final String difficulty;
+  
+  @JsonKey(name: 'question_count')
+  final int questionCount;
+  
+  @JsonKey(name: 'total_attempts')
+  final int totalAttempts;
+  
+  @JsonKey(name: 'best_score')
+  final double bestScore;
+  
+  @JsonKey(name: 'last_attempt_date')
+  final DateTime? lastAttemptDate;
+  
+  @JsonKey(name: 'created_at')
+  final DateTime createdAt;
+  
+  const QuizSummary({
+    required this.quizId,
+    required this.bookId,
+    required this.bookTitle,
+    required this.title,
+    required this.subject,
+    required this.difficulty,
+    required this.questionCount,
+    required this.totalAttempts,
+    required this.bestScore,
+    this.lastAttemptDate,
+    required this.createdAt,
+  });
+  
+  factory QuizSummary.fromJson(Map<String, dynamic> json) =>
+      _$QuizSummaryFromJson(json);
+  
+  Map<String, dynamic> toJson() => _$QuizSummaryToJson(this);
+  
+  @override
+  List<Object?> get props => [
+        quizId,
+        bookId,
+        bookTitle,
+        title,
+        subject,
+        difficulty,
+        questionCount,
+        totalAttempts,
+        bestScore,
+        lastAttemptDate,
+        createdAt,
       ];
 }
 
