@@ -14,13 +14,34 @@ import '../../widgets/common/progress_card.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/common/ai_tip_card.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../widgets/common/responsive_grid_helpers.dart';
+import '../../widgets/reading/reading_interface_mixin.dart';
 
 /// Dashboard screen showing user overview and recommendations
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> 
+    with ReadingInterfaceMixin {
+  // Current book being read
+  BookModel? _currentReadingBook;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Load only My Books for dashboard (shows recent books)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authUser = ref.watch(authProvider);
     final user = ref.watch(currentUserProvider);
@@ -29,7 +50,12 @@ class DashboardScreen extends ConsumerWidget {
     
     // Show login prompt if not authenticated
     if (authUser == null) {
-      return _buildLoginPrompt(context, ref);
+      return _buildLoginPrompt(context);
+    }
+
+    // If in reading mode, show the reading interface from mixin
+    if (isReadingMode && _currentReadingBook != null) {
+      return buildReadingInterface(_currentReadingBook!);
     }
     
     return Scaffold(
@@ -42,42 +68,64 @@ class DashboardScreen extends ConsumerWidget {
               snap: true,
               backgroundColor: theme.colorScheme.surface,
               elevation: 0,
-              expandedHeight: 80,
+              expandedHeight: 100,
               flexibleSpace: FlexibleSpaceBar(
                 background: _buildAppBar(context, ref, user.value),
               ),
             ),
             
-            // Main content
+            // Main content - Progress overview
             SliverPadding(
               padding: const EdgeInsets.all(AppConstants.defaultPadding),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  // Progress overview
-                  _buildProgressSection(context, ref, user.value),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Continue reading
-                  _buildContinueReading(context, ref, books),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // AI recommendations
-                  _buildAiRecommendations(context, ref),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Quick actions
-                  _buildQuickActions(context, ref),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Recent activity
-                  _buildRecentActivity(context, ref),
-                ]),
+              sliver: SliverToBoxAdapter(
+                child: _buildProgressSection(context, ref, user.value),
               ),
             ),
+            
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            
+            // Continue reading
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+              sliver: SliverToBoxAdapter(
+                child: libraryState.isLoadingUserLibrary 
+                  ? _buildLoadingState(context)
+                  : _buildContinueReading(context, ref, books),
+              ),
+            ),
+            
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            
+            // AI recommendations
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+              sliver: SliverToBoxAdapter(
+                child: _buildAiRecommendations(context, ref),
+              ),
+            ),
+            
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            
+            // Quick actions
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+              sliver: SliverToBoxAdapter(
+                child: _buildQuickActions(context, ref),
+              ),
+            ),
+            
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            
+            // Recent activity
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+              sliver: SliverToBoxAdapter(
+                child: _buildRecentActivity(context, ref),
+              ),
+            ),
+            
+            // Bottom padding
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ],
         ),
       ),
@@ -157,43 +205,59 @@ class DashboardScreen extends ConsumerWidget {
         
         // Progress cards row
         SizedBox(
-          height: 120,
+          height: 130,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              ProgressCard(
-                title: 'Books Read',
-                value: progress.totalBooksRead.toString(),
-                subtitle: 'This month',
-                color: AppTheme.readingColor,
-                icon: Icons.menu_book,
+              SizedBox(
+                width: 140,
+                child: ProgressCard(
+                  key: const ValueKey('progress_books_read'),
+                  title: 'Books Read',
+                  value: progress.totalBooksRead.toString(),
+                  subtitle: 'This month',
+                  color: AppTheme.readingColor,
+                  icon: Icons.menu_book,
+                ),
               ),
               const SizedBox(width: 16),
               
-              ProgressCard(
-                title: 'Study Streak',
-                value: '${progress.currentStreak}',
-                subtitle: 'Days',
-                color: AppTheme.practiceColor,
-                icon: Icons.local_fire_department,
+              SizedBox(
+                width: 140,
+                child: ProgressCard(
+                  key: const ValueKey('progress_study_streak'),
+                  title: 'Study Streak',
+                  value: '${progress.currentStreak}',
+                  subtitle: 'Days',
+                  color: AppTheme.practiceColor,
+                  icon: Icons.local_fire_department,
+                ),
               ),
               const SizedBox(width: 16),
               
-              ProgressCard(
-                title: 'Quiz Score',
-                value: '${(progress.averageQuizScore * 100).toInt()}%',
-                subtitle: 'Average',
-                color: AppTheme.aiTipColor,
-                icon: Icons.quiz,
+              SizedBox(
+                width: 140,
+                child: ProgressCard(
+                  key: const ValueKey('progress_quiz_score'),
+                  title: 'Quiz Score',
+                  value: '${(progress.averageQuizScore * 100).toInt()}%',
+                  subtitle: 'Average',
+                  color: AppTheme.aiTipColor,
+                  icon: Icons.quiz,
+                ),
               ),
               const SizedBox(width: 16),
               
-              ProgressCard(
-                title: 'Study Time',
-                value: '${(progress.totalTimeSpent / 60).toInt()}h',
-                subtitle: 'Total',
-                color: AppTheme.noteColor,
-                icon: Icons.access_time,
+              SizedBox(
+                width: 140,
+                child: ProgressCard(
+                  key: const ValueKey('progress_study_time'),
+                  title: 'Study Time',
+                  value: '${(progress.totalTimeSpent / 60).toInt()}h',
+                  subtitle: 'Total',
+                  color: AppTheme.noteColor,
+                  icon: Icons.access_time,
+                ),
               ),
             ],
           ),
@@ -215,9 +279,16 @@ class DashboardScreen extends ConsumerWidget {
       );
     }
     
-    // Get recently read books
-    final recentBooks = books.where((book) => book.lastReadAt != null).toList()
-      ..sort((a, b) => b.lastReadAt!.compareTo(a.lastReadAt!));
+    // Get books for continue reading - prioritize recently read, then recently added
+    final continueBooks = books.map((book) {
+      // Use lastReadAt if available, otherwise use addedAt
+      final sortDate = book.lastReadAt ?? book.addedAt;
+      return MapEntry(book, sortDate);
+    }).toList()
+      ..sort((a, b) => b.value.compareTo(a.value)); // Sort by most recent first
+    
+    final maxCards = _getMaxCardsForScreen(context);
+    final displayBooks = continueBooks.take(maxCards).map((entry) => entry.key).toList();
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -232,7 +303,7 @@ class DashboardScreen extends ConsumerWidget {
               ),
             ),
             TextButton(
-              onPressed: () => context.push(AppRoutes.library),
+              onPressed: () => context.push(AppRoutes.reading),
               child: const Text(AppStrings.viewAll),
             ),
           ],
@@ -240,19 +311,27 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 16),
         
         SizedBox(
-          height: 200,
-          child: ListView.builder(
+          height: 250, // Increased by 25% (200 * 1.25 = 250)
+          child: GridView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: recentBooks.take(5).length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 1, // Single column for horizontal scrolling
+              childAspectRatio: 0.8, // Matches library screen aspect ratio
+              mainAxisSpacing: 16, // 16px spacing between cards
+              crossAxisSpacing: 0, // No cross-axis spacing for single column
+            ),
+            itemCount: displayBooks.length,
             itemBuilder: (context, index) {
-              final book = recentBooks[index];
-              return Padding(
-                padding: EdgeInsets.only(
-                  right: index < recentBooks.length - 1 ? 16 : 0,
-                ),
+              final book = displayBooks[index];
+              return SizedBox(
+                width: 160, // Fixed width to match library screen card width
                 child: BookCard(
+                  key: ValueKey('dashboard_book_${book.id}'),
                   book: book,
-                  onTap: () => context.push('${AppRoutes.reading}/book/${book.id}'),
+                  layout: BookCardLayout.grid,
+                  showAddToLibrary: false, // Don't show add/remove in dashboard
+                  isInLibrary: true, // Books in continue reading are already in library
+                  onTap: () => _openBook(book),
                 ),
               );
             },
@@ -312,6 +391,7 @@ class DashboardScreen extends ConsumerWidget {
           children: [
             Expanded(
               child: _QuickActionCard(
+                key: const ValueKey('quick_action_add_book'),
                 title: 'Add Book',
                 icon: Icons.add_circle_outline,
                 color: AppTheme.readingColor,
@@ -322,6 +402,7 @@ class DashboardScreen extends ConsumerWidget {
             
             Expanded(
               child: _QuickActionCard(
+                key: const ValueKey('quick_action_practice_quiz'),
                 title: 'Practice Quiz',
                 icon: Icons.quiz_outlined,
                 color: AppTheme.practiceColor,
@@ -336,6 +417,7 @@ class DashboardScreen extends ConsumerWidget {
           children: [
             Expanded(
               child: _QuickActionCard(
+                key: const ValueKey('quick_action_view_notes'),
                 title: 'View Notes',
                 icon: Icons.sticky_note_2_outlined,
                 color: AppTheme.noteColor,
@@ -346,6 +428,7 @@ class DashboardScreen extends ConsumerWidget {
             
             Expanded(
               child: _QuickActionCard(
+                key: const ValueKey('quick_action_study_timer'),
                 title: 'Study Timer',
                 icon: Icons.timer_outlined,
                 color: AppTheme.aiTipColor,
@@ -376,6 +459,7 @@ class DashboardScreen extends ConsumerWidget {
         
         // Activity items
         _ActivityItem(
+          key: const ValueKey('activity_read_chapter'),
           icon: Icons.menu_book,
           title: 'Read Chapter 5',
           subtitle: 'Biology Textbook • 25 minutes ago',
@@ -384,6 +468,7 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 12),
         
         _ActivityItem(
+          key: const ValueKey('activity_chemistry_quiz'),
           icon: Icons.quiz,
           title: 'Completed Chemistry Quiz',
           subtitle: 'Score: 85% • 2 hours ago',
@@ -392,10 +477,54 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 12),
         
         _ActivityItem(
+          key: const ValueKey('activity_highlights'),
           icon: Icons.highlight,
           title: 'Added 3 highlights',
           subtitle: 'Physics Notes • Yesterday',
           color: AppTheme.noteColor,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoadingState(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          AppStrings.continueReading,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 16),
+        
+        SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: 3,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: EdgeInsets.only(right: index < 2 ? 16 : 0),
+                child: Container(
+                  width: 120,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withOpacity(0.2),
+                    ),
+                  ),
+                  child: const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ],
     );
@@ -454,7 +583,7 @@ class DashboardScreen extends ConsumerWidget {
     return AppStrings.goodEvening;
   }
 
-  Widget _buildLoginPrompt(BuildContext context, WidgetRef ref) {
+  Widget _buildLoginPrompt(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text(AppStrings.dashboard)),
       body: EmptyStateWidget(
@@ -470,11 +599,46 @@ class DashboardScreen extends ConsumerWidget {
       ),
     );
   }
+
+  void _openBook(BookModel book) {
+    setState(() {
+      _currentReadingBook = book;
+    });
+    setReadingMode(true);
+    ref.read(currentBookProvider.notifier).state = book;
+  }
+
+  /// Calculate maximum number of cards to display based on screen size
+  int _getMaxCardsForScreen(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardWidth = 160.0; // Fixed card width
+    final spacing = 16.0; // Spacing between cards
+    final horizontalPadding = 32.0; // Total horizontal padding (16px on each side)
+    
+    // Calculate available width for cards
+    final availableWidth = screenWidth - horizontalPadding;
+    
+    // Calculate how many cards can fit
+    final cardsThatFit = ((availableWidth + spacing) / (cardWidth + spacing)).floor();
+    
+    // Set reasonable limits based on screen size
+    if (screenWidth >= AppConstants.desktopBreakpoint) {
+      // Desktop: Allow up to 8 cards
+      return cardsThatFit.clamp(5, 8);
+    } else if (screenWidth >= AppConstants.tabletBreakpoint) {
+      // Tablet: Allow up to 6 cards
+      return cardsThatFit.clamp(4, 6);
+    } else {
+      // Mobile: Allow up to 4 cards
+      return cardsThatFit.clamp(3, 4);
+    }
+  }
 }
 
 /// Quick action card widget
 class _QuickActionCard extends StatelessWidget {
   const _QuickActionCard({
+    super.key,
     required this.title,
     required this.icon,
     required this.color,
@@ -530,6 +694,7 @@ class _QuickActionCard extends StatelessWidget {
 /// Activity item widget
 class _ActivityItem extends StatelessWidget {
   const _ActivityItem({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,

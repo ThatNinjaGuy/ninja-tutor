@@ -61,19 +61,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   Future<void> _initializeApp() async {
     try {
-      // Simulate initialization delay
-      await Future.delayed(const Duration(seconds: 2));
-      
-      // Check if user is logged in
-      final user = await ref.read(currentUserProvider.notifier).state.value;
+      // Wait for Firebase auth state to settle
+      await Future.delayed(const Duration(milliseconds: 500));
       
       if (mounted) {
-        if (user != null) {
-          context.go(AppRoutes.dashboard);
-        } else {
-          // For now, go to dashboard (auth can be added later)
-          context.go(AppRoutes.dashboard);
-        }
+        // Always go to dashboard - auth screens will be shown automatically if needed
+        context.go(AppRoutes.dashboard);
       }
     } catch (e) {
       // Handle initialization error

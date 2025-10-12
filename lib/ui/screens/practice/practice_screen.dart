@@ -33,6 +33,11 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    
+    // Load only My Books for practice (generates quizzes from user's books)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
+    });
   }
 
   @override

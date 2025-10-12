@@ -17,6 +17,7 @@ class LibraryState {
     this.isLoadingUserLibrary = false,
     this.isSearching = false,
     this.error,
+    this.isInitialized = false,
   });
 
   final List<BookModel> allBooks;
@@ -27,6 +28,7 @@ class LibraryState {
   final bool isLoadingUserLibrary;
   final bool isSearching;
   final String? error;
+  final bool isInitialized;
 
   LibraryState copyWith({
     List<BookModel>? allBooks,
@@ -37,6 +39,7 @@ class LibraryState {
     bool? isLoadingUserLibrary,
     bool? isSearching,
     String? error,
+    bool? isInitialized,
   }) {
     return LibraryState(
       allBooks: allBooks ?? this.allBooks,
@@ -47,6 +50,7 @@ class LibraryState {
       isLoadingUserLibrary: isLoadingUserLibrary ?? this.isLoadingUserLibrary,
       isSearching: isSearching ?? this.isSearching,
       error: error ?? this.error,
+      isInitialized: isInitialized ?? this.isInitialized,
     );
   }
 
@@ -66,22 +70,79 @@ class LibraryState {
 /// Unified library provider that manages all library-related state
 final unifiedLibraryProvider = StateNotifierProvider<UnifiedLibraryNotifier, LibraryState>((ref) {
   final apiService = ref.watch(apiServiceProvider);
-  final authState = ref.watch(authProvider);
-  return UnifiedLibraryNotifier(apiService, authState?.token);
+  final notifier = UnifiedLibraryNotifier(apiService);
+  
+  // Listen to auth changes and update token
+  ref.listen<SimpleUser?>(authProvider, (previous, next) {
+    if (previous?.id != next?.id) {
+      // Auth changed - update token and reset initialization
+      notifier.updateAuthToken(next?.token);
+    }
+  });
+  
+  // Set initial token
+  final authState = ref.read(authProvider);
+  notifier.updateAuthToken(authState?.token);
+  
+  return notifier;
 });
 
 class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
-  UnifiedLibraryNotifier(this._apiService, this._authToken) : super(const LibraryState()) {
-    if (_authToken != null) {
-      _apiService.setAuthToken(_authToken!);
-      _loadInitialData();
+  UnifiedLibraryNotifier(this._apiService) : super(const LibraryState());
+
+  final ApiService _apiService;
+  String? _authToken;
+  bool _shouldLoadOnAuth = false;
+
+  /// Update auth token and load data if needed
+  void updateAuthToken(String? token) {
+    _authToken = token;
+    
+    if (token != null) {
+      _apiService.setAuthToken(token);
+      
+      // If a screen requested initialization before auth was ready, load My Books now
+      if (_shouldLoadOnAuth) {
+        _loadUserLibrary();
+        _shouldLoadOnAuth = false;
+      }
+    } else {
+      // Auth cleared - reset state
+      state = const LibraryState();
     }
   }
 
-  final ApiService _apiService;
-  final String? _authToken;
+  /// Ensure My Books are loaded (for My Books tab)
+  Future<void> ensureMyBooksLoaded() async {
+    if (state.userLibraryBooks.isNotEmpty) return; // Already loaded
+    
+    if (_authToken == null) {
+      _shouldLoadOnAuth = true;
+      state = state.copyWith(isLoadingUserLibrary: true);
+      return;
+    }
+    
+    await _loadUserLibrary();
+  }
 
-  /// Load initial data (both all books and user library)
+  /// Ensure All Books are loaded (for Explore tab)
+  Future<void> ensureAllBooksLoaded() async {
+    if (state.allBooks.isNotEmpty) return; // Already loaded
+    
+    if (_authToken == null) {
+      state = state.copyWith(isLoadingAllBooks: true);
+      return;
+    }
+    
+    await _loadAllBooks();
+  }
+
+  /// Legacy method for backward compatibility - loads My Books only
+  Future<void> ensureInitialized() async {
+    await ensureMyBooksLoaded();
+  }
+
+  /// Load initial data (both all books and user library) - used by refresh
   Future<void> _loadInitialData() async {
     if (_authToken == null) return;
     
@@ -90,6 +151,9 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
       _loadAllBooks(),
       _loadUserLibrary(),
     ]);
+    
+    // Mark as initialized
+    state = state.copyWith(isInitialized: true);
   }
 
   /// Load all available books
@@ -337,6 +401,7 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
 
   /// Refresh all data
   Future<void> refresh() async {
+    state = state.copyWith(isInitialized: false);
     await _loadInitialData();
   }
 }

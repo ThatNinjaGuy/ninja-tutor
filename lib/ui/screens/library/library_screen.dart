@@ -38,6 +38,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    
+    // Listen to tab changes to lazy load data
+    _tabController.addListener(_handleTabChange);
+    
+    // Load My Books by default (first tab)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
+    });
+  }
+
+  void _handleTabChange() {
+    if (_tabController.index == 1) {
+      // Explore Books tab - load all books only when this tab is opened
+      ref.read(unifiedLibraryProvider.notifier).ensureAllBooksLoaded();
+    }
   }
 
   @override

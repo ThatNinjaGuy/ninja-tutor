@@ -30,8 +30,23 @@ final apiServiceProvider = Provider<ApiService>((ref) {
 final currentUserProvider = StateNotifierProvider<UserNotifier, AsyncValue<UserModel?>>((ref) {
   final hiveService = ref.watch(hiveServiceProvider);
   final apiService = ref.watch(apiServiceProvider);
-  final authUser = ref.watch(authProvider);
-  return UserNotifier(hiveService, apiService, authUser);
+  
+  // Create notifier and listen to auth changes
+  final notifier = UserNotifier(hiveService, apiService);
+  
+  // Listen to auth changes and update user data
+  ref.listen<SimpleUser?>(authProvider, (previous, next) {
+    if (previous?.id != next?.id) {
+      // Auth user changed (logged in, logged out, or different user)
+      notifier.handleAuthChange(next);
+    }
+  });
+  
+  // Initial load based on current auth state
+  final authUser = ref.read(authProvider);
+  notifier.handleAuthChange(authUser);
+  
+  return notifier;
 });
 
 /// User preferences provider
@@ -108,67 +123,72 @@ final errorProvider = StateProvider<String?>((ref) => null);
 
 /// User Notifier
 class UserNotifier extends StateNotifier<AsyncValue<UserModel?>> {
-  UserNotifier(this._hiveService, this._apiService, this._authUser) : super(const AsyncValue.loading()) {
-    _loadUser();
-  }
+  UserNotifier(this._hiveService, this._apiService) : super(const AsyncValue.loading());
 
   final HiveService _hiveService;
   final ApiService _apiService;
-  final SimpleUser? _authUser;
+  SimpleUser? _currentAuthUser;
 
-  Future<void> _loadUser() async {
+  /// Handle auth state changes from authProvider listener
+  Future<void> handleAuthChange(SimpleUser? authUser) async {
+    // If auth user is the same, don't reload
+    if (_currentAuthUser?.id == authUser?.id && authUser != null) {
+      return;
+    }
+    
+    _currentAuthUser = authUser;
+    await _loadUser(authUser);
+  }
+
+  Future<void> _loadUser(SimpleUser? authUser) async {
     // If no Firebase auth user, return null
-    if (_authUser == null) {
+    if (authUser == null) {
       state = const AsyncValue.data(null);
+      await _hiveService.clearUser(); // Clean up local storage
       return;
     }
 
     try {
       // Try to load from local Hive first for fast load
       final localUser = await _hiveService.getUser();
-      if (localUser != null && localUser.id == _authUser!.id) {
+      if (localUser != null && localUser.id == authUser.id) {
         state = AsyncValue.data(localUser);
+        // Background sync with backend (don't await)
+        _fetchAndSyncUser(authUser, updateStateOnSuccess: false);
         return;
       }
       
       // If not in Hive or different user, fetch from backend
-      await _fetchAndSyncUser();
+      await _fetchAndSyncUser(authUser);
     } catch (e) {
       // If Hive fails, try fetching from backend
       try {
-        await _fetchAndSyncUser();
+        await _fetchAndSyncUser(authUser);
       } catch (e2) {
         state = AsyncValue.error(e2, StackTrace.current);
       }
     }
   }
 
-  Future<void> _fetchAndSyncUser() async {
-    try {
-      // Fetch user profile from backend
-      final profileData = await _apiService.getUserProfile();
-      
-      // Convert to UserModel
-      final user = UserModel.fromJson(profileData);
-      
-      // Save to Hive for offline access
-      await _hiveService.saveUser(user);
-      
-      state = AsyncValue.data(user);
-    } catch (e) {
-      // If backend fails, create minimal user from auth data
-      final minimalUser = UserModel(
-        id: _authUser!.id,
-        name: _authUser!.name,
-        email: _authUser!.email,
-        createdAt: DateTime.now(),
-        lastActiveAt: DateTime.now(),
-        preferences: const UserPreferences(
-          readingPreferences: ReadingPreferences(),
-        ),
-        progress: const UserProgress(),
-      );
-      
+  Future<void> _fetchAndSyncUser(SimpleUser authUser, {bool updateStateOnSuccess = true}) async {
+    // Create minimal user from Firebase auth data
+    // The backend sync already happened in auth_provider, no need for another API call
+    final minimalUser = UserModel(
+      id: authUser.id,
+      name: authUser.name,
+      email: authUser.email,
+      createdAt: DateTime.now(),
+      lastActiveAt: DateTime.now(),
+      preferences: const UserPreferences(
+        readingPreferences: ReadingPreferences(),
+      ),
+      progress: const UserProgress(),
+    );
+    
+    // Save to Hive for offline access
+    await _hiveService.saveUser(minimalUser);
+    
+    if (updateStateOnSuccess) {
       state = AsyncValue.data(minimalUser);
     }
   }
@@ -192,7 +212,9 @@ class UserNotifier extends StateNotifier<AsyncValue<UserModel?>> {
   }
   
   Future<void> refresh() async {
-    await _loadUser();
+    if (_currentAuthUser != null) {
+      await _loadUser(_currentAuthUser);
+    }
   }
 }
 

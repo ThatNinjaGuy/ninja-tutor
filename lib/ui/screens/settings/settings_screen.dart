@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/app_providers.dart';
 
 /// Simple user preferences for fallback
 class _SimpleUserPrefs {
@@ -32,7 +33,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final user = ref.watch(authProvider);
-    final isDarkMode = false; // Simple fallback for now
+    final isDarkMode = ref.watch(themeModeProvider);
     
     // Simple user preferences fallback
     final userPrefs = _SimpleUserPrefs();
@@ -171,10 +172,7 @@ class SettingsScreen extends ConsumerWidget {
               subtitle: const Text('Use dark theme'),
               value: isDarkMode,
               onChanged: (value) {
-                // TODO: Implement theme switching
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Theme switching coming soon!')),
-                );
+                ref.read(themeModeProvider.notifier).toggleTheme();
               },
             ),
             

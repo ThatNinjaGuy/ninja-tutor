@@ -39,6 +39,14 @@ class BookCard extends StatelessWidget {
   final VoidCallback? onAddToLibrary;
   final VoidCallback? onRemoveFromLibrary;
 
+  /// Truncate title to max 25 characters(22 characters + 3 dots)
+  String get _truncatedTitle {
+    if (book.title.length <= 22) {
+      return book.title;
+    }
+    return '${book.title.substring(0, 22)}...';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -102,11 +110,11 @@ class BookCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    book.title,
+                    _truncatedTitle,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
@@ -170,7 +178,7 @@ class BookCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                book.title,
+                _truncatedTitle,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -428,12 +436,12 @@ class BookCard extends StatelessWidget {
             children: [
               // Title with better sizing
               Text(
-                book.title,
+                _truncatedTitle,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   fontSize: 13, // Optimized for grid
                 ),
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),

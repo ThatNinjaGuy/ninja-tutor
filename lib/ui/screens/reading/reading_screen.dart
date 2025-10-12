@@ -32,6 +32,16 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
   String? _selectedSubject;
 
   @override
+  void initState() {
+    super.initState();
+    
+    // Load only My Books for reading screen (user can only read their own books)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currentBook = ref.watch(currentBookProvider);
     final user = ref.watch(authProvider);
@@ -211,13 +221,16 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
               ),
             ),
             title: Text(book.title),
-            subtitle: Text('${book.author} • ${book.subject}'),
-            trailing: Text(
-              '${book.totalPages} pages',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ),
+            subtitle: Text('${book.author} • ${book.subject} • ${book.totalPages} pages'),
+            trailing: book.progress != null
+                ? Text(
+                    '${(book.progressPercentage * 100).toInt()}%',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  )
+                : const Icon(Icons.play_arrow),
             onTap: () {
               ref.read(currentBookProvider.notifier).state = book;
               setReadingMode(true);

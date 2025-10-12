@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/unified_library_provider.dart';
 import '../../../models/note/note_model.dart';
 import '../../widgets/notes/note_card.dart';
 import '../../widgets/common/empty_state.dart';
@@ -359,8 +360,22 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
   }
 
   String _getBookTitle(String bookId) {
-    // TODO: Get actual book title from books provider
-    return 'Book $bookId';
+    final libraryState = ref.read(unifiedLibraryProvider);
+    
+    // Try to find book in user's library first
+    try {
+      final book = libraryState.myBooks.firstWhere((b) => b.id == bookId);
+      return book.title;
+    } catch (e) {
+      // Not in user's library, try all books
+      try {
+        final book = libraryState.allBooks.firstWhere((b) => b.id == bookId);
+        return book.title;
+      } catch (e) {
+        // Book not found, return fallback
+        return 'Unknown Book';
+      }
+    }
   }
 
   void _toggleSearch() {
