@@ -207,7 +207,7 @@ class BookCard extends StatelessWidget {
             _buildSubjectChip(theme, small: true),
             if (showProgress)
               Text(
-                '${book.progress?.currentPage ?? 0}/${book.totalPages}',
+                '${book.progress?.totalPagesRead ?? 0}/${book.totalPages}',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.primary,
                   fontWeight: FontWeight.w600,
@@ -490,7 +490,7 @@ class BookCard extends StatelessWidget {
                     _buildLibraryButton(theme)
                   else
                     Text(
-                      '${book.progress?.currentPage ?? 0}/${book.totalPages}',
+                      '${book.progress?.totalPagesRead ?? 0}/${book.totalPages}',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.w600,

@@ -218,7 +218,22 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
       final bookIds = libraryData.map((data) => data['book_id'] as String).toSet();
       final userBooks = libraryData.map((data) {
         final bookData = data['book'] as Map<String, dynamic>;
-        return BookModel.fromJson(bookData);
+        final progressData = data['progress'] as Map<String, dynamic>?;
+        
+        // Merge book and progress data for proper parsing
+        final mergedData = Map<String, dynamic>.from(bookData);
+        if (progressData != null) {
+          mergedData['progress'] = progressData;
+        }
+        
+        final book = BookModel.fromJson(mergedData);
+        
+        // Debug: Log progress parsing
+        if (progressData != null) {
+          debugPrint('📖 ${book.title}: pages_read=${progressData['pages_read_count']}, time=${progressData['reading_time_minutes']}min → parsed: ${book.progress?.totalPagesRead}/${book.totalPages}, ${book.progress?.timeSpent}min');
+        }
+        
+        return book;
       }).toList();
       
       debugPrint('✅ My Books loaded and cached: ${userBooks.length} items');

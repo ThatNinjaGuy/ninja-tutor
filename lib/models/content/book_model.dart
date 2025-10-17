@@ -114,6 +114,7 @@ class BookModel extends Equatable {
           ? ReadingProgress(
               bookId: json['id'] as String,
               currentPage: json['progress']['current_page'] as int? ?? 0,
+              totalPagesRead: json['progress']['pages_read_count'] as int? ?? 0,
               timeSpent: json['progress']['reading_time_minutes'] as int? ?? 0,
               lastReadAt: json['progress']['last_read_at'] != null 
                   ? DateTime.parse(json['progress']['last_read_at'] as String)

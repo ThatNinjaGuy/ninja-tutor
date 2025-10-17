@@ -39,6 +39,85 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
     });
   }
+  
+  /// Calculate dashboard stats from myBooks data
+  Map<String, dynamic> _calculateDashboardStats(List<BookModel> books) {
+    int booksRead = 0;
+    int totalReadingTimeMinutes = 0;
+    List<DateTime> lastReadDates = [];
+    
+    debugPrint('📊 Calculating dashboard stats from ${books.length} books:');
+    
+    for (final book in books) {
+      final progress = book.progress;
+      if (progress != null) {
+        // Log each book's progress
+        debugPrint('   📖 "${book.title}": totalPagesRead=${progress.totalPagesRead}, timeSpent=${progress.timeSpent}min');
+        
+        // Count books with more than 1 page read (60+ seconds per page)
+        if (progress.totalPagesRead >= 1) {
+          booksRead++;
+          debugPrint('      ✅ Counted as READ (${progress.totalPagesRead} > 1)');
+        } else {
+          debugPrint('      ❌ NOT counted as READ (${progress.totalPagesRead} ≤ 1)');
+        }
+        
+        // Sum total reading time
+        totalReadingTimeMinutes += progress.timeSpent;
+        
+        // Collect last read dates for streak calculation
+        lastReadDates.add(progress.lastReadAt);
+      } else {
+        debugPrint('   📖 "${book.title}": No progress data');
+      }
+    }
+    
+    // Calculate study streak
+    final studyStreak = _calculateStudyStreak(lastReadDates);
+    
+    debugPrint('📊 Final stats: booksRead=$booksRead, totalTime=${totalReadingTimeMinutes}min, streak=$studyStreak days');
+    
+    return {
+      'books_read': booksRead,
+      'study_streak': studyStreak,
+      'total_study_time_minutes': totalReadingTimeMinutes,
+      'average_quiz_score': 0.0, // TODO: Calculate from quiz results when available
+    };
+  }
+  
+  /// Calculate consecutive study streak in days
+  int _calculateStudyStreak(List<DateTime> lastReadDates) {
+    if (lastReadDates.isEmpty) return 0;
+    
+    // Sort dates in descending order (most recent first)
+    final sortedDates = lastReadDates.toSet().toList()
+      ..sort((a, b) => b.compareTo(a));
+    
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    final yesterdayDate = todayDate.subtract(const Duration(days: 1));
+    
+    // Convert to dates without time
+    final readDates = sortedDates.map((dt) => 
+      DateTime(dt.year, dt.month, dt.day)
+    ).toSet().toList()..sort((a, b) => b.compareTo(a));
+    
+    // Check if user read today or yesterday (streak is still active)
+    if (!readDates.contains(todayDate) && !readDates.contains(yesterdayDate)) {
+      return 0;
+    }
+    
+    // Count consecutive days
+    int streak = 0;
+    DateTime currentDate = readDates.contains(todayDate) ? todayDate : yesterdayDate;
+    
+    while (readDates.contains(currentDate)) {
+      streak++;
+      currentDate = currentDate.subtract(const Duration(days: 1));
+    }
+    
+    return streak;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -186,11 +265,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
   Widget _buildProgressSection(BuildContext context, WidgetRef ref, UserModel? user) {
     final theme = Theme.of(context);
-    final progress = user?.progress;
+    final libraryState = ref.watch(unifiedLibraryProvider);
+    final books = libraryState.myBooks;
     
-    if (progress == null) {
-      return const SizedBox.shrink();
+    // Show loading state while fetching books
+    if (libraryState.isLoadingUserLibrary && books.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppStrings.yourProgress,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Center(child: CircularProgressIndicator()),
+        ],
+      );
     }
+    
+    // Calculate stats from books
+    final stats = _calculateDashboardStats(books);
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,8 +310,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 child: ProgressCard(
                   key: const ValueKey('progress_books_read'),
                   title: 'Books Read',
-                  value: progress.totalBooksRead.toString(),
-                  subtitle: 'This month',
+                  value: '${stats['books_read'] ?? 0}',
+                  subtitle: 'Completed',
                   color: AppTheme.readingColor,
                   icon: Icons.menu_book,
                 ),
@@ -227,7 +323,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 child: ProgressCard(
                   key: const ValueKey('progress_study_streak'),
                   title: 'Study Streak',
-                  value: '${progress.currentStreak}',
+                  value: '${stats['study_streak'] ?? 0}',
                   subtitle: 'Days',
                   color: AppTheme.practiceColor,
                   icon: Icons.local_fire_department,
@@ -240,7 +336,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 child: ProgressCard(
                   key: const ValueKey('progress_quiz_score'),
                   title: 'Quiz Score',
-                  value: '${(progress.averageQuizScore * 100).toInt()}%',
+                  value: '${(stats['average_quiz_score'] ?? 0).toInt()}%',
                   subtitle: 'Average',
                   color: AppTheme.aiTipColor,
                   icon: Icons.quiz,
@@ -253,7 +349,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 child: ProgressCard(
                   key: const ValueKey('progress_study_time'),
                   title: 'Study Time',
-                  value: '${(progress.totalTimeSpent / 60).toInt()}h',
+                  value: '${((stats['total_study_time_minutes'] ?? 0) / 60).toStringAsFixed(1)}h',
                   subtitle: 'Total',
                   color: AppTheme.noteColor,
                   icon: Icons.access_time,
