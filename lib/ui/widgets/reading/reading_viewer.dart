@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
+import 'reading_controls_overlay.dart';
 
 import '../../../models/content/book_model.dart';
 import '../../../core/providers/unified_library_provider.dart';
@@ -26,16 +27,27 @@ class ReadingViewer extends ConsumerStatefulWidget {
 }
 
 class _ReadingViewerState extends ConsumerState<ReadingViewer> {
-  bool _showControls = false;
+  bool _showControls = true;
   double _zoomLevel = 1.0;
-  int _currentPage = 0;
+  int _currentPage = 1;
   bool _isLoading = true;
   String? _error;
+  html.IFrameElement? _iframeElement;
+  
+  // Text selection overlay
+  String _selectedText = '';
+  Map<String, dynamic>? _selectionPosition;
+  bool _showSelectionOverlay = false;
 
   @override
   void initState() {
     super.initState();
     _loadPdfData();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   Future<void> _loadPdfData() async {
@@ -69,30 +81,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
             else
               _buildPdfViewer(theme),
             
-            // Controls overlay
-            if (_showControls)
-              ReadingControlsPanel(
-                book: widget.book,
-                currentPage: _currentPage,
-                totalPages: widget.book.totalPages,
-                zoomLevel: _zoomLevel,
-                onPageChanged: (page) {
-                  setState(() {
-                    _currentPage = page;
-                  });
-                  _updateReadingProgress(page);
-                },
-                onZoomChanged: (zoom) {
-                  setState(() {
-                    _zoomLevel = zoom;
-                  });
-                },
-                onClose: () {
-                  setState(() {
-                    _showControls = false;
-                  });
-                },
-              ),
           ],
         ),
     );
@@ -158,127 +146,103 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   Widget _buildPdfViewer(ThemeData theme) {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.grey[100],
-      child: Stack(
-        children: [
-          // PDF iframe container
-          Positioned.fill(
-            child: Container(
-              margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: _buildWebPdfViewer(),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWebPdfViewer() {
-    // For web platform, embed the PDF directly using iframe with PDF.js
-    if (widget.book.fileUrl != null && widget.book.fileUrl!.isNotEmpty) {
-      return _buildEmbeddedPdfViewer();
-    } else {
-      // Fallback content when no PDF URL is available
+    final fullUrl = _getFullPdfUrl();
+    
+    if (fullUrl == null) {
       return _buildFallbackContent();
     }
-  }
 
-  Widget _buildEmbeddedPdfViewer() {
-    final fullUrl = _getFullPdfUrl();
-    if (fullUrl == null) return _buildFallbackContent();
-
-    // Create unique view type for this PDF
-    final viewType = 'pdf-viewer-${widget.book.id}';
-    
-    // Register the platform view factory for PDF iframe
-    _registerPdfViewFactory(viewType, fullUrl);
-
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.white,
-      child: Stack(
-        children: [
-          // Full-screen PDF viewer
-          Positioned.fill(
-            child: HtmlElementView(viewType: viewType),
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          height: double.infinity,
+          color: Colors.grey[200],
+          child: _buildWebPdfViewer(fullUrl),
+        ),
+        
+        // Text selection overlay
+        if (_showSelectionOverlay)
+          ReadingControlsOverlay(
+            bookId: widget.book.id,
+            selectedText: _selectedText,
+            pageNumber: _currentPage,
+            position: _selectionPosition,
+            onClose: () {
+              setState(() {
+                _showSelectionOverlay = false;
+                _selectedText = '';
+                _selectionPosition = null;
+              });
+            },
           ),
-          
-          // Loading overlay
-          if (_isLoading)
-            Positioned.fill(
-              child: Container(
-                color: Colors.white.withOpacity(0.9),
-                child: const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('Loading PDF...'),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+      ],
     );
   }
 
-  void _registerPdfViewFactory(String viewType, String pdfUrl) {
-    // Register the view factory if not already registered
+  Widget _buildWebPdfViewer(String pdfUrl) {
+    // Use Mozilla PDF.js for better web PDF viewing
+    final viewType = 'pdf-viewer-${widget.book.id}';
+    
+    // Use Mozilla's hosted PDF.js viewer (working solution)
+    final pdfJsUrl = 'https://mozilla.github.io/pdf.js/web/viewer.html?file=${Uri.encodeComponent(pdfUrl)}';
+    
+    // Register the view factory
     try {
       ui_web.platformViewRegistry.registerViewFactory(
         viewType,
         (int viewId) {
-          final iframe = html.IFrameElement()
-            ..src = pdfUrl
+          _iframeElement = html.IFrameElement()
+            ..src = pdfJsUrl
             ..style.border = 'none'
             ..style.width = '100%'
             ..style.height = '100%'
             ..style.display = 'block'
-            ..style.pointerEvents = 'auto' // Allow PDF scrolling
             ..allowFullscreen = true
             ..onLoad.listen((_) {
-              // PDF loaded successfully
               if (mounted) {
                 setState(() {
+                  _isLoading = false;
+                });
+                
+                // Setup message listener for PDF.js communication
+                _setupPdfMessageListener();
+                
+                // Jump to last read page if available
+                if (widget.book.progress?.currentPage != null && 
+                    widget.book.progress!.currentPage > 0) {
+                  setState(() {
+                    _currentPage = widget.book.progress!.currentPage;
+                  });
+                }
+              }
+            })
+            ..onError.listen((event) {
+              if (mounted) {
+                setState(() {
+                  _error = 'Failed to load PDF';
                   _isLoading = false;
                 });
               }
             });
           
-          return iframe;
+          return _iframeElement!;
         },
       );
     } catch (e) {
-      // View factory might already be registered, that's fine
+      // View factory might already be registered
       setState(() {
         _isLoading = false;
       });
     }
+
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.white,
+      child: HtmlElementView(viewType: viewType),
+    );
   }
-
-
-
 
   Widget _buildFallbackContent() {
     return Container(
@@ -322,8 +286,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     );
   }
 
-
-
   String? _getFullPdfUrl() {
     if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
       return null;
@@ -331,7 +293,15 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
 
     final fileUrl = widget.book.fileUrl!;
     
-    // If it's already a full URL (Firebase Storage), return as-is
+    // For Firebase Storage URLs, proxy through backend to avoid CORS issues
+    if (fileUrl.contains('firebasestorage.app') || 
+        fileUrl.contains('storage.googleapis.com')) {
+      // Encode the Firebase URL and proxy it through backend
+      final encodedUrl = Uri.encodeComponent(fileUrl);
+      return '${AppConstants.baseUrl}/api/v1/proxy/pdf?url=$encodedUrl';
+    }
+    
+    // If it's already a full URL (non-Firebase), return as-is
     if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
       return fileUrl;
     }
@@ -344,7 +314,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     return fileUrl;
   }
 
-
   void _updateReadingProgress(int page) {
     // Update reading progress in the backend
     final progressPercentage = page / widget.book.totalPages;
@@ -353,5 +322,85 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       currentPage: page,
       progressPercentage: progressPercentage,
     );
+  }
+
+  void _setupPdfMessageListener() {
+    html.window.addEventListener('message', (html.Event event) {
+      final messageEvent = event as html.MessageEvent;
+      final data = messageEvent.data;
+      
+      if (data is Map<String, dynamic>) {
+        _handlePdfMessage(data);
+      }
+    });
+  }
+
+  void _handlePdfMessage(Map<String, dynamic> message) {
+    switch (message['type']) {
+      case 'pageChange':
+        _onPageChange(message['newPage'] ?? 1, message['timeSpent'] ?? 0);
+        break;
+      case 'textSelection':
+        _onTextSelection(message['text'] ?? '', message['page'] ?? 1);
+        break;
+      case 'highlight':
+        _onHighlight(message['text'] ?? '', message['page'] ?? 1, message['color'] ?? 'yellow');
+        break;
+      case 'idleStateChange':
+        _onIdleStateChange(message['isIdle'] ?? false);
+        break;
+      case 'pdfReady':
+        _onPdfReady(message['totalPages'] ?? 0, message['currentPage'] ?? 1);
+        break;
+    }
+  }
+
+  void _onPageChange(int pageNum, int timeSpent) {
+    if (mounted) {
+      setState(() {
+        _currentPage = pageNum;
+      });
+      _updateReadingProgress(pageNum);
+      
+      // Send time tracking data to backend
+      _sendPageTimeData(pageNum, timeSpent);
+    }
+  }
+
+  void _onTextSelection(String text, int pageNum) {
+    // Store selection data and show overlay
+    setState(() {
+      _selectedText = text;
+      _showSelectionOverlay = text.isNotEmpty;
+    });
+    print('Text selected: $text on page $pageNum');
+  }
+
+  void _onHighlight(String text, int pageNum, String color) {
+    // Save highlight to backend
+    _saveHighlight(text, pageNum, color);
+  }
+
+  void _onIdleStateChange(bool isIdle) {
+    // Track idle state for accurate time measurement
+    print('User idle state: $isIdle');
+  }
+
+  void _onPdfReady(int totalPages, int currentPage) {
+    if (mounted) {
+      setState(() {
+        _currentPage = currentPage;
+      });
+    }
+  }
+
+  void _sendPageTimeData(int pageNum, int timeSpent) {
+    // TODO: Implement API call to save page time data
+    print('Sending page time data: page $pageNum, time $timeSpent seconds');
+  }
+
+  void _saveHighlight(String text, int pageNum, String color) {
+    // TODO: Implement API call to save highlight
+    print('Saving highlight: "$text" on page $pageNum with color $color');
   }
 }

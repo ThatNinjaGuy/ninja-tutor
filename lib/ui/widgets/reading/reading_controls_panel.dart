@@ -37,7 +37,7 @@ class _ReadingControlsPanelState extends State<ReadingControlsPanel> {
   @override
   void initState() {
     super.initState();
-    _pageController = TextEditingController(text: '${widget.currentPage + 1}');
+    _pageController = TextEditingController(text: '${widget.currentPage}');
     _searchController = TextEditingController();
   }
 
@@ -45,7 +45,7 @@ class _ReadingControlsPanelState extends State<ReadingControlsPanel> {
   void didUpdateWidget(ReadingControlsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentPage != widget.currentPage) {
-      _pageController.text = '${widget.currentPage + 1}';
+      _pageController.text = '${widget.currentPage}';
     }
   }
 
@@ -190,7 +190,7 @@ class _ReadingControlsPanelState extends State<ReadingControlsPanel> {
         
         // Page info
         Text(
-          'Page ${widget.currentPage + 1} of ${widget.totalPages}',
+          'Page ${widget.currentPage} of ${widget.totalPages}',
           style: theme.textTheme.bodyLarge?.copyWith(
             color: Colors.white,
             fontWeight: FontWeight.w600,
@@ -205,22 +205,22 @@ class _ReadingControlsPanelState extends State<ReadingControlsPanel> {
             _buildNavButton(
               icon: Icons.first_page,
               label: 'First',
-              onPressed: widget.currentPage > 0 ? () => widget.onPageChanged(0) : null,
+              onPressed: widget.currentPage > 1 ? () => widget.onPageChanged(1) : null,
             ),
             _buildNavButton(
               icon: Icons.navigate_before,
               label: 'Previous',
-              onPressed: widget.currentPage > 0 ? () => widget.onPageChanged(widget.currentPage - 1) : null,
+              onPressed: widget.currentPage > 1 ? () => widget.onPageChanged(widget.currentPage - 1) : null,
             ),
             _buildNavButton(
               icon: Icons.navigate_next,
               label: 'Next',
-              onPressed: widget.currentPage < widget.totalPages - 1 ? () => widget.onPageChanged(widget.currentPage + 1) : null,
+              onPressed: widget.currentPage < widget.totalPages ? () => widget.onPageChanged(widget.currentPage + 1) : null,
             ),
             _buildNavButton(
               icon: Icons.last_page,
               label: 'Last',
-              onPressed: widget.currentPage < widget.totalPages - 1 ? () => widget.onPageChanged(widget.totalPages - 1) : null,
+              onPressed: widget.currentPage < widget.totalPages ? () => widget.onPageChanged(widget.totalPages) : null,
             ),
           ],
         ),
@@ -260,7 +260,7 @@ class _ReadingControlsPanelState extends State<ReadingControlsPanel> {
                 onSubmitted: (value) {
                   final page = int.tryParse(value);
                   if (page != null && page >= 1 && page <= widget.totalPages) {
-                    widget.onPageChanged(page - 1);
+                    widget.onPageChanged(page);
                   }
                 },
               ),
@@ -270,7 +270,7 @@ class _ReadingControlsPanelState extends State<ReadingControlsPanel> {
               onPressed: () {
                 final page = int.tryParse(_pageController.text);
                 if (page != null && page >= 1 && page <= widget.totalPages) {
-                  widget.onPageChanged(page - 1);
+                  widget.onPageChanged(page);
                 }
               },
               child: const Text('Go'),
