@@ -244,24 +244,46 @@ class BookCard extends StatelessWidget {
   }
 
   Widget _buildDefaultCover(ThemeData theme, [double? size]) {
-    double iconSize;
+    // Determine font size based on layout
+    double fontSize;
+    EdgeInsets padding;
+    
     switch (layout) {
       case BookCardLayout.compact:
-        iconSize = size ?? 20;
+        fontSize = 10;
+        padding = const EdgeInsets.all(4);
         break;
       case BookCardLayout.grid:
-        iconSize = size ?? 32;
+        fontSize = 14;
+        padding = const EdgeInsets.all(8);
         break;
       case BookCardLayout.full:
-        iconSize = size ?? 24;
+        fontSize = 12;
+        padding = const EdgeInsets.all(6);
         break;
     }
     
-    return Center(
-      child: Icon(
-        Icons.menu_book,
-        color: _getSubjectColor(),
-        size: iconSize,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Center(
+        child: Padding(
+          padding: padding,
+          child: Text(
+            _truncatedTitle,
+            textAlign: TextAlign.center,
+            maxLines: layout == BookCardLayout.grid ? 4 : 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.bold,
+              color: _getSubjectColor(),
+              height: 1.2,
+            ),
+          ),
+        ),
       ),
     );
   }
