@@ -207,7 +207,7 @@ class BookCard extends StatelessWidget {
             _buildSubjectChip(theme, small: true),
             if (showProgress)
               Text(
-                '${(book.progressPercentage * 100).toInt()}%',
+                '${book.progress?.currentPage ?? 0}/${book.totalPages}',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.primary,
                   fontWeight: FontWeight.w600,
@@ -316,18 +316,19 @@ class BookCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Page ${progress.currentPage} of ${book.totalPages}',
+              'Page ${progress.currentPage}/${book.totalPages}',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurface.withOpacity(0.7),
               ),
             ),
-            Text(
-              '${(book.progressPercentage * 100).toInt()}%',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.w600,
+            if (progress.timeSpent > 0)
+              Text(
+                '${progress.timeSpent} min',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.secondary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
           ],
         ),
         const SizedBox(height: 4),
@@ -489,7 +490,7 @@ class BookCard extends StatelessWidget {
                     _buildLibraryButton(theme)
                   else
                     Text(
-                      '${(book.progressPercentage * 100).toInt()}%',
+                      '${book.progress?.currentPage ?? 0}/${book.totalPages}',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.w600,

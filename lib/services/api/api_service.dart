@@ -481,6 +481,7 @@ class ApiService {
     int? totalPages,
     String? readingStatus,
     String? notes,
+    Map<String, int>? pageTimes,
   }) async {
     try {
       final data = <String, dynamic>{
@@ -491,8 +492,16 @@ class ApiService {
       if (totalPages != null) data['total_pages'] = totalPages;
       if (readingStatus != null) data['reading_status'] = readingStatus;
       if (notes != null) data['notes'] = notes;
+      if (pageTimes != null && pageTimes.isNotEmpty) data['page_times'] = pageTimes;
+
+      print('🌐 API Request to /library/update-progress:');
+      print('   Data: $data');
 
       final response = await _dio.put('/library/update-progress', data: data);
+      
+      print('🌐 API Response:');
+      print('   ${response.data}');
+      
       return response.data;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);

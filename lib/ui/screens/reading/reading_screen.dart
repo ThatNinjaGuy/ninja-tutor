@@ -223,12 +223,26 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
             title: Text(book.title),
             subtitle: Text('${book.author} • ${book.subject} • ${book.totalPages} pages'),
             trailing: book.progress != null
-                ? Text(
-                    '${(book.progressPercentage * 100).toInt()}%',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${book.progress!.currentPage}/${book.totalPages}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (book.progress!.timeSpent > 0)
+                        Text(
+                          '${book.progress!.timeSpent} min',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.secondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                    ],
                   )
                 : const Icon(Icons.play_arrow),
             onTap: () {

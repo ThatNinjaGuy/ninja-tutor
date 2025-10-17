@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
+import 'dart:async';
 import 'reading_controls_overlay.dart';
 
 import '../../../models/content/book_model.dart';
@@ -38,16 +39,34 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   String _selectedText = '';
   Map<String, dynamic>? _selectionPosition;
   bool _showSelectionOverlay = false;
+  
+  // Progress update - periodic saving every 60 seconds
+  Timer? _progressSaveTimer;
+  int? _pendingPage;
+  double? _pendingProgressPercentage;
+  Map<String, int> _pageTimesAccumulator = {}; // page_number: seconds_spent since last save
+  DateTime? _currentPageStartTime; // Track when user started reading current page
 
   @override
   void initState() {
     super.initState();
     _loadPdfData();
+    _startPeriodicProgressSave();
   }
 
   @override
   void dispose() {
+    _progressSaveTimer?.cancel();
+    _saveProgressImmediately(); // Save any pending progress before disposing
     super.dispose();
+  }
+  
+  void _startPeriodicProgressSave() {
+    // Save progress every 60 seconds (periodic, not debounced)
+    _progressSaveTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
+      _saveProgressImmediately();
+    });
+    print('⏰ Started periodic progress save (every 60 seconds)');
   }
 
   Future<void> _loadPdfData() async {
@@ -184,8 +203,12 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // Use Mozilla PDF.js for better web PDF viewing
     final viewType = 'pdf-viewer-${widget.book.id}';
     
-    // Use Mozilla's hosted PDF.js viewer (working solution)
-    final pdfJsUrl = 'https://mozilla.github.io/pdf.js/web/viewer.html?file=${Uri.encodeComponent(pdfUrl)}';
+    // Use PDF.js viewer from backend (same origin as PDF files - no CORS issues)
+    final pdfJsUrl = '${AppConstants.baseUrl}/pdfjs/web/custom_viewer.html?file=${Uri.encodeComponent(pdfUrl)}';
+    
+    // Debug: Log the URLs
+    print('PDF URL: $pdfUrl');
+    print('PDF.js Viewer URL: $pdfJsUrl');
     
     // Register the view factory
     try {
@@ -204,6 +227,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
                 setState(() {
                   _isLoading = false;
                 });
+                
+                // Hide download and print buttons using CSS injection
+                _hideUnwantedButtons();
                 
                 // Setup message listener for PDF.js communication
                 _setupPdfMessageListener();
@@ -315,13 +341,68 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   void _updateReadingProgress(int page) {
-    // Update reading progress in the backend
-    final progressPercentage = page / widget.book.totalPages;
+    // Just store the current page - the periodic timer will save it
+    _pendingPage = page;
+    _pendingProgressPercentage = page / widget.book.totalPages;
+    
+    final totalTime = _pageTimesAccumulator.values.fold(0, (sum, time) => sum + time);
+    final pagesWithTime = _pageTimesAccumulator.length;
+    print('📝 Current page: $page/${widget.book.totalPages}, tracked $pagesWithTime pages, ${totalTime}s total since last save');
+  }
+  
+  void _saveProgressImmediately() {
+    if (_pendingPage == null) return;
+    
+    // Calculate time on current page (if user hasn't changed pages yet)
+    if (_currentPageStartTime != null && _currentPage > 0) {
+      final currentPageTimeSeconds = DateTime.now().difference(_currentPageStartTime!).inSeconds;
+      if (currentPageTimeSeconds > 0) {
+        final currentPageKey = _currentPage.toString();
+        _pageTimesAccumulator[currentPageKey] = (_pageTimesAccumulator[currentPageKey] ?? 0) + currentPageTimeSeconds;
+        print('⏱️ Adding current page time: page $_currentPage spent ${currentPageTimeSeconds}s (still on this page)');
+        
+        // Reset the start time for the next interval
+        _currentPageStartTime = DateTime.now();
+      }
+    }
+    
+    // Don't save if no time data accumulated
+    if (_pageTimesAccumulator.isEmpty) {
+      print('⚠️ No page time data to save yet');
+      return;
+    }
+    
+    final totalTime = _pageTimesAccumulator.values.fold(0, (sum, time) => sum + time);
+    final pagesWithTime = _pageTimesAccumulator.length;
+    
+    print('💾 Saving progress to backend: page $_pendingPage/${widget.book.totalPages}');
+    print('📊 Page times being saved: $_pageTimesAccumulator');
+    print('⏱️ Total: $pagesWithTime pages, ${totalTime}s');
+    
+    // Call API with all accumulated page time data
+    _saveProgressToBackend(
+      page: _pendingPage!,
+      pageTimes: Map<String, int>.from(_pageTimesAccumulator),
+    );
+    
+    // Clear the accumulator after saving - backend has merged the times
+    // This resets tracking for the next 60-second interval
+    _pageTimesAccumulator.clear();
+    print('🔄 Page time accumulator cleared - tracking fresh for next interval');
+  }
+  
+  Future<void> _saveProgressToBackend({
+    required int page,
+    required Map<String, int> pageTimes,
+  }) async {
     ref.read(unifiedLibraryProvider.notifier).updateReadingProgress(
       bookId: widget.book.id,
       currentPage: page,
-      progressPercentage: progressPercentage,
+      progressPercentage: page / widget.book.totalPages,
+      pageTimes: pageTimes,
     );
+    
+    print('✅ Progress saved successfully');
   }
 
   void _setupPdfMessageListener() {
@@ -329,8 +410,14 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       final messageEvent = event as html.MessageEvent;
       final data = messageEvent.data;
       
-      if (data is Map<String, dynamic>) {
-        _handlePdfMessage(data);
+      print('📨 Received message from PDF.js: $data');
+      
+      // Handle both Map<String, dynamic> and LinkedMap from JavaScript
+      if (data is Map) {
+        final messageData = Map<String, dynamic>.from(data);
+        _handlePdfMessage(messageData);
+      } else {
+        print('⚠️ Message data is not a Map: ${data.runtimeType}');
       }
     });
   }
@@ -338,7 +425,10 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   void _handlePdfMessage(Map<String, dynamic> message) {
     switch (message['type']) {
       case 'pageChange':
-        _onPageChange(message['newPage'] ?? 1, message['timeSpent'] ?? 0);
+        final previousPage = message['previousPage'] ?? 1;
+        final newPage = message['newPage'] ?? 1;
+        final timeSpent = message['timeSpent'] ?? 0;
+        _onPageChange(previousPage, newPage, timeSpent);
         break;
       case 'textSelection':
         _onTextSelection(message['text'] ?? '', message['page'] ?? 1);
@@ -355,15 +445,25 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     }
   }
 
-  void _onPageChange(int pageNum, int timeSpent) {
+  void _onPageChange(int previousPage, int newPage, int timeSpent) {
+    print('📄 Page changed: page $previousPage spent $timeSpent seconds, now on page $newPage');
+    
+    // Accumulate time for the previous page
+    if (timeSpent > 0) {
+      final pageKey = previousPage.toString();
+      _pageTimesAccumulator[pageKey] = (_pageTimesAccumulator[pageKey] ?? 0) + timeSpent;
+      print('⏱️ Page $previousPage total time: ${_pageTimesAccumulator[pageKey]}s');
+      print('📚 All accumulated times: $_pageTimesAccumulator');
+    }
+    
+    // Track when we started reading the new page
+    _currentPageStartTime = DateTime.now();
+    
     if (mounted) {
       setState(() {
-        _currentPage = pageNum;
+        _currentPage = newPage;
       });
-      _updateReadingProgress(pageNum);
-      
-      // Send time tracking data to backend
-      _sendPageTimeData(pageNum, timeSpent);
+      _updateReadingProgress(newPage);
     }
   }
 
@@ -391,6 +491,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       setState(() {
         _currentPage = currentPage;
       });
+      // Start tracking time for the initial page
+      _currentPageStartTime = DateTime.now();
+      print('📖 PDF ready - starting time tracking for page $currentPage');
     }
   }
 
@@ -402,5 +505,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   void _saveHighlight(String text, int pageNum, String color) {
     // TODO: Implement API call to save highlight
     print('Saving highlight: "$text" on page $pageNum with color $color');
+  }
+
+  void _hideUnwantedButtons() {
+    // This method is no longer needed as we're using local PDF.js with buttons already removed
   }
 }

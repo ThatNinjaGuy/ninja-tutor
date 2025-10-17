@@ -338,6 +338,7 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     required String bookId,
     required int currentPage,
     required double progressPercentage,
+    Map<String, int>? pageTimes,
   }) async {
     if (_authToken == null) return;
 
@@ -347,6 +348,7 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         currentPage: currentPage,
         totalPages: null, // Will be calculated on backend
         readingStatus: progressPercentage >= 1.0 ? 'completed' : 'in_progress',
+        pageTimes: pageTimes,
       );
     } catch (e) {
       // Handle error silently for now
