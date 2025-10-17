@@ -110,15 +110,16 @@ class BookModel extends Equatable {
         language: 'en', // Default
         difficulty: DifficultyLevel.medium, // Default
       ),
-      progress: json['progress_percentage'] != null 
+      progress: json['progress'] != null 
           ? ReadingProgress(
               bookId: json['id'] as String,
-              currentPage: ((json['progress_percentage'] as num) * (json['total_pages'] as int? ?? 1)).round(),
-              lastReadAt: json['last_read_at'] != null 
-                  ? DateTime.parse(json['last_read_at'] as String)
+              currentPage: json['progress']['current_page'] as int? ?? 0,
+              timeSpent: json['progress']['reading_time_minutes'] as int? ?? 0,
+              lastReadAt: json['progress']['last_read_at'] != null 
+                  ? DateTime.parse(json['progress']['last_read_at'] as String)
                   : DateTime.now(),
-              startedAt: json['added_at'] != null 
-                  ? DateTime.parse(json['added_at'] as String)
+              startedAt: json['progress']['started_at'] != null 
+                  ? DateTime.parse(json['progress']['started_at'] as String)
                   : DateTime.now(),
             )
           : null,
@@ -149,9 +150,15 @@ class BookModel extends Equatable {
   /// Check if book is available offline
   bool get isOfflineAvailable => filePath != null;
   
-  /// Get reading progress percentage
+  /// Get reading progress percentage (from backend - based on pages with 60+ seconds)
   double get progressPercentage {
+    // The backend calculates this based on pages with 60+ seconds reading time
+    // This is stored in the progress object from the API
+    // For now, we calculate it client-side from currentPage as fallback
     if (progress == null || totalPages == 0) return 0.0;
+    
+    // TODO: Backend should send the calculated progress_percentage
+    // For now, use simple calculation
     return progress!.currentPage / totalPages;
   }
   
