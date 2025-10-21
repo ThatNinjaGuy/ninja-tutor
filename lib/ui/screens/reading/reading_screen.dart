@@ -11,6 +11,7 @@ import '../../../models/content/book_model.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/search_filter_bar.dart';
+import '../../widgets/common/profile_menu_button.dart';
 
 /// Interactive reading screen with contextual AI features
 class ReadingScreen extends ConsumerStatefulWidget {
@@ -105,6 +106,9 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
         title: const Text(AppStrings.selectBookToRead),
         centerTitle: true,
         elevation: 0,
+        actions: [
+          ProfileMenuButton(currentRoute: AppRoutes.reading),
+        ],
       ),
       body: libraryState.myBooks.isEmpty
           ? EmptyStateWidget(

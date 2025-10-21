@@ -11,10 +11,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/content/book_model.dart';
 import '../../../models/user/user_model.dart';
 import '../../widgets/common/progress_card.dart';
-import '../../widgets/common/book_card.dart';
 import '../../widgets/common/ai_tip_card.dart';
 import '../../widgets/common/empty_state.dart';
-import '../../widgets/common/responsive_grid_helpers.dart';
+import '../../widgets/common/profile_menu_button.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
 
 /// Dashboard screen showing user overview and recommendations
@@ -206,7 +205,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
   Widget _buildAppBar(BuildContext context, WidgetRef ref, UserModel? user) {
     final theme = Theme.of(context);
-    final isDarkMode = ref.watch(themeModeProvider);
     
     return Padding(
       padding: const EdgeInsets.all(AppConstants.defaultPadding),
@@ -234,20 +232,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ),
           ),
           
-          // Theme toggle
-          IconButton(
-            onPressed: () => ref.read(themeModeProvider.notifier).toggleTheme(),
-            icon: Icon(
-              isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              color: theme.colorScheme.onBackground.withOpacity(0.7),
-            ),
-          ),
+          // Profile menu (Sign in/Sign out)
+          const ProfileMenuButton(currentRoute: AppRoutes.dashboard),
           
           // Settings
           IconButton(
             onPressed: () => context.push(AppRoutes.settings),
             icon: Icon(
-              Icons.account_circle_outlined,
+              Icons.settings_outlined,
               color: theme.colorScheme.onBackground.withOpacity(0.7),
             ),
           ),
@@ -357,6 +349,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
   Widget _buildContinueReading(BuildContext context, WidgetRef ref, List<BookModel> books) {
     final theme = Theme.of(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = AppConstants.defaultPadding * 2; // Total padding on both sides
+    final availableWidth = screenWidth - horizontalPadding;
+    
+    // Calculate card width for 7 cards total with spacing (View All + 6 books)
+    final cardSpacing = 8.0;
+    final totalSpacing = cardSpacing * 6; // 6 gaps for 7 cards
+    final cardWidth = (availableWidth - totalSpacing) / 7;
     
     if (books.isEmpty) {
       return _buildEmptyState(
@@ -376,50 +376,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     }).toList()
       ..sort((a, b) => b.value.compareTo(a.value)); // Sort by most recent first
     
-    final maxCards = _getMaxCardsForScreen(context);
-    final displayBooks = continueBooks.take(maxCards).map((entry) => entry.key).toList();
+    // Take 6 books
+    final displayBooks = continueBooks.take(6).map((entry) => entry.key).toList();
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              AppStrings.continueReading,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            TextButton(
-              onPressed: () => context.push(AppRoutes.reading),
-              child: const Text(AppStrings.viewAll),
-            ),
-          ],
+        Text(
+          AppStrings.continueReading,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
         ),
         const SizedBox(height: 16),
         
         SizedBox(
-          height: 250, // Increased by 25% (200 * 1.25 = 250)
-          child: GridView.builder(
+          height: cardWidth * 1.2, // Optimized height for better proportions
+          child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 1, // Single column for horizontal scrolling
-              childAspectRatio: 0.8, // Matches library screen aspect ratio
-              mainAxisSpacing: 16, // 16px spacing between cards
-              crossAxisSpacing: 0, // No cross-axis spacing for single column
-            ),
-            itemCount: displayBooks.length,
+            itemCount: displayBooks.length + 1, // +1 for View All card
             itemBuilder: (context, index) {
-              final book = displayBooks[index];
-              return SizedBox(
-                width: 160, // Fixed width to match library screen card width
-                child: BookCard(
+              // First card is "View All"
+              if (index == 0) {
+                return Padding(
+                  padding: EdgeInsets.only(right: cardSpacing),
+                  child: _ViewAllCard(
+                    width: cardWidth,
+                    onTap: () => context.push(AppRoutes.reading),
+                  ),
+                );
+              }
+              
+              // Other cards are books
+              final book = displayBooks[index - 1];
+              return Padding(
+                padding: EdgeInsets.only(right: index < displayBooks.length ? cardSpacing : 0),
+                child: _DashboardBookCard(
                   key: ValueKey('dashboard_book_${book.id}'),
                   book: book,
-                  layout: BookCardLayout.grid,
-                  showAddToLibrary: false, // Don't show add/remove in dashboard
-                  isInLibrary: true, // Books in continue reading are already in library
+                  width: cardWidth,
                   onTap: () => _openBook(book),
                 ),
               );
@@ -696,32 +691,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     setReadingMode(true);
     ref.read(currentBookProvider.notifier).state = book;
   }
-
-  /// Calculate maximum number of cards to display based on screen size
-  int _getMaxCardsForScreen(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final cardWidth = 160.0; // Fixed card width
-    final spacing = 16.0; // Spacing between cards
-    final horizontalPadding = 32.0; // Total horizontal padding (16px on each side)
-    
-    // Calculate available width for cards
-    final availableWidth = screenWidth - horizontalPadding;
-    
-    // Calculate how many cards can fit
-    final cardsThatFit = ((availableWidth + spacing) / (cardWidth + spacing)).floor();
-    
-    // Set reasonable limits based on screen size
-    if (screenWidth >= AppConstants.desktopBreakpoint) {
-      // Desktop: Allow up to 8 cards
-      return cardsThatFit.clamp(5, 8);
-    } else if (screenWidth >= AppConstants.tabletBreakpoint) {
-      // Tablet: Allow up to 6 cards
-      return cardsThatFit.clamp(4, 6);
-    } else {
-      // Mobile: Allow up to 4 cards
-      return cardsThatFit.clamp(3, 4);
-    }
-  }
 }
 
 /// Quick action card widget
@@ -835,6 +804,237 @@ class _ActivityItem extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// View All card widget for continue reading section
+class _ViewAllCard extends StatelessWidget {
+  const _ViewAllCard({
+    required this.width,
+    required this.onTap,
+  });
+
+  final double width;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return SizedBox(
+      width: width,
+      child: Card(
+        elevation: AppConstants.cardElevation,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.library_books,
+                    size: 40,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'View All',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'See all books',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Simplified book card for dashboard continue reading section
+class _DashboardBookCard extends StatelessWidget {
+  const _DashboardBookCard({
+    super.key,
+    required this.book,
+    required this.width,
+    required this.onTap,
+  });
+
+  final BookModel book;
+  final double width;
+  final VoidCallback onTap;
+
+  Color _getSubjectColor() {
+    switch (book.subject.toLowerCase()) {
+      case 'mathematics':
+      case 'math':
+        return const Color(0xFF3B82F6); // Blue
+      case 'science':
+        return const Color(0xFF10B981); // Green
+      case 'english':
+        return const Color(0xFFF59E0B); // Amber
+      case 'history':
+        return const Color(0xFF8B5CF6); // Purple
+      case 'computer science':
+        return const Color(0xFF06B6D4); // Cyan
+      case 'art':
+        return const Color(0xFFEC4899); // Pink
+      default:
+        return AppTheme.readingColor;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return SizedBox(
+      width: width,
+      child: Card(
+        elevation: AppConstants.cardElevation,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Book cover - flexible size based on card dimensions
+                Container(
+                  height: width * 0.7, // 70% of card width for better proportions
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: _getSubjectColor().withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withOpacity(0.2),
+                    ),
+                  ),
+                  child: book.coverUrl != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            book.coverUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => _buildDefaultCover(theme),
+                          ),
+                        )
+                      : _buildDefaultCover(theme),
+                ),
+                
+                const SizedBox(height: 6),
+                
+                // Title and progress section - tightly fitted
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Title - max 2 lines
+                      Text(
+                        book.title,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                          height: 1.2, // Better line height
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      
+                      // Gamified progress bar (energy bar style)
+                      if (book.progress != null)
+                        _buildProgressBar(theme),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDefaultCover(ThemeData theme) {
+    return Center(
+      child: Icon(
+        Icons.menu_book,
+        size: 32, // Increased from 20 to 32 for better visibility
+        color: _getSubjectColor(),
+      ),
+    );
+  }
+
+  Widget _buildProgressBar(ThemeData theme) {
+    final progress = book.progressPercentage;
+    
+    return Container(
+      width: double.infinity,
+      height: 6,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade300,
+        borderRadius: BorderRadius.circular(3),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: FractionallySizedBox(
+        alignment: Alignment.centerLeft,
+        widthFactor: progress,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF10B981), // Emerald green
+                const Color(0xFF059669), // Darker green
+              ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.circular(3),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF10B981).withOpacity(0.5),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -12,6 +12,7 @@ import '../../widgets/common/book_card.dart';
 import '../../widgets/common/responsive_grid_helpers.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/search_filter_bar.dart';
+import '../../widgets/common/profile_menu_button.dart';
 import '../../widgets/library/add_book_bottom_sheet.dart';
 import '../../widgets/library/book_options_sheet.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
@@ -145,6 +146,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           icon: const Icon(Icons.add),
           tooltip: 'Add Book',
         ),
+        const ProfileMenuButton(currentRoute: AppRoutes.library),
       ],
       bottom: TabBar(
         controller: _tabController,

@@ -1,0 +1,81 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run -d web-server --web-port 3000
+
+## exception
+
+ArgumentError: Invalid argument(s): Uri org-dartlang-app:/web_plugin_registrant.dart must have scheme 'file:'.
+
+```
+#0      PosixStyle.pathFromUri (package:path/src/style/posix.dart:55:5)
+#1      Context.fromUri (package:path/src/context.dart:1040:40)
+#2      FileSystem.getPath (package:file/src/interface/file_system.dart:158:24)
+#3      LocalFileSystem.file (package:file/src/backends/local/local_file_system.dart:26:54)
+#4      ErrorHandlingFileSystem.file (package:flutter_tools/src/base/error_handling_io.dart:139:83)
+#5      ProjectFileInvalidator.findInvalidated (package:flutter_tools/src/run_hot.dart:1605:27)
+#6      ResidentWebRunner._updateDevFS (package:flutter_tools/src/isolated/resident_web_runner.dart:752:80)
+#7      ResidentWebRunner.restart (package:flutter_tools/src/isolated/resident_web_runner.dart:476:22)
+<asynchronous suspension>
+#8      TerminalHandler._commonTerminalInputHandler (package:flutter_tools/src/resident_runner.dart:1696:40)
+<asynchronous suspension>
+#9      TerminalHandler.processTerminalInput (package:flutter_tools/src/resident_runner.dart:1751:7)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+[32m[✓][39m Flutter (Channel stable, 3.35.5, on macOS 15.7 24G214 darwin-arm64, locale en-IN)
+    [380ms]
+    [32m•[39m Flutter version 3.35.5 on channel stable at /opt/homebrew/share/flutter
+    [32m•[39m Upstream repository https://github.com/flutter/flutter.git
+    [32m•[39m Framework revision ac4e799d23 (4 weeks ago), 2025-09-26 12:05:09 -0700
+    [32m•[39m Engine revision d3d45dcf25
+    [32m•[39m Dart version 3.9.2
+    [32m•[39m DevTools version 2.48.0
+    [32m•[39m Feature flags: enable-web, enable-linux-desktop, enable-macos-desktop,
+      enable-windows-desktop, enable-android, enable-ios, cli-animations,
+      enable-lldb-debugging
+
+[31m[✗][39m Android toolchain - develop for Android devices [319ms]
+    [31m✗[39m ANDROID_HOME = /Users/deadshot/Library/Android/sdk
+      but Android SDK not found at this location.
+
+[33m[!][39m Xcode - develop for iOS and macOS (Xcode 26.0.1) [1,440ms]
+    [32m•[39m Xcode at /Applications/Xcode.app/Contents/Developer
+    [32m•[39m Build 17A400
+    [31m✗[39m Xcode end user license agreement not signed; open Xcode or run the command
+      'sudo xcodebuild -license'.
+    [31m✗[39m Xcode requires additional components to be installed in order to run.
+      Launch Xcode and install additional required components when prompted or run:
+        sudo xcodebuild -runFirstLaunch
+    [31m✗[39m CocoaPods installed but not working.
+        You appear to have CocoaPods installed but it is not working.
+        This can happen if the version of Ruby that CocoaPods was installed with is
+        different from the one being used to invoke it.
+        This can usually be fixed by re-installing CocoaPods.
+      For re-installation instructions, see
+      https://guides.cocoapods.org/using/getting-started.html#installation
+
+[32m[✓][39m Chrome - develop for the web [3ms]
+    [32m•[39m Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+
+[33m[!][39m Android Studio (not installed) [2ms]
+    [32m•[39m Android Studio not found; download from
+      https://developer.android.com/studio/index.html
+      (or visit https://flutter.dev/to/macos-android-setup for detailed
+      instructions).
+
+[32m[✓][39m Connected device (3 available) [4.5s]
+    [32m•[39m macOS (desktop)  • macos      • darwin-arm64   • macOS 15.7 24G214 darwin-arm64
+    [32m•[39m Web Server (web) • web-server • web-javascript • Flutter Tools
+    [32m•[39m Chrome (web)     • chrome     • web-javascript • Google Chrome 141.0.7390.108
+
+[32m[✓][39m Network resources [1,583ms]
+    [32m•[39m All expected network resources are available.
+
+[33m![39m Doctor found issues in 3 categories.
+```

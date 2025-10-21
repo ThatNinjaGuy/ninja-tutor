@@ -13,6 +13,7 @@ import '../../widgets/practice/quiz_session.dart';
 import '../../widgets/practice/question_display.dart';
 import '../../widgets/practice/quiz_review.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../widgets/common/profile_menu_button.dart';
 
 /// Practice screen for quizzes and assessments
 class PracticeScreen extends ConsumerStatefulWidget {
@@ -126,6 +127,9 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
       appBar: AppBar(
         title: const Text(AppStrings.practice),
         elevation: 0,
+        actions: const [
+          ProfileMenuButton(currentRoute: AppRoutes.practice),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [

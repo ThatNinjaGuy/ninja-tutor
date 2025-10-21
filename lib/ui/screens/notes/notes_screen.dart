@@ -11,6 +11,7 @@ import '../../../models/note/note_model.dart';
 import '../../widgets/notes/note_card.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/search_filter_bar.dart';
+import '../../widgets/common/profile_menu_button.dart';
 
 /// Notes screen for managing highlights and annotations
 class NotesScreen extends ConsumerStatefulWidget {
@@ -78,6 +79,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
               ),
             ],
           ),
+          const ProfileMenuButton(currentRoute: AppRoutes.notes),
         ],
         bottom: TabBar(
           controller: _tabController,

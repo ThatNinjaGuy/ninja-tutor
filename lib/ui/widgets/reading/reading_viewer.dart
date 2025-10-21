@@ -46,6 +46,12 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   double? _pendingProgressPercentage;
   Map<String, int> _pageTimesAccumulator = {}; // page_number: seconds_spent since last save
   DateTime? _currentPageStartTime; // Track when user started reading current page
+  
+  // Captured annotations storage
+  final List<Map<String, dynamic>> _capturedTextSelections = [];
+  final List<Map<String, dynamic>> _capturedTextAnnotations = [];
+  final List<Map<String, dynamic>> _capturedDrawings = [];
+  final List<Map<String, dynamic>> _capturedHighlights = [];
 
   @override
   void initState() {
@@ -174,8 +180,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     return Stack(
       children: [
         Container(
-          width: double.infinity,
-          height: double.infinity,
+      width: double.infinity,
+      height: double.infinity,
           color: Colors.grey[200],
           child: _buildWebPdfViewer(fullUrl),
         ),
@@ -431,10 +437,13 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         _onPageChange(previousPage, newPage, timeSpent);
         break;
       case 'textSelection':
-        _onTextSelection(message['text'] ?? '', message['page'] ?? 1);
+        _onTextSelection(message['text'] ?? '', message['page'] ?? 1, message['position']);
         break;
       case 'highlight':
         _onHighlight(message['text'] ?? '', message['page'] ?? 1, message['color'] ?? 'yellow');
+        break;
+      case 'annotation':
+        _onAnnotation(message);
         break;
       case 'idleStateChange':
         _onIdleStateChange(message['isIdle'] ?? false);
@@ -467,13 +476,29 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     }
   }
 
-  void _onTextSelection(String text, int pageNum) {
+  void _onTextSelection(String text, int pageNum, Map<String, dynamic>? position) {
     // Store selection data and show overlay
     setState(() {
       _selectedText = text;
       _showSelectionOverlay = text.isNotEmpty;
     });
-    print('Text selected: $text on page $pageNum');
+    
+    if (text.isNotEmpty && position != null) {
+      // Save to captured selections list
+      final selection = {
+        'text': text,
+        'page': pageNum,
+        'position': position,
+        'timestamp': DateTime.now().toIso8601String(),
+        'bookId': widget.book.id,
+      };
+      
+      _capturedTextSelections.add(selection);
+      
+      print('📝 Text selected #${_capturedTextSelections.length}: "$text" (${position['charCount'] ?? text.length} chars) on page $pageNum');
+      print('   Position: PDF(${position['pdfX']}, ${position['pdfY']}) Size: ${position['pdfWidth']}x${position['pdfHeight']}');
+      print('   Total selections captured: ${_capturedTextSelections.length}');
+    }
   }
 
   void _onHighlight(String text, int pageNum, String color) {
@@ -504,7 +529,115 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
 
   void _saveHighlight(String text, int pageNum, String color) {
     // TODO: Implement API call to save highlight
-    print('Saving highlight: "$text" on page $pageNum with color $color');
+    print('💾 Saving highlight: "$text" on page $pageNum with color $color');
+  }
+  
+  void _onAnnotation(Map<String, dynamic> annotation) {
+    final type = annotation['type'] ?? 'unknown';
+    final page = annotation['page'] ?? 1;
+    final position = annotation['position'] as Map<String, dynamic>?;
+    
+    // Add common fields
+    annotation['timestamp'] = DateTime.now().toIso8601String();
+    annotation['bookId'] = widget.book.id;
+    
+    print('✏️ Annotation captured: type=$type, page=$page');
+    
+    switch (type) {
+      case 'freetext':
+        final text = annotation['text'] ?? '';
+        final fontSize = annotation['fontSize'] ?? '';
+        final color = annotation['color'] ?? '';
+        
+        _capturedTextAnnotations.add(annotation);
+        
+        print('   📄 Text #${_capturedTextAnnotations.length}: "$text" (fontSize: $fontSize, color: $color)');
+        print('   📍 Position: PDF(${position?['pdfX']}, ${position?['pdfY']})');
+        print('   Total text annotations: ${_capturedTextAnnotations.length}');
+        _saveTextAnnotation(text, page, position);
+        break;
+        
+      case 'ink':
+        final drawingData = annotation['drawingData'] ?? '';
+        final width = annotation['width'] ?? 0;
+        final height = annotation['height'] ?? 0;
+        
+        _capturedDrawings.add(annotation);
+        
+        print('   ✏️ Drawing #${_capturedDrawings.length}: ${width}x${height}px');
+        print('   📍 Position: PDF(${position?['pdfX']}, ${position?['pdfY']})');
+        print('   🖼️ Data size: ${drawingData.length} chars (base64 PNG)');
+        print('   Total drawings: ${_capturedDrawings.length}');
+        _saveDrawingAnnotation(drawingData, page, position);
+        break;
+        
+      case 'highlight':
+        final color = annotation['color'] ?? '';
+        
+        _capturedHighlights.add(annotation);
+        
+        print('   🎨 Highlight #${_capturedHighlights.length}: color=$color');
+        print('   📍 Position: PDF(${position?['pdfX']}, ${position?['pdfY']})');
+        print('   Total highlights: ${_capturedHighlights.length}');
+        break;
+        
+      default:
+        print('   ❓ Unknown annotation type: $type');
+    }
+  }
+  
+  void _saveTextAnnotation(String text, int pageNum, Map<String, dynamic>? position) {
+    // TODO: Implement API call to save text annotation
+    print('💾 Saving text annotation to backend:');
+    print('   Text: "$text"');
+    print('   Page: $pageNum');
+    print('   Position: $position');
+  }
+  
+  void _saveDrawingAnnotation(String drawingData, int pageNum, Map<String, dynamic>? position) {
+    // TODO: Implement API call to save drawing annotation
+    print('💾 Saving drawing annotation to backend:');
+    print('   Page: $pageNum');
+    print('   Position: $position');
+    print('   Drawing data (base64 PNG): ${drawingData.substring(0, 50)}... (${drawingData.length} chars total)');
+  }
+
+  /// Get all captured annotations organized by type
+  Map<String, dynamic> getAllCapturedAnnotations() {
+    return {
+      'textSelections': _capturedTextSelections,
+      'textAnnotations': _capturedTextAnnotations,
+      'drawings': _capturedDrawings,
+      'highlights': _capturedHighlights,
+      'counts': {
+        'textSelections': _capturedTextSelections.length,
+        'textAnnotations': _capturedTextAnnotations.length,
+        'drawings': _capturedDrawings.length,
+        'highlights': _capturedHighlights.length,
+        'total': _capturedTextSelections.length + 
+                 _capturedTextAnnotations.length + 
+                 _capturedDrawings.length + 
+                 _capturedHighlights.length,
+      },
+      'bookId': widget.book.id,
+      'bookTitle': widget.book.title,
+    };
+  }
+  
+  /// Print summary of all captured data
+  void printAnnotationsSummary() {
+    final data = getAllCapturedAnnotations();
+    print('\n📊 ===== ANNOTATIONS SUMMARY =====');
+    print('📚 Book: ${data['bookTitle']}');
+    print('🆔 Book ID: ${data['bookId']}');
+    print('\n📈 Counts:');
+    print('   Text Selections: ${data['counts']['textSelections']}');
+    print('   Text Annotations: ${data['counts']['textAnnotations']}');
+    print('   Drawings: ${data['counts']['drawings']}');
+    print('   Highlights: ${data['counts']['highlights']}');
+    print('   ─────────────────');
+    print('   TOTAL: ${data['counts']['total']}');
+    print('==================================\n');
   }
 
   void _hideUnwantedButtons() {
