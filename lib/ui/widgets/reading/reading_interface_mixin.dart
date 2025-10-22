@@ -13,6 +13,7 @@ import '../../../core/constants/app_constants.dart';
 import 'reading_viewer.dart';
 import 'ai_chat_panel.dart';
 import 'bookmark_panel.dart';
+import 'notes_panel.dart';
 import 'notes_tooltip.dart';
 import 'note_creation_dialog.dart';
 
@@ -27,6 +28,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   
   // Bookmark and notes tooltip state
   bool _showBookmarkPanel = false;
+  bool _showNotesPanel = false;
   bool _showNotesTooltip = false;
   String? _currentBookId;
   Timer? _hideNotesTimer;
@@ -54,8 +56,9 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     setState(() {
       _currentPage = value;
       // Close panels when page changes
-      if (_showBookmarkPanel || _showNotesTooltip) {
+      if (_showBookmarkPanel || _showNotesPanel || _showNotesTooltip) {
         _showBookmarkPanel = false;
+        _showNotesPanel = false;
         _showNotesTooltip = false;
       }
     });
@@ -66,6 +69,8 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     // Load bookmarks and notes when book changes (only once)
     if (_currentBookId != book.id) {
       _currentBookId = book.id;
+      // Reset current page when switching books
+      _currentPage = book.progress?.currentPage ?? 1;
       // Use microtask to ensure it runs only once per build cycle
       Future.microtask(() {
         if (mounted && _currentBookId == book.id) {
@@ -89,15 +94,23 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       });
     }
     
+    // Show notes panel as dialog when flag is set
+    if (_showNotesPanel) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showNotesDialog(book);
+      });
+    }
+    
     
     return KeyboardListener(
       focusNode: FocusNode(),
       onKeyEvent: (KeyEvent event) {
         if (event is KeyDownEvent && event.logicalKey.keyLabel == 'Escape') {
-          if (_showBookmarkPanel || _showNotesTooltip) {
+          if (_showBookmarkPanel || _showNotesPanel || _showNotesTooltip) {
             print('🔴 Escape key pressed - closing panels');
             setState(() {
               _showBookmarkPanel = false;
+              _showNotesPanel = false;
               _showNotesTooltip = false;
             });
           }
@@ -106,10 +119,11 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       child: GestureDetector(
         onTap: () {
         // Close panels when tapping outside
-        if (_showBookmarkPanel || _showNotesTooltip) {
+        if (_showBookmarkPanel || _showNotesPanel || _showNotesTooltip) {
           print('🔴 Tap outside panels - closing all');
           setState(() {
             _showBookmarkPanel = false;
+            _showNotesPanel = false;
             _showNotesTooltip = false;
           });
         }
@@ -366,58 +380,51 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   Widget _buildNotesButton(BookModel book, bool isInLibrary, int notesCount) {
     final theme = Theme.of(context);
     
-    return MouseRegion(
-      onEnter: (_) {
-        print('🟢 Mouse entered notes button');
-        if (!_showNotesTooltip && isInLibrary) {
-          print('🟢 Showing notes tooltip');
-          setState(() => _showNotesTooltip = true);
-        }
-      },
-      onExit: (_) {
-        print('🔴 Mouse left notes button');
-      },
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          _buildCompactControlButton(
-            icon: Icons.sticky_note_2_outlined,
-            tooltip: isInLibrary ? 'Notes' : 'Notes (Add to library first)',
-            isDisabled: !isInLibrary,
-            onPressed: isInLibrary ? () => _showNoteCreationDialog(book.id) : null,
-          ),
-          if (notesCount > 0)
-            Positioned(
-              right: -4,
-              top: -4,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.secondary,
-                  shape: BoxShape.circle,
-                  border: Border.all(
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        _buildCompactControlButton(
+          icon: Icons.sticky_note_2_outlined,
+          tooltip: isInLibrary ? 'Notes' : 'Notes (Add to library first)',
+          isActive: _showNotesPanel,
+          isDisabled: !isInLibrary,
+          onPressed: isInLibrary ? () {
+            setState(() {
+              _showNotesPanel = !_showNotesPanel;
+            });
+          } : null,
+        ),
+        if (notesCount > 0)
+          Positioned(
+            right: -4,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.secondary,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white,
+                  width: 2,
+                ),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 20,
+                minHeight: 20,
+              ),
+              child: Center(
+                child: Text(
+                  '$notesCount',
+                  style: const TextStyle(
                     color: Colors.white,
-                    width: 2,
-                  ),
-                ),
-                constraints: const BoxConstraints(
-                  minWidth: 20,
-                  minHeight: 20,
-                ),
-                child: Center(
-                  child: Text(
-                    '$notesCount',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -533,6 +540,59 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     // Reset flag after showing dialog
     setState(() {
       _showBookmarkPanel = false;
+    });
+  }
+  
+  /// Show notes panel as a proper Dialog
+  void _showNotesDialog(BookModel book) {
+    // Reset flag immediately to prevent repeated calls
+    if (!_showNotesPanel) return;
+    
+    // Disable PDF pointer events when dialog opens
+    _disablePdfPointerEvents();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          alignment: Alignment.centerRight,
+          insetPadding: EdgeInsets.zero,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            width: MediaQuery.of(context).size.width * AppConstants.aiPanelWidthPercentage,
+            height: MediaQuery.of(context).size.height,
+            child: NotesPanel(
+              key: ValueKey('notes_${book.id}'),
+              bookId: book.id,
+              getCurrentPage: () => _currentPage,  // Pass callback to get current page dynamically
+              onClose: () {
+                Navigator.of(dialogContext).pop();
+                setState(() {
+                  _showNotesPanel = false;
+                });
+              },
+            ),
+          ),
+        );
+      },
+    ).then((_) {
+      // Re-enable PDF pointer events when dialog closes
+      _enablePdfPointerEvents();
+      
+      // Ensure flag is reset when dialog closes
+      if (mounted) {
+        setState(() {
+          _showNotesPanel = false;
+        });
+      }
+    });
+    
+    // Reset flag after showing dialog
+    setState(() {
+      _showNotesPanel = false;
     });
   }
   

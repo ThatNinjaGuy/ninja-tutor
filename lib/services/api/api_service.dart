@@ -877,7 +877,34 @@ class ApiService {
           'y': 0.0,
         },
       });
-      return NoteModel.fromJson(response.data);
+      
+      // Transform snake_case response to camelCase for NoteModel
+      final data = response.data as Map<String, dynamic>;
+      final transformedData = {
+        'id': data['id'],
+        'bookId': data['book_id'],
+        'pageNumber': data['position']['page'],
+        'type': data['type'],
+        'content': data['content'],
+        'title': data['title'],
+        'tags': data['tags'] ?? [],
+        'createdAt': data['created_at'],
+        'updatedAt': data['updated_at'] ?? data['created_at'],
+        'position': data['position'],
+        'style': data['style'] ?? {
+          'color': '#2196F3',
+          'opacity': 1.0,
+          'fontSize': 14.0,
+          'fontFamily': 'Inter',
+          'isBold': false,
+          'isItalic': false,
+        },
+        'isFavorite': data['is_favorite'] ?? false,
+        'linkedText': data['linked_text'],
+        'aiInsights': data['ai_insights'],
+      };
+      
+      return NoteModel.fromJson(transformedData);
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
@@ -889,8 +916,32 @@ class ApiService {
       final response = await _dio.get('/notes/book/$bookId');
       
       final notes = <NoteModel>[];
-      for (final noteJson in response.data) {
-        notes.add(NoteModel.fromJson(noteJson));
+      for (final noteData in response.data) {
+        // Transform snake_case response to camelCase for NoteModel
+        final transformedData = {
+          'id': noteData['id'],
+          'bookId': noteData['book_id'],
+          'pageNumber': noteData['position']['page'],
+          'type': noteData['type'],
+          'content': noteData['content'],
+          'title': noteData['title'],
+          'tags': noteData['tags'] ?? [],
+          'createdAt': noteData['created_at'],
+          'updatedAt': noteData['updated_at'] ?? noteData['created_at'],
+          'position': noteData['position'],
+          'style': noteData['style'] ?? {
+            'color': '#2196F3',
+            'opacity': 1.0,
+            'fontSize': 14.0,
+            'fontFamily': 'Inter',
+            'isBold': false,
+            'isItalic': false,
+          },
+          'isFavorite': noteData['is_favorite'] ?? false,
+          'linkedText': noteData['linked_text'],
+          'aiInsights': noteData['ai_insights'],
+        };
+        notes.add(NoteModel.fromJson(transformedData));
       }
       return notes;
     } on DioException catch (e) {
