@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,12 +8,15 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/utils/debouncer.dart';
+import '../../../core/utils/haptics_helper.dart';
 import '../../../models/content/book_model.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/common/responsive_grid_helpers.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/search_filter_bar.dart';
 import '../../widgets/common/profile_menu_button.dart';
+import '../../widgets/common/skeleton_loader.dart';
 import '../../widgets/library/add_book_bottom_sheet.dart';
 import '../../widgets/library/book_options_sheet.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
@@ -25,12 +29,16 @@ class LibraryScreen extends ConsumerStatefulWidget {
   ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
 }
 
+enum ViewMode { grid, list, compact }
+
 class _LibraryScreenState extends ConsumerState<LibraryScreen> 
     with TickerProviderStateMixin, ReadingInterfaceMixin {
   late TabController _tabController;
   String? _selectedSubject = 'All';
   String? _selectedGrade = 'All';
   String _searchQuery = '';
+  late Debouncer _searchDebouncer;
+  ViewMode _viewMode = ViewMode.grid;
   
   // Current book being read
   BookModel? _currentReadingBook;
@@ -39,6 +47,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _searchDebouncer = Debouncer(duration: const Duration(milliseconds: 300));
     
     // Listen to tab changes to lazy load data
     _tabController.addListener(_handleTabChange);
@@ -62,6 +71,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchDebouncer.dispose();
     super.dispose();
   }
 
@@ -159,71 +169,123 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 
   Widget _buildSearchAndFilters() {
-    return SearchFilterBar(
-      searchHint: 'Search books...',
-      searchQuery: _searchQuery,
-      onSearchChanged: (value) {
-        setState(() => _searchQuery = value);
-        if (value.isEmpty) {
-                        ref.read(unifiedLibraryProvider.notifier).clearSearch();
-        } else {
-          _handleSearchChanged(value);
-        }
-      },
-      filterWidgets: [
-        ResponsiveFilterRow(
-          children: [
-            DropdownButtonFormField<String>(
-              value: _selectedSubject,
-              decoration: const InputDecoration(
-                labelText: 'Subject',
-                prefixIcon: Icon(Icons.subject),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                isDense: true,
+    final theme = Theme.of(context);
+    
+    return Column(
+      children: [
+        SearchFilterBar(
+          searchHint: 'Search books...',
+          searchQuery: _searchQuery,
+          onSearchChanged: (value) {
+            setState(() => _searchQuery = value);
+            if (value.isEmpty) {
+              ref.read(unifiedLibraryProvider.notifier).clearSearch();
+            } else {
+              // Debounce search to avoid excessive API calls
+              _searchDebouncer.call(() => _handleSearchChanged(value));
+            }
+          },
+          filterWidgets: [
+            ResponsiveFilterRow(
+              children: [
+                DropdownButtonFormField<String>(
+                  value: _selectedSubject,
+                  decoration: const InputDecoration(
+                    labelText: 'Subject',
+                    prefixIcon: Icon(Icons.subject),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    isDense: true,
+                  ),
+                  items: _getSubjects().map((subject) {
+                    return DropdownMenuItem(
+                      value: subject,
+                      child: Text(subject, style: const TextStyle(fontSize: 14)),
+                    );
+                  }).toList(),
+                  onChanged: _handleSubjectChanged,
+                ),
+                DropdownButtonFormField<String>(
+                  value: _selectedGrade,
+                  decoration: const InputDecoration(
+                    labelText: 'Grade',
+                    prefixIcon: Icon(Icons.school),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    isDense: true,
+                  ),
+                  items: _getGrades().map((gradeEntry) {
+                    return DropdownMenuItem(
+                      value: gradeEntry['value'],
+                      child: Text(gradeEntry['display']!, style: const TextStyle(fontSize: 14)),
+                    );
+                  }).toList(),
+                  onChanged: _handleGradeChanged,
               ),
-              items: _getSubjects().map((subject) {
-                return DropdownMenuItem(
-                  value: subject,
-                  child: Text(subject, style: const TextStyle(fontSize: 14)),
-                );
-              }).toList(),
-              onChanged: _handleSubjectChanged,
-            ),
-            DropdownButtonFormField<String>(
-              value: _selectedGrade,
-              decoration: const InputDecoration(
-                labelText: 'Grade',
-                prefixIcon: Icon(Icons.school),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                isDense: true,
-              ),
-              items: _getGrades().map((gradeEntry) {
-                return DropdownMenuItem(
-                  value: gradeEntry['value'],
-                  child: Text(gradeEntry['display']!, style: const TextStyle(fontSize: 14)),
-                );
-              }).toList(),
-              onChanged: _handleGradeChanged,
+            ],
           ),
-        ],
-      ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        
+        // View mode toggle
+        Row(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Row(
+                children: [
+                  _buildViewModeButton(ViewMode.grid, Icons.grid_view, theme),
+                  _buildViewModeButton(ViewMode.list, Icons.view_list, theme),
+                  _buildViewModeButton(ViewMode.compact, Icons.view_compact, theme),
+                ],
+              ),
+            ),
+            const Spacer(),
+            // Sort indicator
+            TextButton.icon(
+              onPressed: () {
+                // TODO: Implement sort options
+              },
+              icon: const Icon(Icons.sort, size: 18),
+              label: const Text('Sort', style: TextStyle(fontSize: 13)),
+            ),
+          ],
+        ),
       ],
+    );
+  }
+  
+  Widget _buildViewModeButton(ViewMode mode, IconData icon, ThemeData theme) {
+    final isSelected = _viewMode == mode;
+    return Material(
+      color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: () {
+          setState(() => _viewMode = mode);
+          HapticsHelper.light();
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(
+            icon,
+            size: 20,
+            color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
     );
   }
 
   /// Build My Books tab - shows only user's personal library with search and filters
   Widget _buildMyBooksGrid(LibraryState libraryState) {
-    if (libraryState.isLoadingUserLibrary) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(AppStrings.loadingYourBooks),
-          ],
-        ),
-      );
+    // Show skeleton loader instead of spinner for better UX
+    if (libraryState.isLoadingUserLibrary && libraryState.myBooks.isEmpty) {
+      return const GridSkeletonLoader(itemCount: 6);
     }
 
     if (libraryState.error != null) {
@@ -281,17 +343,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   /// Build Explore Books tab - shows all available books with add functionality
   Widget _buildExploreBooksGrid(LibraryState libraryState) {
-    if (libraryState.isLoadingAllBooks || libraryState.isSearching) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(libraryState.isSearching ? AppStrings.searchingBooks : AppStrings.loadingBooks),
-          ],
-        ),
-      );
+    // Show skeleton loader instead of spinner for better UX
+    if ((libraryState.isLoadingAllBooks || libraryState.isSearching) && 
+        libraryState.allBooks.isEmpty && libraryState.searchResults.isEmpty) {
+      return const GridSkeletonLoader(itemCount: 6);
     }
 
     if (libraryState.error != null) {
@@ -399,31 +454,73 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   /// Add book to user's personal library
   Future<void> _addBookToLibrary(String bookId) async {
+    // Haptic feedback
+    HapticFeedback.mediumImpact();
+    
     final success = await ref.read(unifiedLibraryProvider.notifier).addBookToLibrary(bookId);
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? AppStrings.bookAddedToLibrary : AppStrings.failedToAddBook),
-          backgroundColor: success ? Colors.green : Colors.red,
-          duration: const Duration(seconds: 2),
+          content: Row(
+            children: [
+              Icon(
+                success ? Icons.check_circle : Icons.error,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(success ? AppStrings.bookAddedToLibrary : AppStrings.failedToAddBook),
+              ),
+            ],
+          ),
+          backgroundColor: success ? Colors.green.shade600 : Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          duration: const Duration(milliseconds: 2000),
         ),
       );
+      
+      if (success) {
+        HapticFeedback.lightImpact();
+      }
     }
   }
 
   /// Remove book from user's personal library
   Future<void> _removeBookFromLibrary(String bookId) async {
+    // Haptic feedback
+    HapticFeedback.mediumImpact();
+    
     final success = await ref.read(unifiedLibraryProvider.notifier).removeBookFromLibrary(bookId);
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? AppStrings.bookRemovedFromLibrary : AppStrings.failedToRemoveBook),
-          backgroundColor: success ? Colors.orange : Colors.red,
-          duration: const Duration(seconds: 2),
+          content: Row(
+            children: [
+              Icon(
+                success ? Icons.remove_circle : Icons.error,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(success ? AppStrings.bookRemovedFromLibrary : AppStrings.failedToRemoveBook),
+              ),
+            ],
+          ),
+          backgroundColor: success ? Colors.orange.shade600 : Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          duration: const Duration(milliseconds: 2000),
         ),
       );
+      
+      if (success) {
+        HapticFeedback.lightImpact();
+      }
     }
   }
 

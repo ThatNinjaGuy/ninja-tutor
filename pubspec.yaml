@@ -23,6 +23,12 @@ dependencies:
   cupertino_icons: ^1.0.6
   google_fonts: ^6.1.0
   flutter_svg: ^2.0.9
+  cached_network_image: ^3.3.1
+  flutter_animate: ^4.5.0
+  confetti: ^0.7.0
+  flutter_slidable: ^3.1.0
+  shimmer: ^3.0.0
+  lottie: ^3.1.0
 
   # Data & Storage
   hive: ^2.2.3

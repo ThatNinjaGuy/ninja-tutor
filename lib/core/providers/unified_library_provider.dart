@@ -291,29 +291,48 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     state = state.copyWith(searchResults: []);
   }
 
-  /// Add book to user's library
+  /// Add book to user's library with optimistic update
   Future<bool> addBookToLibrary(String bookId) async {
     if (_authToken == null) return false;
 
     try {
-      await _apiService.addBookToLibrary(bookId);
-      
-      // Update local state immediately for better UX
-      final updatedIds = Set<String>.from(state.userLibraryBookIds)..add(bookId);
-      
-      // Find the book in all books and add to user library books
+      // Find the book in all books for optimistic update
       final book = state.allBooks.firstWhere((b) => b.id == bookId);
+      
+      // Optimistic update - update UI immediately
+      final updatedIds = Set<String>.from(state.userLibraryBookIds)..add(bookId);
       final updatedUserBooks = [...state.userLibraryBooks, book];
       
+      // Store previous state for rollback
+      final previousIds = state.userLibraryBookIds;
+      final previousUserBooks = state.userLibraryBooks;
+      
+      // Apply optimistic update
       state = state.copyWith(
         userLibraryBookIds: updatedIds,
         userLibraryBooks: updatedUserBooks,
       );
       
+      // Make API call in background
+      await _apiService.addBookToLibrary(bookId);
+      
       return true;
     } catch (e) {
       debugPrint('Error adding book to library: $e');
-      // Auth errors are handled by interceptor - just return false
+      
+      // Rollback optimistic update on error
+      try {
+        final book = state.allBooks.firstWhere((b) => b.id == bookId);
+        final rollbackIds = Set<String>.from(state.userLibraryBookIds)..remove(bookId);
+        final rollbackUserBooks = state.userLibraryBooks.where((b) => b.id != bookId).toList();
+        
+        state = state.copyWith(
+          userLibraryBookIds: rollbackIds,
+          userLibraryBooks: rollbackUserBooks,
+        );
+      } catch (_) {}
+      
+      // Auth errors are handled by interceptor
       if (e is ApiException && e.isAuthError) {
         return false;
       }
@@ -321,26 +340,44 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     }
   }
 
-  /// Remove book from user's library
+  /// Remove book from user's library with optimistic update
   Future<bool> removeBookFromLibrary(String bookId) async {
     if (_authToken == null) return false;
 
     try {
-      await _apiService.removeBookFromLibrary(bookId);
+      // Store previous state for rollback
+      final removedBook = state.userLibraryBooks.firstWhere((b) => b.id == bookId);
       
-      // Update local state immediately for better UX
+      // Optimistic update - update UI immediately
       final updatedIds = Set<String>.from(state.userLibraryBookIds)..remove(bookId);
       final updatedUserBooks = state.userLibraryBooks.where((b) => b.id != bookId).toList();
       
+      // Apply optimistic update
       state = state.copyWith(
         userLibraryBookIds: updatedIds,
         userLibraryBooks: updatedUserBooks,
       );
       
+      // Make API call in background
+      await _apiService.removeBookFromLibrary(bookId);
+      
       return true;
     } catch (e) {
       debugPrint('Error removing book from library: $e');
-      // Auth errors are handled by interceptor - just return false
+      
+      // Rollback optimistic update on error
+      try {
+        final removedBook = state.allBooks.firstWhere((b) => b.id == bookId);
+        final rollbackIds = Set<String>.from(state.userLibraryBookIds)..add(bookId);
+        final rollbackUserBooks = [...state.userLibraryBooks, removedBook];
+        
+        state = state.copyWith(
+          userLibraryBookIds: rollbackIds,
+          userLibraryBooks: rollbackUserBooks,
+        );
+      } catch (_) {}
+      
+      // Auth errors are handled by interceptor
       if (e is ApiException && e.isAuthError) {
         return false;
       }

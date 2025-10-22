@@ -1,19 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/gamification_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/haptics_helper.dart';
 import '../../../models/content/book_model.dart';
 import '../../../models/user/user_model.dart';
 import '../../widgets/common/progress_card.dart';
 import '../../widgets/common/ai_tip_card.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/profile_menu_button.dart';
+import '../../widgets/common/skeleton_loader.dart';
+import '../../widgets/common/modern_card.dart';
+import '../../widgets/common/modern_buttons.dart';
+import '../../widgets/common/quick_actions_fab.dart';
+import '../../widgets/gamification/streak_flame.dart';
+import '../../widgets/gamification/xp_progress_bar.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
 
 /// Dashboard screen showing user overview and recommendations
@@ -199,9 +210,40 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ),
             
             // Bottom padding
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         ),
+      ),
+      floatingActionButton: QuickActionsFAB(
+        actions: [
+          QuickAction(
+            icon: Icons.book,
+            label: 'Add Book',
+            color: AppTheme.readingColor,
+            onTap: () {
+              HapticsHelper.light();
+              context.push(AppRoutes.library);
+            },
+          ),
+          QuickAction(
+            icon: Icons.quiz,
+            label: 'Practice',
+            color: AppTheme.practiceColor,
+            onTap: () {
+              HapticsHelper.light();
+              context.push(AppRoutes.practice);
+            },
+          ),
+          QuickAction(
+            icon: Icons.sticky_note_2,
+            label: 'Notes',
+            color: AppTheme.noteColor,
+            onTap: () {
+              HapticsHelper.light();
+              context.push(AppRoutes.notes);
+            },
+          ),
+        ],
       ),
     );
   }
@@ -255,6 +297,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final theme = Theme.of(context);
     final libraryState = ref.watch(unifiedLibraryProvider);
     final books = libraryState.myBooks;
+    final gamification = ref.watch(gamificationProvider);
     
     // Show loading state while fetching books
     if (libraryState.isLoadingUserLibrary && books.isEmpty) {
@@ -276,9 +319,70 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     // Calculate stats from books
     final stats = _calculateDashboardStats(books);
     
+    // Update gamification state with current stats
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Sync XP from total study time (5 hours = 100 XP)
+      final studyTimeMinutes = stats['total_study_time_minutes'] ?? 0;
+      ref.read(gamificationProvider.notifier).syncXPFromStudyTime(studyTimeMinutes);
+      
+      // Check for achievement unlocks
+      ref.read(gamificationProvider.notifier).checkAchievements(
+        booksRead: stats['books_read'] ?? 0,
+        pagesRead: books.fold<int>(0, (sum, book) => sum + (book.progress?.totalPagesRead ?? 0)),
+        studyTimeMinutes: studyTimeMinutes,
+      );
+      
+      // Update streak
+      if (stats['study_streak'] != gamification.currentStreak) {
+        ref.read(gamificationProvider.notifier).updateStreak(true);
+      }
+    });
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // XP and Level Section
+        PremiumCard(
+          padding: const EdgeInsets.all(20),
+          accentColor: AppTheme.xpColor,
+          child: Row(
+            children: [
+              // Level badge
+              LevelBadge(
+                level: gamification.currentLevel,
+                size: 80,
+                glowIntensity: 0.6,
+              ),
+              const SizedBox(width: 20),
+              
+              // Level info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    XPProgressBar(
+                      currentXP: gamification.xpInCurrentLevel,
+                      xpForNextLevel: gamification.xpForNextLevel,
+                      currentLevel: gamification.currentLevel,
+                      showLabel: true,
+                      height: 12,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${gamification.xpInCurrentLevel}/${gamification.xpForNextLevel} XP to Level ${gamification.currentLevel + 1}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.2, end: 0),
+        
+        const SizedBox(height: 16),
+        
         Text(
           AppStrings.yourProgress,
           style: theme.textTheme.titleLarge?.copyWith(
@@ -287,61 +391,160 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         ),
         const SizedBox(height: 16),
         
-        // Progress cards row
+        // Progress cards row with modern design
         SizedBox(
-          height: 130,
+          height: 160,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
+              // Books Read
               SizedBox(
                 width: 140,
-                child: ProgressCard(
-                  key: const ValueKey('progress_books_read'),
-                  title: 'Books Read',
-                  value: '${stats['books_read'] ?? 0}',
-                  subtitle: 'Completed',
-                  color: AppTheme.readingColor,
-                  icon: Icons.menu_book,
-                ),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF10B981), Color(0xFF059669)],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.menu_book, color: Colors.white, size: 28),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '${stats['books_read'] ?? 0}',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.readingColor,
+                        ),
+                      ),
+                      Text(
+                        'Books Read',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 100.ms).slideX(begin: -0.2),
               ),
               const SizedBox(width: 16),
               
+              // Study Streak with flame
               SizedBox(
                 width: 140,
-                child: ProgressCard(
-                  key: const ValueKey('progress_study_streak'),
-                  title: 'Study Streak',
-                  value: '${stats['study_streak'] ?? 0}',
-                  subtitle: 'Days',
-                  color: AppTheme.practiceColor,
-                  icon: Icons.local_fire_department,
-                ),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      StreakFlame(
+                        streak: gamification.currentStreak,
+                        size: 40,
+                        showNumber: false,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '${gamification.currentStreak}',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.streakColor,
+                        ),
+                      ),
+                      Text(
+                        'Day Streak',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 200.ms).slideX(begin: -0.2),
               ),
               const SizedBox(width: 16),
               
+              // Quiz Score
               SizedBox(
                 width: 140,
-                child: ProgressCard(
-                  key: const ValueKey('progress_quiz_score'),
-                  title: 'Quiz Score',
-                  value: '${(stats['average_quiz_score'] ?? 0).toInt()}%',
-                  subtitle: 'Average',
-                  color: AppTheme.aiTipColor,
-                  icon: Icons.quiz,
-                ),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.quiz, color: Colors.white, size: 28),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '${(stats['average_quiz_score'] ?? 0).toInt()}%',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.aiTipColor,
+                        ),
+                      ),
+                      Text(
+                        'Quiz Score',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.2),
               ),
               const SizedBox(width: 16),
               
+              // Study Time
               SizedBox(
                 width: 140,
-                child: ProgressCard(
-                  key: const ValueKey('progress_study_time'),
-                  title: 'Study Time',
-                  value: '${((stats['total_study_time_minutes'] ?? 0) / 60).toStringAsFixed(1)}h',
-                  subtitle: 'Total',
-                  color: AppTheme.noteColor,
-                  icon: Icons.access_time,
-                ),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF06B6D4), Color(0xFF0891B2)],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.access_time, color: Colors.white, size: 28),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '${((stats['total_study_time_minutes'] ?? 0) / 60).toStringAsFixed(1)}h',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.noteColor,
+                        ),
+                      ),
+                      Text(
+                        'Study Time',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 400.ms).slideX(begin: -0.2),
               ),
             ],
           ),
@@ -585,18 +788,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             itemBuilder: (context, index) {
               return Padding(
                 padding: EdgeInsets.only(right: index < 2 ? 16 : 0),
-                child: Container(
+                child: SizedBox(
                   width: 120,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: theme.colorScheme.outline.withOpacity(0.2),
-                    ),
-                  ),
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                  child: const BookCardSkeleton(isGrid: true),
                 ),
               );
             },
@@ -797,7 +991,11 @@ class _QuickActionCard extends StatelessWidget {
     
     return Card(
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          // Add haptic feedback
+          HapticFeedback.lightImpact();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(AppConstants.borderRadius),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -828,6 +1026,11 @@ class _QuickActionCard extends StatelessWidget {
           ),
         ),
       ),
+    ).animate().fadeIn(duration: 300.ms).scale(
+      begin: const Offset(0.95, 0.95),
+      end: const Offset(1.0, 1.0),
+      duration: 300.ms,
+      curve: Curves.easeOutCubic,
     );
   }
 }
@@ -913,7 +1116,11 @@ class _ViewAllCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppConstants.borderRadius),
         ),
         child: InkWell(
-          onTap: onTap,
+          onTap: () {
+            // Add haptic feedback
+            HapticFeedback.lightImpact();
+            onTap();
+          },
           borderRadius: BorderRadius.circular(AppConstants.borderRadius),
           child: Container(
             padding: const EdgeInsets.all(16),
@@ -1024,10 +1231,21 @@ class _DashboardBookCard extends StatelessWidget {
                   child: book.coverUrl != null
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            book.coverUrl!,
+                          child: CachedNetworkImage(
+                            imageUrl: book.coverUrl!,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => _buildDefaultCover(theme),
+                            placeholder: (context, url) => Container(
+                              color: _getSubjectColor().withOpacity(0.1),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: _getSubjectColor(),
+                                ),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => _buildDefaultCover(theme),
+                            fadeInDuration: const Duration(milliseconds: 300),
+                            fadeOutDuration: const Duration(milliseconds: 100),
                           ),
                         )
                       : _buildDefaultCover(theme),
