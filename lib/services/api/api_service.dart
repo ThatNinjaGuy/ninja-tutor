@@ -957,6 +957,59 @@ class ApiService {
       throw ApiException.fromDioError(e);
     }
   }
+
+  /// Get all notes for current user across all books
+  Future<List<NoteModel>> getAllUserNotes() async {
+    try {
+      final response = await _dio.get('/notes/all');
+      
+      final notes = <NoteModel>[];
+      for (final noteData in response.data) {
+        // Transform snake_case response to camelCase for NoteModel
+        // Same transformation as getNotesForBook
+        final transformedData = {
+          'id': noteData['id'],
+          'bookId': noteData['book_id'],
+          'pageNumber': noteData['position']?['page'] ?? 0,
+          'type': noteData['type'],
+          'content': noteData['content'],
+          'title': noteData['title'],
+          'tags': noteData['tags'] ?? [],
+          'createdAt': noteData['created_at'],
+          'updatedAt': noteData['updated_at'] ?? noteData['created_at'],
+          'position': noteData['position'] ?? {
+            'x': 0.0,
+            'y': 0.0,
+          },
+          'style': noteData['style'] ?? {
+            'color': '#2196F3',
+            'opacity': 1.0,
+            'fontSize': 14.0,
+            'fontFamily': 'Inter',
+            'isBold': false,
+            'isItalic': false,
+          },
+          'isFavorite': noteData['is_favorite'] ?? false,
+          'linkedText': noteData['linked_text'],
+          'aiInsights': noteData['ai_insights'],
+        };
+        notes.add(NoteModel.fromJson(transformedData));
+      }
+      return notes;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get all bookmarks for current user across all books
+  Future<List<Map<String, dynamic>>> getAllUserBookmarks() async {
+    try {
+      final response = await _dio.get('/bookmarks/all');
+      return List<Map<String, dynamic>>.from(response.data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
 }
 
 /// Authentication interceptor
