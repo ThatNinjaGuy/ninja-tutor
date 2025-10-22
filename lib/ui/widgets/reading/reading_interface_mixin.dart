@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:html' as html;
 
 import '../../../models/content/book_model.dart';
 import '../../../core/providers/unified_library_provider.dart';
+import '../../../core/providers/reading_ai_provider.dart';
 import '../../../core/constants/app_constants.dart';
 import 'reading_viewer.dart';
+import 'ai_chat_panel.dart';
 
 /// Mixin providing shared reading interface functionality
 /// Used by both LibraryScreen and ReadingScreen to avoid code duplication
@@ -13,11 +16,13 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   bool _isReadingMode = false;
   bool _showAiPanel = false;
   String? _selectedText;
+  int _currentPage = 1;
   
   // Getters that must be overridden
   bool get isReadingMode => _isReadingMode;
   bool get showAiPanel => _showAiPanel;
   String? get selectedText => _selectedText;
+  int get currentPage => _currentPage;
   
   // Setters for state management
   void setReadingMode(bool value) {
@@ -32,19 +37,21 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     setState(() => _selectedText = value);
   }
   
+  void setCurrentPage(int value) {
+    setState(() => _currentPage = value);
+  }
+  
   /// Build the complete reading interface
   Widget buildReadingInterface(BookModel book) {
+    // Show AI dialog when needed
+    if (_showAiPanel) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showAiDialog(book);
+      });
+    }
+    
     return Scaffold(
-      body: Stack(
-        children: [
-          // Main content with responsive layout
-          _buildResponsiveLayout(book),
-          
-          // AI contextual panel overlay
-          if (_showAiPanel)
-            _buildAiPanel(context),
-        ],
-      ),
+      body: _buildResponsiveLayout(book),
     );
   }
 
@@ -64,6 +71,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
                   book: book,
                   onTextSelected: _handleTextSelection,
                   onDefinitionRequest: _handleDefinitionRequest,
+                  onPageChanged: (page) => setCurrentPage(page),
                 ),
               ),
               // Vertical helper panel on the right
@@ -74,14 +82,15 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
           // Narrow screen: helper panel at the bottom
           return Column(
             children: [
-              // PDF viewer takes most of the space
-              Expanded(
-                child: ReadingViewer(
-                  book: book,
-                  onTextSelected: _handleTextSelection,
-                  onDefinitionRequest: _handleDefinitionRequest,
-                ),
+            // PDF viewer takes most of the space
+            Expanded(
+              child: ReadingViewer(
+                book: book,
+                onTextSelected: _handleTextSelection,
+                onDefinitionRequest: _handleDefinitionRequest,
+                onPageChanged: (page) => setCurrentPage(page),
               ),
+            ),
               // Horizontal helper panel at the bottom
               _buildHorizontalHelperPanel(book),
             ],
@@ -240,98 +249,85 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     );
   }
 
-  /// AI Panel overlay
-  Widget _buildAiPanel(BuildContext context) {
-    return Positioned(
-      right: 0,
-      top: 0,
-      bottom: 0,
-      width: MediaQuery.of(context).size.width * AppConstants.aiPanelWidthPercentage,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(-2, 0),
+  /// Show AI chat as a proper Dialog
+  void _showAiDialog(BookModel book) {
+    // Reset flag immediately to prevent repeated calls
+    if (!_showAiPanel) return;
+    
+    // Disable PDF scrolling when dialog opens
+    _setPdfScrollingEnabled(false);
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          alignment: Alignment.centerRight,
+          insetPadding: EdgeInsets.zero,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            width: MediaQuery.of(context).size.width * AppConstants.aiPanelWidthPercentage,
+            height: MediaQuery.of(context).size.height,
+            child: AiChatPanel(
+              bookId: book.id,
+              currentPage: _currentPage,
+              selectedText: _selectedText,
+              onClose: () {
+                Navigator.of(dialogContext).pop();
+                setState(() {
+                  _showAiPanel = false;
+                  _selectedText = null;
+                });
+              },
             ),
-          ],
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Panel header
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.psychology,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'AI Assistant',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => setState(() {
-                        _showAiPanel = false;
-                      }),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-              ),
-              // AI content
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    if (_selectedText != null)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'Definition for "$_selectedText"',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'AI features coming soon!',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
-        ),
-      ),
-    );
+        );
+      },
+    ).then((_) {
+      // Re-enable PDF scrolling when dialog closes
+      _setPdfScrollingEnabled(true);
+      
+      // Ensure flag is reset when dialog closes
+      if (mounted) {
+        setState(() {
+          _showAiPanel = false;
+          _selectedText = null;
+        });
+      }
+    });
+    
+    // Reset flag after showing dialog
+    setState(() {
+      _showAiPanel = false;
+    });
+  }
+  
+  /// Enable or disable PDF scrolling
+  void _setPdfScrollingEnabled(bool enabled) {
+    try {
+      // Find all iframes (PDF viewers) and control their events
+      final iframes = html.document.querySelectorAll('iframe');
+      for (var iframe in iframes) {
+        if (iframe is html.IFrameElement) {
+          // Send message to PDF.js to enable/disable scrolling
+          final message = {
+            'type': 'setScrollEnabled',
+            'enabled': enabled,
+          };
+          iframe.contentWindow?.postMessage(message, '*');
+          
+          // Also set CSS pointer events as backup
+          iframe.style.pointerEvents = enabled ? 'auto' : 'none';
+          
+          print('${enabled ? "✅ Enabled" : "🚫 Disabled"} PDF scrolling');
+        }
+      }
+    } catch (e) {
+      // Silently fail if we can't control PDF scrolling
+      print('Could not control PDF scrolling: $e');
+    }
   }
 
   // Reading event handlers

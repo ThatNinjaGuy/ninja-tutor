@@ -353,10 +353,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final horizontalPadding = AppConstants.defaultPadding * 2; // Total padding on both sides
     final availableWidth = screenWidth - horizontalPadding;
     
-    // Calculate card width for 7 cards total with spacing (View All + 6 books)
-    final cardSpacing = 8.0;
-    final totalSpacing = cardSpacing * 6; // 6 gaps for 7 cards
-    final cardWidth = (availableWidth - totalSpacing) / 7;
+    // Define minimum card width for small screens
+    const minCardWidth = 120.0;
+    const maxCardsPerRow = 7; // View All + 6 books
+    const cardSpacing = 8.0;
+    
+    // Calculate optimal number of cards and card width
+    final cardLayout = _calculateOptimalCardLayout(
+      availableWidth: availableWidth,
+      minCardWidth: minCardWidth,
+      maxCards: maxCardsPerRow,
+      cardSpacing: cardSpacing,
+    );
+    
+    final cardWidth = cardLayout.cardWidth;
+    final cardsToShow = cardLayout.cardsToShow;
     
     if (books.isEmpty) {
       return _buildEmptyState(
@@ -376,8 +387,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     }).toList()
       ..sort((a, b) => b.value.compareTo(a.value)); // Sort by most recent first
     
-    // Take 6 books
-    final displayBooks = continueBooks.take(6).map((entry) => entry.key).toList();
+    // Take books based on calculated layout
+    final displayBooks = continueBooks.take(cardsToShow - 1).map((entry) => entry.key).toList();
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,33 +403,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         
         SizedBox(
           height: cardWidth * 1.2, // Optimized height for better proportions
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: displayBooks.length + 1, // +1 for View All card
-            itemBuilder: (context, index) {
-              // First card is "View All"
-              if (index == 0) {
-                return Padding(
-                  padding: EdgeInsets.only(right: cardSpacing),
-                  child: _ViewAllCard(
-                    width: cardWidth,
-                    onTap: () => context.push(AppRoutes.reading),
-                  ),
-                );
-              }
-              
-              // Other cards are books
-              final book = displayBooks[index - 1];
-              return Padding(
-                padding: EdgeInsets.only(right: index < displayBooks.length ? cardSpacing : 0),
-                child: _DashboardBookCard(
-                  key: ValueKey('dashboard_book_${book.id}'),
-                  book: book,
-                  width: cardWidth,
-                  onTap: () => _openBook(book),
-                ),
-              );
-            },
+          child: _buildCardsList(
+            displayBooks: displayBooks,
+            cardWidth: cardWidth,
+            cardSpacing: cardSpacing,
+            showCarousel: cardLayout.showCarousel,
           ),
         ),
       ],
@@ -691,6 +680,97 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     setReadingMode(true);
     ref.read(currentBookProvider.notifier).state = book;
   }
+
+  /// Calculate optimal card layout for responsive design
+  CardLayoutInfo _calculateOptimalCardLayout({
+    required double availableWidth,
+    required double minCardWidth,
+    required int maxCards,
+    required double cardSpacing,
+  }) {
+    // Try to fit maximum cards first
+    for (int cards = maxCards; cards >= 3; cards--) {
+      final totalSpacing = cardSpacing * (cards - 1);
+      final cardWidth = (availableWidth - totalSpacing) / cards;
+      
+      if (cardWidth >= minCardWidth) {
+        return CardLayoutInfo(
+          cardWidth: cardWidth,
+          cardsToShow: cards,
+          showCarousel: false,
+        );
+      }
+    }
+    
+    // If we can't fit minimum cards, use carousel with minimum width
+    return CardLayoutInfo(
+      cardWidth: minCardWidth,
+      cardsToShow: maxCards,
+      showCarousel: true,
+    );
+  }
+
+  /// Build cards list with optional carousel
+  Widget _buildCardsList({
+    required List<BookModel> displayBooks,
+    required double cardWidth,
+    required double cardSpacing,
+    required bool showCarousel,
+  }) {
+    if (showCarousel) {
+      return PageView.builder(
+        itemCount: displayBooks.length + 1, // +1 for View All card
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: _buildCardAtIndex(index, displayBooks, cardWidth),
+          );
+        },
+      );
+    } else {
+      return ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: displayBooks.length + 1, // +1 for View All card
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: EdgeInsets.only(right: index < displayBooks.length ? cardSpacing : 0),
+            child: _buildCardAtIndex(index, displayBooks, cardWidth),
+          );
+        },
+      );
+    }
+  }
+
+  /// Build individual card at given index
+  Widget _buildCardAtIndex(int index, List<BookModel> displayBooks, double cardWidth) {
+    if (index == 0) {
+      return _ViewAllCard(
+        width: cardWidth,
+        onTap: () => context.push(AppRoutes.reading),
+      );
+    }
+    
+    final book = displayBooks[index - 1];
+    return _DashboardBookCard(
+      key: ValueKey('dashboard_book_${book.id}'),
+      book: book,
+      width: cardWidth,
+      onTap: () => _openBook(book),
+    );
+  }
+}
+
+/// Card layout information for responsive design
+class CardLayoutInfo {
+  const CardLayoutInfo({
+    required this.cardWidth,
+    required this.cardsToShow,
+    required this.showCarousel,
+  });
+
+  final double cardWidth;
+  final int cardsToShow;
+  final bool showCarousel;
 }
 
 /// Quick action card widget

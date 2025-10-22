@@ -7,6 +7,7 @@ import 'reading_controls_overlay.dart';
 
 import '../../../models/content/book_model.dart';
 import '../../../core/providers/unified_library_provider.dart';
+import '../../../core/providers/reading_ai_provider.dart';
 import '../../../core/constants/app_constants.dart';
 import 'reading_controls_panel.dart';
 
@@ -17,11 +18,13 @@ class ReadingViewer extends ConsumerStatefulWidget {
     required this.book,
     this.onTextSelected,
     this.onDefinitionRequest,
+    this.onPageChanged,
   });
 
   final BookModel book;
   final Function(String text, Offset position)? onTextSelected;
   final Function(String word)? onDefinitionRequest;
+  final Function(int page)? onPageChanged;
 
   @override
   ConsumerState<ReadingViewer> createState() => _ReadingViewerState();
@@ -52,6 +55,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   final List<Map<String, dynamic>> _capturedTextAnnotations = [];
   final List<Map<String, dynamic>> _capturedDrawings = [];
   final List<Map<String, dynamic>> _capturedHighlights = [];
+  
+  // Message listener reference for cleanup
+  void Function(html.Event)? _messageListener;
 
   @override
   void initState() {
@@ -64,6 +70,13 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   void dispose() {
     _progressSaveTimer?.cancel();
     _saveProgressImmediately(); // Save any pending progress before disposing
+    
+    // Remove message listener to prevent memory leaks
+    if (_messageListener != null) {
+      html.window.removeEventListener('message', _messageListener!);
+      _messageListener = null;
+    }
+    
     super.dispose();
   }
   
@@ -77,17 +90,21 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
 
   Future<void> _loadPdfData() async {
     if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
-      setState(() {
-        _isLoading = false;
-        _error = 'No PDF file available for this book';
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'No PDF file available for this book';
+        });
+      }
       return;
     }
 
-    setState(() {
-      _isLoading = false;
-      _error = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _error = null;
+      });
+    }
   }
 
   @override
@@ -412,7 +429,11 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   void _setupPdfMessageListener() {
-    html.window.addEventListener('message', (html.Event event) {
+    // Store the listener so we can remove it later
+    _messageListener = (html.Event event) {
+      // Check if widget is still mounted before processing
+      if (!mounted) return;
+      
       final messageEvent = event as html.MessageEvent;
       final data = messageEvent.data;
       
@@ -425,7 +446,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       } else {
         print('⚠️ Message data is not a Map: ${data.runtimeType}');
       }
-    });
+    };
+    
+    html.window.addEventListener('message', _messageListener!);
   }
 
   void _handlePdfMessage(Map<String, dynamic> message) {
@@ -473,10 +496,23 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         _currentPage = newPage;
       });
       _updateReadingProgress(newPage);
+      
+      // Notify parent widget about page change
+      widget.onPageChanged?.call(newPage);
+      
+      // Update AI provider context (clear selected text on page change)
+      ref.read(readingAiProvider.notifier).updateContext(
+        page: newPage,
+        selectedText: null,
+        bookId: widget.book.id,
+      );
     }
   }
 
   void _onTextSelection(String text, int pageNum, Map<String, dynamic>? position) {
+    // Check if widget is still mounted before updating state
+    if (!mounted) return;
+    
     // Store selection data and show overlay
     setState(() {
       _selectedText = text;
@@ -512,14 +548,15 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   void _onPdfReady(int totalPages, int currentPage) {
-    if (mounted) {
-      setState(() {
-        _currentPage = currentPage;
-      });
-      // Start tracking time for the initial page
-      _currentPageStartTime = DateTime.now();
-      print('📖 PDF ready - starting time tracking for page $currentPage');
-    }
+    // Check if widget is still mounted before updating state
+    if (!mounted) return;
+    
+    setState(() {
+      _currentPage = currentPage;
+    });
+    // Start tracking time for the initial page
+    _currentPageStartTime = DateTime.now();
+    print('📖 PDF ready - starting time tracking for page $currentPage');
   }
 
   void _sendPageTimeData(int pageNum, int timeSpent) {

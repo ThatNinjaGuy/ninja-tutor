@@ -201,23 +201,34 @@ class _ReadingControlsOverlayState extends ConsumerState<ReadingControlsOverlay>
   }
 
   void _defineWord() {
-    // TODO: Implement word definition
+    // Import the AI provider at the top if not already done
+    if (widget.selectedText.isEmpty) return;
+    
+    // Call quick action through parent callback
+    // This will be handled by the reading interface to open AI panel
+    widget.onClose?.call();
+    
+    // Show snackbar to indicate action is triggered
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Dictionary feature coming soon!'),
-        duration: Duration(seconds: 1),
+      SnackBar(
+        content: Text('Opening definition for "${widget.selectedText.substring(0, widget.selectedText.length > 20 ? 20 : widget.selectedText.length)}..."'),
+        duration: const Duration(seconds: 1),
       ),
     );
   }
 
   void _askAI() {
-    // TODO: Implement AI interaction
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('AI feature coming soon!'),
-        duration: Duration(seconds: 1),
-      ),
-    );
+    // Close overlay and let parent handle opening AI panel with selected text
+    widget.onClose?.call();
+    
+    if (widget.selectedText.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Opening AI assistant...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
   }
 
   void _sendMessageToPdf(String type, Map<String, dynamic> data) {

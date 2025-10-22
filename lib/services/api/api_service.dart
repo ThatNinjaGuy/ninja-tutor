@@ -692,6 +692,62 @@ class ApiService {
     }
   }
 
+  // Reading Intelligence endpoints
+
+  /// Ask a question about reading content
+  Future<Map<String, dynamic>> askReadingQuestion({
+    required String question,
+    required String bookId,
+    required int currentPage,
+    String? selectedText,
+    List<Map<String, String>>? conversationHistory,
+  }) async {
+    try {
+      final response = await _dio.post('/ai/reading/ask', data: {
+        'question': question,
+        'book_id': bookId,
+        'current_page': currentPage,
+        if (selectedText != null) 'selected_text': selectedText,
+        'conversation_history': conversationHistory ?? [],
+      });
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Execute quick action (Define, Explain, Summarize)
+  Future<Map<String, dynamic>> readingQuickAction({
+    required String action,
+    required String text,
+    required String bookId,
+    required int pageNumber,
+    String? summaryType,
+  }) async {
+    try {
+      final response = await _dio.post('/ai/reading/quick-action', data: {
+        'action': action,
+        'text': text,
+        'book_id': bookId,
+        'page_number': pageNumber,
+        if (summaryType != null) 'summary_type': summaryType,
+      });
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get content for a specific page
+  Future<Map<String, dynamic>> getPageContent(String bookId, int pageNumber) async {
+    try {
+      final response = await _dio.get('/ai/reading/page-content/$bookId/$pageNumber');
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   // Enhanced Notes endpoints
 
   /// Get all notes for current user
