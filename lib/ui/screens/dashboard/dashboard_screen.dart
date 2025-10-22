@@ -45,9 +45,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     int totalReadingTimeMinutes = 0;
     List<DateTime> lastReadDates = [];
     
+    debugPrint('📊 Calculating dashboard stats for ${books.length} books:');
+    
     for (final book in books) {
       final progress = book.progress;
       if (progress != null) {
+        debugPrint('   📖 "${book.title}": ${progress.totalPagesRead} pages (60+ sec) / ${book.totalPages} total');
       
         // Count books with more than 1 page read (60+ seconds per page)
         if (progress.totalPagesRead >= 1) {

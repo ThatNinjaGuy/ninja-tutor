@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:json_annotation/json_annotation.dart';
 import 'package:hive/hive.dart';
 
@@ -151,16 +152,19 @@ class BookModel extends Equatable {
   /// Check if book is available offline
   bool get isOfflineAvailable => filePath != null;
   
-  /// Get reading progress percentage (from backend - based on pages with 60+ seconds)
+  /// Get reading progress percentage (based on pages with 60+ seconds reading time)
   double get progressPercentage {
-    // The backend calculates this based on pages with 60+ seconds reading time
-    // This is stored in the progress object from the API
-    // For now, we calculate it client-side from currentPage as fallback
+    // The backend calculates pages_read_count based on pages with 60+ seconds reading time
+    // totalPagesRead is populated from pages_read_count in the API response
     if (progress == null || totalPages == 0) return 0.0;
     
-    // TODO: Backend should send the calculated progress_percentage
-    // For now, use simple calculation
-    return progress!.currentPage / totalPages;
+    // Use totalPagesRead which represents pages with 60+ seconds of reading time
+    final percentage = progress!.totalPagesRead / totalPages;
+    
+    // Debug logging
+    debugPrint('📊 Progress for "$title": ${progress!.totalPagesRead} pages read (60+ sec) / $totalPages total = ${(percentage * 100).toStringAsFixed(1)}%');
+    
+    return percentage;
   }
   
   /// Check if book is completed
