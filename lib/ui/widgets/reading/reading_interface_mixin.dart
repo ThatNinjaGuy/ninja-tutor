@@ -130,12 +130,6 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
           ),
           const SizedBox(height: 16),
           _buildCompactControlButton(
-            icon: Icons.quiz,
-            tooltip: 'Quiz',
-            onPressed: _startQuiz,
-          ),
-          const SizedBox(height: 16),
-          _buildCompactControlButton(
             icon: Icons.bookmark_add,
             tooltip: isInLibrary ? 'Bookmark' : 'Bookmark (Add to library first)',
             isDisabled: !isInLibrary,
@@ -179,11 +173,6 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
             isActive: _showAiPanel,
             isDisabled: !isInLibrary,
             onPressed: isInLibrary ? () => setState(() => _showAiPanel = !_showAiPanel) : null,
-          ),
-          _buildCompactControlButton(
-            icon: Icons.quiz,
-            tooltip: 'Quiz',
-            onPressed: _startQuiz,
           ),
           _buildCompactControlButton(
             icon: Icons.bookmark_add,
@@ -341,11 +330,6 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   void _handleDefinitionRequest(String word) {
     // TODO: Implement AI definition request
     // Placeholder for when AI service is implemented
-  }
-
-  void _startQuiz() {
-    // TODO: Navigate to quiz based on current reading position
-    // Placeholder for when quiz generation is implemented
   }
 
   void _addBookmark() {
