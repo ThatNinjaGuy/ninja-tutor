@@ -7,6 +7,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/unified_library_provider.dart';
+import '../../../models/content/book_model.dart';
 import '../../../models/note/note_model.dart';
 import '../../widgets/notes/note_card.dart';
 import '../../widgets/common/empty_state.dart';
@@ -482,9 +483,44 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
     );
   }
 
-  void _openNote(NoteModel note) {
-    // TODO: Navigate to note detail screen
-    // Placeholder: Will navigate to note detail when implemented
+  void _openNote(NoteModel note) async {
+    // Navigate to reading screen with the book and page
+    final libraryState = ref.read(unifiedLibraryProvider);
+    
+    try {
+      // Find the book in user's library
+      final book = libraryState.myBooks.firstWhere((b) => b.id == note.bookId);
+      
+      // Update the book's current page to match the note/bookmark page
+      final now = DateTime.now();
+      final updatedBook = book.copyWith(
+        progress: book.progress?.copyWith(currentPage: note.pageNumber) ?? 
+                 ReadingProgress(
+                   bookId: note.bookId,
+                   currentPage: note.pageNumber,
+                   lastReadAt: now,
+                   startedAt: now,
+                 ),
+      );
+      
+      // Set the book as current book
+      ref.read(currentBookProvider.notifier).state = updatedBook;
+      
+      // Navigate to reading screen
+      context.go('/reading/book/${note.bookId}');
+      
+      // Switch to reading tab
+      ref.read(navigationProvider.notifier).state = 1;
+    } catch (e) {
+      // Book not found in library
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Book not found in your library'),
+          ),
+        );
+      }
+    }
   }
 
   void _editNote(NoteModel note) {

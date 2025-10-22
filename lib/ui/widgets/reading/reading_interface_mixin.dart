@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'dart:html' as html;
 import 'dart:async';
 
@@ -207,7 +208,11 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
                 icon: Icons.close,
                 tooltip: 'Close',
                 isCloseButton: true,
-                onPressed: () => setState(() => _isReadingMode = false),
+                onPressed: () {
+                  setState(() => _isReadingMode = false);
+                  // Navigate back to base reading route to clear book ID from URL
+                  context.go('/reading');
+                },
               ),
               const SizedBox(height: 16),
               _buildCompactControlButton(
@@ -290,7 +295,11 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
             icon: Icons.close,
             tooltip: 'Close',
             isCloseButton: true,
-            onPressed: () => setState(() => _isReadingMode = false),
+            onPressed: () {
+              setState(() => _isReadingMode = false);
+              // Navigate back to base reading route to clear book ID from URL
+              context.go('/reading');
+            },
           ),
           _buildCompactControlButton(
             icon: Icons.psychology,
