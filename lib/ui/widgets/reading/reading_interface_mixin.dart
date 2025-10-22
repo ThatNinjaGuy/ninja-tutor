@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:html' as html;
+import 'dart:async';
 
 import '../../../models/content/book_model.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/reading_ai_provider.dart';
+import '../../../core/providers/bookmark_provider.dart';
+import '../../../core/providers/notes_provider.dart';
 import '../../../core/constants/app_constants.dart';
 import 'reading_viewer.dart';
 import 'ai_chat_panel.dart';
+import 'bookmark_panel.dart';
+import 'notes_tooltip.dart';
+import 'note_creation_dialog.dart';
 
 /// Mixin providing shared reading interface functionality
 /// Used by both LibraryScreen and ReadingScreen to avoid code duplication
@@ -17,6 +24,12 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   bool _showAiPanel = false;
   String? _selectedText;
   int _currentPage = 1;
+  
+  // Bookmark and notes tooltip state
+  bool _showBookmarkPanel = false;
+  bool _showNotesTooltip = false;
+  String? _currentBookId;
+  Timer? _hideNotesTimer;
   
   // Getters that must be overridden
   bool get isReadingMode => _isReadingMode;
@@ -38,11 +51,30 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   }
   
   void setCurrentPage(int value) {
-    setState(() => _currentPage = value);
+    setState(() {
+      _currentPage = value;
+      // Close panels when page changes
+      if (_showBookmarkPanel || _showNotesTooltip) {
+        _showBookmarkPanel = false;
+        _showNotesTooltip = false;
+      }
+    });
   }
   
   /// Build the complete reading interface
   Widget buildReadingInterface(BookModel book) {
+    // Load bookmarks and notes when book changes (only once)
+    if (_currentBookId != book.id) {
+      _currentBookId = book.id;
+      // Use microtask to ensure it runs only once per build cycle
+      Future.microtask(() {
+        if (mounted && _currentBookId == book.id) {
+          ref.read(bookmarkProvider.notifier).loadBookmarks(book.id);
+          ref.read(notesProvider.notifier).loadNotes(book.id);
+        }
+      });
+    }
+    
     // Show AI dialog when needed
     if (_showAiPanel) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -50,8 +82,42 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       });
     }
     
-    return Scaffold(
-      body: _buildResponsiveLayout(book),
+    // Show bookmark panel as dialog when flag is set
+    if (_showBookmarkPanel) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showBookmarkDialog(book);
+      });
+    }
+    
+    
+    return KeyboardListener(
+      focusNode: FocusNode(),
+      onKeyEvent: (KeyEvent event) {
+        if (event is KeyDownEvent && event.logicalKey.keyLabel == 'Escape') {
+          if (_showBookmarkPanel || _showNotesTooltip) {
+            print('🔴 Escape key pressed - closing panels');
+            setState(() {
+              _showBookmarkPanel = false;
+              _showNotesTooltip = false;
+            });
+          }
+        }
+      },
+      child: GestureDetector(
+        onTap: () {
+        // Close panels when tapping outside
+        if (_showBookmarkPanel || _showNotesTooltip) {
+          print('🔴 Tap outside panels - closing all');
+          setState(() {
+            _showBookmarkPanel = false;
+            _showNotesTooltip = false;
+          });
+        }
+        },
+        child: Scaffold(
+          body: _buildResponsiveLayout(book),
+        ),
+      ),
     );
   }
 
@@ -60,6 +126,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWideScreen = constraints.maxWidth > AppConstants.wideScreenBreakpoint;
+        
         
         if (isWideScreen) {
           // Wide screen: helper panel on the right side
@@ -82,15 +149,15 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
           // Narrow screen: helper panel at the bottom
           return Column(
             children: [
-            // PDF viewer takes most of the space
-            Expanded(
-              child: ReadingViewer(
-                book: book,
-                onTextSelected: _handleTextSelection,
-                onDefinitionRequest: _handleDefinitionRequest,
-                onPageChanged: (page) => setCurrentPage(page),
+              // PDF viewer takes most of the space
+              Expanded(
+                child: ReadingViewer(
+                  book: book,
+                  onTextSelected: _handleTextSelection,
+                  onDefinitionRequest: _handleDefinitionRequest,
+                  onPageChanged: (page) => setCurrentPage(page),
+                ),
               ),
-            ),
               // Horizontal helper panel at the bottom
               _buildHorizontalHelperPanel(book),
             ],
@@ -104,46 +171,85 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   Widget _buildVerticalHelperPanel(BookModel book) {
     final libraryState = ref.watch(unifiedLibraryProvider);
     final isInLibrary = libraryState.isBookInLibrary(book.id);
+    final bookmarkState = ref.watch(bookmarkProvider);
+    final notesState = ref.watch(notesProvider);
     
-    return Container(
-      width: AppConstants.readingPanelWidthVertical,
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        border: Border(left: BorderSide(color: Colors.grey.shade300)),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _buildCompactControlButton(
-            icon: Icons.close,
-            tooltip: 'Close',
-            isCloseButton: true,
-            onPressed: () => setState(() => _isReadingMode = false),
+    final isBookmarked = bookmarkState.isPageBookmarked(_currentPage);
+    final notesCount = notesState.getNotesCountForPage(_currentPage);
+    
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: AppConstants.readingPanelWidthVertical,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            border: Border(left: BorderSide(color: Colors.grey.shade300)),
           ),
-          const SizedBox(height: 16),
-          _buildCompactControlButton(
-            icon: Icons.psychology,
-            tooltip: isInLibrary ? 'AI Tips' : 'AI Tips (Add to library first)',
-            isActive: _showAiPanel,
-            isDisabled: !isInLibrary,
-            onPressed: isInLibrary ? () => setState(() => _showAiPanel = !_showAiPanel) : null,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildCompactControlButton(
+                icon: Icons.close,
+                tooltip: 'Close',
+                isCloseButton: true,
+                onPressed: () => setState(() => _isReadingMode = false),
+              ),
+              const SizedBox(height: 16),
+              _buildCompactControlButton(
+                icon: Icons.psychology,
+                tooltip: isInLibrary ? 'AI Tips' : 'AI Tips (Add to library first)',
+                isActive: _showAiPanel,
+                isDisabled: !isInLibrary,
+                onPressed: isInLibrary ? () => setState(() => _showAiPanel = !_showAiPanel) : null,
+              ),
+              const SizedBox(height: 16),
+              _buildBookmarkButton(book, isInLibrary, isBookmarked),
+              const SizedBox(height: 16),
+              _buildNotesButton(book, isInLibrary, notesCount),
+              const SizedBox(height: 16),
+              _buildCompactControlButton(
+                icon: Icons.highlight,
+                tooltip: isInLibrary ? 'Highlight' : 'Highlight (Add to library first)',
+                isDisabled: !isInLibrary,
+                onPressed: isInLibrary ? _toggleHighlight : null,
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          _buildCompactControlButton(
-            icon: Icons.bookmark_add,
-            tooltip: isInLibrary ? 'Bookmark' : 'Bookmark (Add to library first)',
-            isDisabled: !isInLibrary,
-            onPressed: isInLibrary ? _addBookmark : null,
+        ),
+        if (_showNotesTooltip && isInLibrary)
+          Positioned(
+            right: AppConstants.readingPanelWidthVertical + 10,
+            top: 180,
+            child: MouseRegion(
+              onEnter: (_) {
+                print('🟢 Mouse entered notes tooltip');
+                _hideNotesTimer?.cancel();
+              },
+              onExit: (_) {
+                print('🔴 Mouse left notes tooltip - auto-hiding in 2s');
+                _hideNotesTimer = Timer(const Duration(seconds: 2), () {
+                  if (mounted) {
+                    setState(() => _showNotesTooltip = false);
+                  }
+                });
+              },
+              child: NotesTooltip(
+                currentPageNotes: notesState.getNotesForPage(_currentPage),
+                allBookNotes: notesState.allNotes,
+                currentPage: _currentPage,
+                onNoteDelete: (note) {
+                  print('🗑️ Delete note: ${note.id}');
+                  _deleteNote(book.id, note);
+                },
+                onClose: () {
+                  print('🔴 Close notes tooltip');
+                  setState(() => _showNotesTooltip = false);
+                },
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
-          _buildCompactControlButton(
-            icon: Icons.highlight,
-            tooltip: isInLibrary ? 'Highlight' : 'Highlight (Add to library first)',
-            isDisabled: !isInLibrary,
-            onPressed: isInLibrary ? _toggleHighlight : null,
-          ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -151,6 +257,11 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   Widget _buildHorizontalHelperPanel(BookModel book) {
     final libraryState = ref.watch(unifiedLibraryProvider);
     final isInLibrary = libraryState.isBookInLibrary(book.id);
+    final bookmarkState = ref.watch(bookmarkProvider);
+    final notesState = ref.watch(notesProvider);
+    
+    final isBookmarked = bookmarkState.isPageBookmarked(_currentPage);
+    final notesCount = notesState.getNotesCountForPage(_currentPage);
     
     return Container(
       height: AppConstants.readingPanelHeightHorizontal,
@@ -174,12 +285,8 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
             isDisabled: !isInLibrary,
             onPressed: isInLibrary ? () => setState(() => _showAiPanel = !_showAiPanel) : null,
           ),
-          _buildCompactControlButton(
-            icon: Icons.bookmark_add,
-            tooltip: isInLibrary ? 'Bookmark' : 'Bookmark (Add to library first)',
-            isDisabled: !isInLibrary,
-            onPressed: isInLibrary ? _addBookmark : null,
-          ),
+              _buildBookmarkButton(book, isInLibrary, isBookmarked),
+              _buildNotesButton(book, isInLibrary, notesCount),
           _buildCompactControlButton(
             icon: Icons.highlight,
             tooltip: isInLibrary ? 'Highlight' : 'Highlight (Add to library first)',
@@ -238,13 +345,88 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     );
   }
 
+  /// Build bookmark button with panel
+  Widget _buildBookmarkButton(BookModel book, bool isInLibrary, bool isBookmarked) {
+    return _buildCompactControlButton(
+      icon: isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+      tooltip: isInLibrary 
+          ? 'Bookmarks'
+          : 'Bookmark (Add to library first)',
+      isActive: isBookmarked,
+      isDisabled: !isInLibrary,
+      onPressed: isInLibrary ? () {
+        setState(() {
+          _showBookmarkPanel = !_showBookmarkPanel;
+        });
+      } : null,
+    );
+  }
+  
+  /// Build notes button with count badge and tooltip
+  Widget _buildNotesButton(BookModel book, bool isInLibrary, int notesCount) {
+    final theme = Theme.of(context);
+    
+    return MouseRegion(
+      onEnter: (_) {
+        print('🟢 Mouse entered notes button');
+        if (!_showNotesTooltip && isInLibrary) {
+          print('🟢 Showing notes tooltip');
+          setState(() => _showNotesTooltip = true);
+        }
+      },
+      onExit: (_) {
+        print('🔴 Mouse left notes button');
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          _buildCompactControlButton(
+            icon: Icons.sticky_note_2_outlined,
+            tooltip: isInLibrary ? 'Notes' : 'Notes (Add to library first)',
+            isDisabled: !isInLibrary,
+            onPressed: isInLibrary ? () => _showNoteCreationDialog(book.id) : null,
+          ),
+          if (notesCount > 0)
+            Positioned(
+              right: -4,
+              top: -4,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondary,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white,
+                    width: 2,
+                  ),
+                ),
+                constraints: const BoxConstraints(
+                  minWidth: 20,
+                  minHeight: 20,
+                ),
+                child: Center(
+                  child: Text(
+                    '$notesCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   /// Show AI chat as a proper Dialog
   void _showAiDialog(BookModel book) {
     // Reset flag immediately to prevent repeated calls
     if (!_showAiPanel) return;
     
-    // Disable PDF scrolling when dialog opens
-    _setPdfScrollingEnabled(false);
+    
     
     showDialog(
       context: context,
@@ -275,9 +457,6 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
         );
       },
     ).then((_) {
-      // Re-enable PDF scrolling when dialog closes
-      _setPdfScrollingEnabled(true);
-      
       // Ensure flag is reset when dialog closes
       if (mounted) {
         setState(() {
@@ -293,32 +472,61 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     });
   }
   
-  /// Enable or disable PDF scrolling
-  void _setPdfScrollingEnabled(bool enabled) {
-    try {
-      // Find all iframes (PDF viewers) and control their events
-      final iframes = html.document.querySelectorAll('iframe');
-      for (var iframe in iframes) {
-        if (iframe is html.IFrameElement) {
-          // Send message to PDF.js to enable/disable scrolling
-          final message = {
-            'type': 'setScrollEnabled',
-            'enabled': enabled,
-          };
-          iframe.contentWindow?.postMessage(message, '*');
-          
-          // Also set CSS pointer events as backup
-          iframe.style.pointerEvents = enabled ? 'auto' : 'none';
-          
-          print('${enabled ? "✅ Enabled" : "🚫 Disabled"} PDF scrolling');
-        }
+  /// Show bookmark panel as a proper Dialog
+  void _showBookmarkDialog(BookModel book) {
+    // Reset flag immediately to prevent repeated calls
+    if (!_showBookmarkPanel) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          alignment: Alignment.centerRight,
+          insetPadding: EdgeInsets.zero,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            width: MediaQuery.of(context).size.width * AppConstants.aiPanelWidthPercentage,
+            height: MediaQuery.of(context).size.height,
+            child: BookmarkPanel(
+              bookId: book.id,
+              currentPage: _currentPage,
+              onClose: () {
+                Navigator.of(dialogContext).pop();
+                setState(() {
+                  _showBookmarkPanel = false;
+                });
+              },
+              onPageNavigate: (page) {
+                Navigator.of(dialogContext).pop();
+                setState(() {
+                  _showBookmarkPanel = false;
+                });
+                setCurrentPage(page);
+              },
+            ),
+          ),
+        );
+      },
+    ).then((_) {
+      // Ensure flag is reset when dialog closes
+      if (mounted) {
+        setState(() {
+          _showBookmarkPanel = false;
+        });
       }
-    } catch (e) {
-      // Silently fail if we can't control PDF scrolling
-      print('Could not control PDF scrolling: $e');
-    }
+    });
+    
+    // Reset flag after showing dialog
+    setState(() {
+      _showBookmarkPanel = false;
+    });
   }
-
+  
+  /// Enable or disable PDF scrolling
+  
   // Reading event handlers
   void _handleTextSelection(String text, Offset position) {
     setState(() {
@@ -332,14 +540,86 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     // Placeholder for when AI service is implemented
   }
 
-  void _addBookmark() {
-    // TODO: Add bookmark functionality
-    // Placeholder for when bookmark service is implemented
+  
+  /// Show note creation dialog
+  Future<void> _showNoteCreationDialog(String bookId) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => NoteCreationDialog(
+        pageNumber: _currentPage,
+        onSave: (content, title) async {
+          final note = await ref.read(notesProvider.notifier).createNote(
+            bookId: bookId,
+            pageNumber: _currentPage,
+            content: content,
+            title: title,
+          );
+          
+          if (note != null && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Note added to page $_currentPage'),
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
+      ),
+    );
   }
+  
+  /// Delete a note
+  Future<void> _deleteNote(String bookId, dynamic note) async {
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Note'),
+        content: const Text('Are you sure you want to delete this note?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirm == true) {
+      final success = await ref.read(notesProvider.notifier).deleteNote(
+        bookId: bookId,
+        noteId: note.id,
+        pageNumber: note.pageNumber,
+      );
+      
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Note deleted'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+  
 
   void _toggleHighlight() {
     // TODO: Toggle highlight mode
     // Placeholder for when highlight service is implemented
+  }
+  
+  @override
+  void dispose() {
+    _hideNotesTimer?.cancel();
+    super.dispose();
   }
 }
 

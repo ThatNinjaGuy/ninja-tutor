@@ -779,6 +779,133 @@ class ApiService {
       throw ApiException.fromDioError(e);
     }
   }
+
+  // Bookmark-specific endpoints
+
+  /// Get all bookmarks for a book
+  Future<List<Map<String, dynamic>>> getBookmarksForBook(String bookId) async {
+    try {
+      final response = await _dio.get('/bookmarks/book/$bookId');
+      return List<Map<String, dynamic>>.from(response.data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Create a bookmark for a specific page
+  Future<Map<String, dynamic>> createBookmark({
+    required String bookId,
+    required int pageNumber,
+    String? note,
+  }) async {
+    try {
+      final response = await _dio.post('/bookmarks', data: {
+        'book_id': bookId,
+        'page_number': pageNumber,
+        if (note != null) 'note': note,
+      });
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Delete a bookmark by ID
+  Future<void> deleteBookmark(String bookmarkId) async {
+    try {
+      await _dio.delete('/bookmarks/$bookmarkId');
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Delete a bookmark by page number
+  Future<void> deleteBookmarkByPage(String bookId, int pageNumber) async {
+    try {
+      await _dio.delete('/bookmarks/book/$bookId/page/$pageNumber');
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get bookmark for a specific page
+  Future<Map<String, dynamic>?> getBookmarkForPage(String bookId, int pageNumber) async {
+    try {
+      final response = await _dio.get('/bookmarks/book/$bookId/page/$pageNumber');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return null; // No bookmark found
+      }
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  // Note-specific endpoints
+
+  /// Get notes for a specific page
+  Future<List<NoteModel>> getNotesForPage(String bookId, int pageNumber) async {
+    try {
+      final response = await _dio.get('/notes/book/$bookId/page/$pageNumber/notes');
+      
+      final notes = <NoteModel>[];
+      for (final noteJson in response.data) {
+        notes.add(NoteModel.fromJson(noteJson));
+      }
+      return notes;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Create a note on a specific page
+  Future<NoteModel> createNote({
+    required String bookId,
+    required int pageNumber,
+    required String content,
+    String? title,
+  }) async {
+    try {
+      final response = await _dio.post('/notes', data: {
+        'book_id': bookId,
+        'type': 'text',
+        'content': content,
+        'title': title,
+        'position': {
+          'page': pageNumber,
+          'x': 0.0,
+          'y': 0.0,
+        },
+      });
+      return NoteModel.fromJson(response.data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get all notes for a book
+  Future<List<NoteModel>> getNotesForBook(String bookId) async {
+    try {
+      final response = await _dio.get('/notes/book/$bookId');
+      
+      final notes = <NoteModel>[];
+      for (final noteJson in response.data) {
+        notes.add(NoteModel.fromJson(noteJson));
+      }
+      return notes;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Delete a note
+  Future<void> deleteNote(String noteId) async {
+    try {
+      await _dio.delete('/notes/$noteId');
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
 }
 
 /// Authentication interceptor
