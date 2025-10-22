@@ -82,54 +82,83 @@ class BookmarkNotifier extends StateNotifier<BookmarkState> {
   
   /// Toggle bookmark for a page
   Future<bool> toggleBookmark(String bookId, int pageNumber) async {
-    final isBookmarked = state.isPageBookmarked(pageNumber);
-    
-    if (isBookmarked) {
-      // Remove bookmark by page number
-      final success = await _bookmarkService.removeBookmarkByPage(
-        bookId: bookId,
-        pageNumber: pageNumber,
-      );
-      
-      if (success) {
-        // Update state
-        final updatedBookmarks = List<BookmarkModel>.from(state.bookmarks)
-          ..removeWhere((b) => b.pageNumber == pageNumber);
-        state = state.copyWith(bookmarks: updatedBookmarks);
-        return true;
-      }
+    // Prevent double-clicks by checking loading state
+    if (state.isLoading) {
+      print('⏳ Bookmark operation already in progress');
       return false;
-    } else {
-      // Check if bookmark already exists (frontend validation)
-      if (state.bookmarks.any((b) => b.pageNumber == pageNumber)) {
-        print('Bookmark already exists for page $pageNumber');
+    }
+    
+    final isBookmarked = state.isPageBookmarked(pageNumber);
+    print('🔄 toggleBookmark: page=$pageNumber, isBookmarked=$isBookmarked');
+    
+    // Set loading state
+    state = state.copyWith(isLoading: true);
+    
+    try {
+      if (isBookmarked) {
+        print('🗑️ Removing bookmark for page $pageNumber');
+        // Remove bookmark by page number
+        final success = await _bookmarkService.removeBookmarkByPage(
+          bookId: bookId,
+          pageNumber: pageNumber,
+        );
+        
+        if (success) {
+          print('✅ Bookmark removed, updating state');
+          // Update state
+          final updatedBookmarks = List<BookmarkModel>.from(state.bookmarks)
+            ..removeWhere((b) => b.pageNumber == pageNumber);
+          state = state.copyWith(bookmarks: updatedBookmarks, isLoading: false);
+          return true;
+        }
+        print('❌ Failed to remove bookmark');
+        state = state.copyWith(isLoading: false);
         return false;
-      }
-      
-      // Add bookmark
-      try {
+      } else {
+        // Check if bookmark already exists (frontend validation)
+        if (state.bookmarks.any((b) => b.pageNumber == pageNumber)) {
+          print('⚠️ Bookmark already exists for page $pageNumber in state');
+          state = state.copyWith(isLoading: false);
+          return false;
+        }
+        
+        print('➕ Adding bookmark for page $pageNumber');
+        // Add bookmark
         final bookmark = await _bookmarkService.addBookmark(
           bookId: bookId,
           pageNumber: pageNumber,
         );
         
         if (bookmark != null) {
+          print('✅ Bookmark created, updating state');
+          // Check again before adding to prevent race condition
+          if (state.bookmarks.any((b) => b.pageNumber == pageNumber)) {
+            print('⚠️ Bookmark already in state, skipping add');
+            state = state.copyWith(isLoading: false);
+            return true; // Return true because bookmark exists
+          }
+          
           // Update state
           final updatedBookmarks = List<BookmarkModel>.from(state.bookmarks)..add(bookmark);
           // Sort by page number
           updatedBookmarks.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-          state = state.copyWith(bookmarks: updatedBookmarks);
+          state = state.copyWith(bookmarks: updatedBookmarks, isLoading: false);
+          print('✅ State updated, now ${updatedBookmarks.length} bookmarks');
           return true;
         }
-        return false;
-      } catch (e) {
-        print('Error creating bookmark: $e');
-        // If backend returns error about duplicate, reload bookmarks to sync state
-        if (e.toString().contains('already exists')) {
-          await loadBookmarks(bookId, forceRefresh: true);
-        }
+        print('❌ Failed to create bookmark');
+        state = state.copyWith(isLoading: false);
         return false;
       }
+    } catch (e) {
+      print('❌ Error in toggleBookmark: $e');
+      // If backend returns error about duplicate, reload bookmarks to sync state
+      if (e.toString().contains('already exists')) {
+        print('🔄 Reloading bookmarks due to duplicate error');
+        await loadBookmarks(bookId, forceRefresh: true);
+      }
+      state = state.copyWith(isLoading: false);
+      return false;
     }
   }
   

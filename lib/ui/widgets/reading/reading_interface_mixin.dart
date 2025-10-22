@@ -426,7 +426,8 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     // Reset flag immediately to prevent repeated calls
     if (!_showAiPanel) return;
     
-    
+    // Disable PDF pointer events when dialog opens
+    _disablePdfPointerEvents();
     
     showDialog(
       context: context,
@@ -457,6 +458,9 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
         );
       },
     ).then((_) {
+      // Re-enable PDF pointer events when dialog closes
+      _enablePdfPointerEvents();
+      
       // Ensure flag is reset when dialog closes
       if (mounted) {
         setState(() {
@@ -477,6 +481,9 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     // Reset flag immediately to prevent repeated calls
     if (!_showBookmarkPanel) return;
     
+    // Disable PDF pointer events when dialog opens
+    _disablePdfPointerEvents();
+    
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -491,6 +498,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
             width: MediaQuery.of(context).size.width * AppConstants.aiPanelWidthPercentage,
             height: MediaQuery.of(context).size.height,
             child: BookmarkPanel(
+              key: ValueKey('bookmark_${book.id}'),
               bookId: book.id,
               currentPage: _currentPage,
               onClose: () {
@@ -511,6 +519,9 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
         );
       },
     ).then((_) {
+      // Re-enable PDF pointer events when dialog closes
+      _enablePdfPointerEvents();
+      
       // Ensure flag is reset when dialog closes
       if (mounted) {
         setState(() {
@@ -523,6 +534,36 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     setState(() {
       _showBookmarkPanel = false;
     });
+  }
+  
+  /// Disable PDF iframe pointer events
+  void _disablePdfPointerEvents() {
+    try {
+      final iframes = html.document.querySelectorAll('iframe');
+      for (var iframe in iframes) {
+        if (iframe is html.IFrameElement) {
+          iframe.style.pointerEvents = 'none';
+          print('🚫 Disabled PDF pointer events');
+        }
+      }
+    } catch (e) {
+      print('Could not disable PDF pointer events: $e');
+    }
+  }
+  
+  /// Enable PDF iframe pointer events
+  void _enablePdfPointerEvents() {
+    try {
+      final iframes = html.document.querySelectorAll('iframe');
+      for (var iframe in iframes) {
+        if (iframe is html.IFrameElement) {
+          iframe.style.pointerEvents = 'auto';
+          print('✅ Enabled PDF pointer events');
+        }
+      }
+    } catch (e) {
+      print('Could not enable PDF pointer events: $e');
+    }
   }
   
   /// Enable or disable PDF scrolling

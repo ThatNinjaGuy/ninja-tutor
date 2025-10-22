@@ -28,6 +28,31 @@ class BookmarkPanel extends ConsumerStatefulWidget {
 
 class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
   final ScrollController _scrollController = ScrollController();
+  bool _isProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Load bookmarks when panel first opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print('🔷 BookmarkPanel initState: loading bookmarks for ${widget.bookId}');
+      ref.read(bookmarkProvider.notifier).loadBookmarks(widget.bookId);
+    });
+  }
+
+  @override
+  void didUpdateWidget(BookmarkPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reload bookmarks if book changes
+    if (oldWidget.bookId != widget.bookId) {
+      print('🔷 BookmarkPanel: Book changed from ${oldWidget.bookId} to ${widget.bookId}');
+      ref.read(bookmarkProvider.notifier).loadBookmarks(widget.bookId, forceRefresh: true);
+    }
+    // Log page change for debugging
+    if (oldWidget.currentPage != widget.currentPage) {
+      print('🔷 BookmarkPanel: Page changed from ${oldWidget.currentPage} to ${widget.currentPage}');
+    }
+  }
 
   @override
   void dispose() {
@@ -40,36 +65,43 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
     final theme = Theme.of(context);
     final bookmarkState = ref.watch(bookmarkProvider);
 
-    return Material(
-      elevation: 8,
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(16),
-        bottomLeft: Radius.circular(16),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            bottomLeft: Radius.circular(16),
-          ),
+    return Listener(
+      onPointerDown: (_) {},
+      onPointerMove: (_) {},
+      onPointerUp: (_) {},
+      onPointerSignal: (_) {},
+      behavior: HitTestBehavior.opaque,
+      child: Material(
+        elevation: 8,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(16),
+          bottomLeft: Radius.circular(16),
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Header
-              _buildHeader(theme),
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              bottomLeft: Radius.circular(16),
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              children: [
+                // Header
+                _buildHeader(theme),
 
-              // Current page bookmark section
-              _buildCurrentPageSection(theme, bookmarkState),
+                // Bookmarks list - now in the middle and scrollable
+                Expanded(
+                  child: bookmarkState.bookmarks.isEmpty
+                      ? _buildEmptyState(theme)
+                      : _buildBookmarksList(theme, bookmarkState),
+                ),
 
-              // Bookmarks list
-              Expanded(
-                child: bookmarkState.bookmarks.isEmpty
-                    ? _buildEmptyState(theme)
-                    : _buildBookmarksList(theme, bookmarkState),
-              ),
-            ],
+                // Current page bookmark section - moved to bottom
+                _buildCurrentPageSection(theme, bookmarkState),
+              ],
+            ),
           ),
         ),
       ),
@@ -130,6 +162,8 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
   Widget _buildCurrentPageSection(ThemeData theme, BookmarkState bookmarkState) {
     final isCurrentPageBookmarked = bookmarkState.isPageBookmarked(widget.currentPage);
     
+    print('🔷 Building current page section: page=${widget.currentPage}, isBookmarked=$isCurrentPageBookmarked, isLoading=${bookmarkState.isLoading}');
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -137,7 +171,7 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
             ? theme.colorScheme.primaryContainer.withOpacity(0.3)
             : theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
         border: Border(
-          bottom: BorderSide(
+          top: BorderSide(
             color: theme.colorScheme.outline.withOpacity(0.2),
           ),
         ),
@@ -174,15 +208,81 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
             ),
           ),
           ElevatedButton.icon(
-            onPressed: () {
-              ref.read(bookmarkProvider.notifier).toggleBookmark(widget.bookId, widget.currentPage);
+            onPressed: (_isProcessing || bookmarkState.isLoading) ? null : () async {
+              // Prevent double-clicks with local state
+              if (_isProcessing) {
+                print('⏳ Already processing bookmark operation');
+                return;
+              }
+              
+              setState(() => _isProcessing = true);
+              
+              // Capture the CURRENT state BEFORE the async operation
+              final wasBookmarked = isCurrentPageBookmarked;
+              
+              print('🔵 Add/Remove button pressed for page ${widget.currentPage}');
+              print('🔵 Was bookmarked: $wasBookmarked');
+              
+              try {
+                final success = await ref.read(bookmarkProvider.notifier).toggleBookmark(
+                  widget.bookId, 
+                  widget.currentPage,
+                );
+                
+                print('🔵 Toggle result: $success');
+                
+                if (mounted) {
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          wasBookmarked
+                              ? 'Bookmark removed from page ${widget.currentPage}'
+                              : 'Bookmark added to page ${widget.currentPage}',
+                        ),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  } else {
+                    print('⚠️ Toggle bookmark failed');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to ${wasBookmarked ? 'remove' : 'add'} bookmark'),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: theme.colorScheme.error,
+                      ),
+                    );
+                  }
+                }
+              } finally {
+                if (mounted) {
+                  setState(() => _isProcessing = false);
+                }
+              }
             },
-            icon: Icon(
-              isCurrentPageBookmarked ? Icons.remove : Icons.add,
-              size: 16,
-            ),
+            icon: _isProcessing 
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isCurrentPageBookmarked 
+                            ? theme.colorScheme.onErrorContainer
+                            : theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  )
+                : Icon(
+                    isCurrentPageBookmarked ? Icons.remove : Icons.add,
+                    size: 16,
+                  ),
             label: Text(
-              isCurrentPageBookmarked ? 'Remove' : 'Add',
+              _isProcessing 
+                  ? 'Processing...'
+                  : (isCurrentPageBookmarked ? 'Remove' : 'Add'),
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: isCurrentPageBookmarked 
@@ -235,14 +335,15 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
     final sortedBookmarks = List<BookmarkModel>.from(bookmarkState.bookmarks)
       ..sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
 
-    return ListView.builder(
+    return SingleChildScrollView(
       controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
-      itemCount: sortedBookmarks.length,
-      itemBuilder: (context, index) {
-        final bookmark = sortedBookmarks[index];
-        return _buildBookmarkItem(theme, bookmark);
-      },
+      child: Column(
+        children: sortedBookmarks.map((bookmark) {
+          return _buildBookmarkItem(theme, bookmark);
+        }).toList(),
+      ),
     );
   }
 

@@ -60,11 +60,13 @@ class BookmarkService {
     String? note,
   }) async {
     try {
+      print('📍 BookmarkService: Creating bookmark for page $pageNumber');
       final bookmarkJson = await _apiService.createBookmark(
         bookId: bookId,
         pageNumber: pageNumber,
         note: note,
       );
+      print('✅ BookmarkService: API returned bookmark data');
       final bookmark = BookmarkModel.fromJson(bookmarkJson);
       
       // Update cache
@@ -72,12 +74,15 @@ class BookmarkService {
         _bookmarksCache[bookId]!.add(bookmark);
         // Re-sort by page number
         _bookmarksCache[bookId]!.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+        print('✅ BookmarkService: Cache updated, now ${_bookmarksCache[bookId]!.length} bookmarks');
+      } else {
+        print('⚠️ BookmarkService: Cache not initialized for bookId $bookId');
       }
       
       return bookmark;
     } catch (e) {
-      print('Error adding bookmark: $e');
-      return null;
+      print('❌ BookmarkService: Error adding bookmark: $e');
+      rethrow; // Rethrow to let provider handle the error
     }
   }
   
