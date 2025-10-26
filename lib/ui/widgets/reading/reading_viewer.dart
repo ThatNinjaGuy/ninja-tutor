@@ -39,6 +39,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   html.IFrameElement? _iframeElement;
   String? _pdfBlobUrl;
   bool _pdfSent = false; // Track if PDF has been sent to viewer to prevent duplicate loads
+  String? _currentViewType; // Track current view type to avoid re-registration
   
   // Text selection overlay
   String _selectedText = '';
@@ -64,9 +65,31 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   @override
   void initState() {
     super.initState();
+    print('🔄 ReadingViewer initState - Resetting state for new book load');
     _pdfSent = false; // Reset flag on each load
+    _pdfBlobUrl = null; // Clear previous blob URL
+    _iframeElement = null; // Reset iframe element to force re-creation
+    _isLoading = true; // Reset loading state
+    _error = null; // Clear any previous errors
+    _currentViewType = null; // Reset view type for fresh iframe
     _loadPdfData();
     _startPeriodicProgressSave();
+  }
+
+  @override
+  void didUpdateWidget(ReadingViewer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If the book changed, reset everything and reload
+    if (oldWidget.book.id != widget.book.id) {
+      print('🔄 Book changed, resetting state for: ${widget.book.title}');
+      _pdfSent = false;
+      _pdfBlobUrl = null;
+      _iframeElement = null;
+      _isLoading = true;
+      _error = null;
+      _currentViewType = null; // Force new view type for new book
+      _loadPdfData();
+    }
   }
 
   @override
@@ -245,15 +268,59 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     );
   }
 
+  Widget _buildLoadingScreen() {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: theme.colorScheme.surface,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Loading ${widget.book.title}...',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Fetching from Firebase',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPdfViewer(ThemeData theme) {
     final fullUrl = _getFullPdfUrl();
     
-    if (fullUrl == null) {
+    // Show loading screen while blob URL is being created
+    if (fullUrl == null && _isLoading) {
+      return _buildLoadingScreen();
+    }
+    
+    // Show error screen if loading failed
+    if (fullUrl == null && _error == null && !_isLoading) {
       return _buildFallbackContent();
     }
 
     // Log the final PDF URL that will be requested
     print('🎯 FINAL PDF URL THAT WILL BE LOADED: $fullUrl');
+
+    // Return loading screen if URL is still null at this point
+    if (fullUrl == null) {
+      return _buildLoadingScreen();
+    }
 
     return Stack(
       children: [
@@ -286,7 +353,12 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
 
   Widget _buildWebPdfViewer(String pdfUrl) {
     // Use Mozilla PDF.js for better web PDF viewing
-    final viewType = 'pdf-viewer-${widget.book.id}';
+    // Only create a new view type if book changes
+    if (_currentViewType == null || !_currentViewType!.contains(widget.book.id)) {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      _currentViewType = 'pdf-viewer-${widget.book.id}-$timestamp';
+    }
+    final viewType = _currentViewType!;
     
     // Use PDF.js viewer from Flutter app (same origin - avoids X-Frame-Options issues)
     // Build iframe without file parameter - will send via postMessage when ready
@@ -332,6 +404,11 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
                 // CRITICAL: Send PDF URL via postMessage when iframe is ready
                 // Wait a bit for viewer to initialize, then send the PDF URL
                 Future.delayed(const Duration(milliseconds: 500), () {
+                  _sendPdfUrlToIframe();
+                });
+                
+                // Also try to send if blob URL becomes available
+                Future.delayed(const Duration(milliseconds: 1000), () {
                   _sendPdfUrlToIframe();
                 });
               }
