@@ -111,6 +111,9 @@ class UserPreferences extends Equatable {
   @HiveField(6)
   final ReadingPreferences readingPreferences;
   
+  @HiveField(7)
+  final String? classGrade;
+  
   const UserPreferences({
     this.language = 'en',
     this.isDarkMode = false,
@@ -118,11 +121,17 @@ class UserPreferences extends Equatable {
     this.aiTipsEnabled = true,
     this.notificationsEnabled = true,
     this.soundEnabled = true,
+    this.classGrade,
     required this.readingPreferences,
   });
   
-  factory UserPreferences.fromJson(Map<String, dynamic> json) => 
-      _$UserPreferencesFromJson(json);
+  factory UserPreferences.fromJson(Map<String, dynamic> json) {
+    // Handle snake_case to camelCase conversion for classGrade
+    if (json.containsKey('class_grade') && !json.containsKey('classGrade')) {
+      json['classGrade'] = json['class_grade'];
+    }
+    return _$UserPreferencesFromJson(json);
+  }
   
   Map<String, dynamic> toJson() => _$UserPreferencesToJson(this);
   
@@ -134,6 +143,7 @@ class UserPreferences extends Equatable {
     bool? notificationsEnabled,
     bool? soundEnabled,
     ReadingPreferences? readingPreferences,
+    String? classGrade,
   }) {
     return UserPreferences(
       language: language ?? this.language,
@@ -143,6 +153,7 @@ class UserPreferences extends Equatable {
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       soundEnabled: soundEnabled ?? this.soundEnabled,
       readingPreferences: readingPreferences ?? this.readingPreferences,
+      classGrade: classGrade ?? this.classGrade,
     );
   }
   
@@ -155,6 +166,7 @@ class UserPreferences extends Equatable {
         notificationsEnabled,
         soundEnabled,
         readingPreferences,
+        classGrade,
       ];
 }
 
@@ -262,8 +274,15 @@ class UserProgress extends Equatable {
     this.subjectProgress = const {},
   });
   
-  factory UserProgress.fromJson(Map<String, dynamic> json) => 
-      _$UserProgressFromJson(json);
+  factory UserProgress.fromJson(Map<String, dynamic> json) {
+    // Ensure empty subjectProgress if not present
+    if (!json.containsKey('subjectProgress') && !json.containsKey('subjects_progress')) {
+      json['subjectProgress'] = {};
+    } else if (json.containsKey('subjects_progress')) {
+      json['subjectProgress'] = json['subjects_progress'];
+    }
+    return _$UserProgressFromJson(json);
+  }
   
   Map<String, dynamic> toJson() => _$UserProgressToJson(this);
   

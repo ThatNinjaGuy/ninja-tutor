@@ -49,9 +49,8 @@ class SearchFilterBar extends StatelessWidget {
   Widget _buildSingleLineLayout() {
     return Row(
       children: [
-        // Search bar (flexible, takes remaining space)
+        // Search bar - takes 50% width
         Expanded(
-          flex: 2,
           child: TextField(
             decoration: InputDecoration(
               hintText: searchHint,
@@ -72,10 +71,8 @@ class SearchFilterBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 16),
-        // Filters (flexible, shared space)
-        // Simply render filterWidgets directly - they should handle their own layout
+        // Filters - takes 50% width
         Expanded(
-          flex: 3,
           child: filterWidgets.length == 1 
               ? filterWidgets[0]
               : Row(

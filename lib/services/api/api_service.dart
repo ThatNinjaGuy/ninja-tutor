@@ -105,9 +105,11 @@ class ApiService {
   // User endpoints
 
   /// Sync Firebase user with backend
-  Future<Map<String, dynamic>> syncUser() async {
+  Future<Map<String, dynamic>> syncUser({String? classGrade}) async {
     try {
-      final response = await _dio.post('/auth/sync-user');
+      final response = await _dio.post('/auth/sync-user', data: {
+        if (classGrade != null) 'class_grade': classGrade,
+      });
       return response.data;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);

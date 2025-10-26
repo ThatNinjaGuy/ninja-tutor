@@ -449,7 +449,25 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     }
 
     if (grade != null && grade != 'All') {
-      filtered = filtered.where((book) => book.grade == grade).toList();
+      // Normalize grade for comparison: "10" should match "Grade 10" or "10" or just "10"
+      filtered = filtered.where((book) {
+        // Match exact strings
+        if (book.grade == grade) return true;
+        
+        // Match if book.grade contains the grade value (e.g., "Grade 10" contains "10")
+        if (book.grade.toLowerCase().contains(grade.toLowerCase())) return true;
+        
+        // Match if grade value is in the book's grade (e.g., "10" in "Grade 10")
+        if (grade.toLowerCase() == 'college') {
+          return book.grade.toLowerCase().contains('college');
+        }
+        
+        // Extract numeric part for comparison
+        final bookGradeNum = book.grade.replaceAll(RegExp(r'[^0-9]'), '');
+        final filterGradeNum = grade.replaceAll(RegExp(r'[^0-9]'), '');
+        
+        return bookGradeNum == filterGradeNum && bookGradeNum.isNotEmpty;
+      }).toList();
     }
 
     return filtered;

@@ -167,25 +167,48 @@ class UserNotifier extends StateNotifier<AsyncValue<UserModel?>> {
   }
 
   Future<void> _fetchAndSyncUser(SimpleUser authUser, {bool updateStateOnSuccess = true}) async {
-    // Create minimal user from Firebase auth data
-    // The backend sync already happened in auth_provider, no need for another API call
-    final minimalUser = UserModel(
-      id: authUser.id,
-      name: authUser.name,
-      email: authUser.email,
-      createdAt: DateTime.now(),
-      lastActiveAt: DateTime.now(),
-      preferences: const UserPreferences(
-        readingPreferences: ReadingPreferences(),
-      ),
-      progress: const UserProgress(),
-    );
-    
-    // Save to Hive for offline access
-    await _hiveService.saveUser(minimalUser);
-    
-    if (updateStateOnSuccess) {
-      state = AsyncValue.data(minimalUser);
+    try {
+      // Fetch full user profile from backend
+      final apiService = ApiService();
+      final userProfile = await apiService.getUserProfile();
+      
+      // Parse full user data from backend response
+      final fullUser = UserModel(
+        id: userProfile['id'] as String,
+        name: userProfile['name'] as String,
+        email: userProfile['email'] as String,
+        createdAt: DateTime.parse(userProfile['created_at'] as String),
+        lastActiveAt: DateTime.now(),
+        preferences: UserPreferences.fromJson(userProfile['preferences'] as Map<String, dynamic>),
+        progress: UserProgress.fromJson(userProfile['progress'] as Map<String, dynamic>),
+      );
+      
+      // Save to Hive for offline access
+      await _hiveService.saveUser(fullUser);
+      
+      if (updateStateOnSuccess) {
+        state = AsyncValue.data(fullUser);
+      }
+    } catch (e) {
+      debugPrint('Error fetching user profile from backend: $e');
+      // Fall back to minimal user if API call fails
+      final minimalUser = UserModel(
+        id: authUser.id,
+        name: authUser.name,
+        email: authUser.email,
+        createdAt: DateTime.now(),
+        lastActiveAt: DateTime.now(),
+        preferences: const UserPreferences(
+          readingPreferences: ReadingPreferences(),
+        ),
+        progress: const UserProgress(),
+      );
+      
+      await _hiveService.saveUser(minimalUser);
+      
+      if (updateStateOnSuccess) {
+        state = AsyncValue.data(minimalUser);
+      }
     }
   }
 

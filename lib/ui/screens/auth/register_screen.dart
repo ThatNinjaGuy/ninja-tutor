@@ -21,9 +21,26 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  String? _selectedClass;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  
+  static const List<Map<String, String>> _grades = [
+    {'value': '1', 'display': 'Grade 1'},
+    {'value': '2', 'display': 'Grade 2'},
+    {'value': '3', 'display': 'Grade 3'},
+    {'value': '4', 'display': 'Grade 4'},
+    {'value': '5', 'display': 'Grade 5'},
+    {'value': '6', 'display': 'Grade 6'},
+    {'value': '7', 'display': 'Grade 7'},
+    {'value': '8', 'display': 'Grade 8'},
+    {'value': '9', 'display': 'Grade 9'},
+    {'value': '10', 'display': 'Grade 10'},
+    {'value': '11', 'display': 'Grade 11'},
+    {'value': '12', 'display': 'Grade 12'},
+    {'value': 'College', 'display': 'College'},
+  ];
 
   @override
   void dispose() {
@@ -44,6 +61,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         _nameController.text.trim(),
         _emailController.text.trim(),
         _passwordController.text,
+        classGrade: _selectedClass,
       );
       
       if (mounted) {
@@ -55,8 +73,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
         );
         
-        // Navigate to login screen
-        context.go('/login');
+        // Wait for auth state to update (user will be logged in automatically)
+        await Future.delayed(const Duration(milliseconds: 1500));
+        
+        // Navigate to library screen so user can explore books for their grade
+        if (mounted) {
+          context.go(AppRoutes.library);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -160,6 +183,27 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             return AppStrings.pleaseEnterValidEmail;
                           }
                           return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Class/Grade field
+                      DropdownButtonFormField<String>(
+                        value: _selectedClass,
+                        decoration: const InputDecoration(
+                          labelText: 'Class',
+                          prefixIcon: Icon(Icons.school),
+                        ),
+                        items: _grades.map((gradeEntry) {
+                          return DropdownMenuItem(
+                            value: gradeEntry['value'],
+                            child: Text(gradeEntry['display']!),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedClass = value;
+                          });
                         },
                       ),
                       const SizedBox(height: 16),

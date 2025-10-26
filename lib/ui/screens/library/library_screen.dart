@@ -34,36 +34,43 @@ enum ViewMode { grid, list, compact }
 class _LibraryScreenState extends ConsumerState<LibraryScreen> 
     with TickerProviderStateMixin, ReadingInterfaceMixin {
   late TabController _tabController;
-  String? _selectedSubject = 'All';
-  String? _selectedGrade = 'All';
+  String? _selectedCategory = 'All';
   String _searchQuery = '';
   late Debouncer _searchDebouncer;
   ViewMode _viewMode = ViewMode.grid;
   
   // Current book being read
   BookModel? _currentReadingBook;
+  bool _exploreBooksLoaded = false;
+  bool _myBooksLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    // Start with Explore Books tab (index 1) instead of My Books tab (index 0)
+    _tabController = TabController(length: 2, vsync: this, initialIndex: 1);
     _searchDebouncer = Debouncer(duration: const Duration(milliseconds: 300));
     
     // Listen to tab changes to lazy load data
     _tabController.addListener(_handleTabChange);
-    
-    // Load My Books by default (first tab)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
-    });
   }
-
+  
   void _handleTabChange() {
-    // Only load when tab change is complete (not during animation)
+    // Load books only when switching to a tab that hasn't been loaded yet
+    // The provider's ensure* methods have cache checks, so safe to call multiple times
     if (!_tabController.indexIsChanging) {
-      if (_tabController.index == 1) {
-        // Explore Books tab - load all books only when this tab is opened
+      if (_tabController.index == 1 && !_exploreBooksLoaded) {
+        // Explore Books tab - load all books only when this tab is opened for the first time
+        debugPrint('📚 Switching to Explore Books tab - loading all books');
+        _exploreBooksLoaded = true;
         ref.read(unifiedLibraryProvider.notifier).ensureAllBooksLoaded();
+      } else if (_tabController.index == 0 && !_myBooksLoaded) {
+        // My Books tab - load user library only when this tab is opened for the first time
+        debugPrint('📚 Switching to My Books tab - loading user library');
+        _myBooksLoaded = true;
+        ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
+      } else {
+        debugPrint('📚 Tab switched to: ${_tabController.index == 1 ? "Explore Books" : "My Books"} (already loaded)');
       }
     }
   }
@@ -82,6 +89,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
     // Show login prompt if not authenticated
     if (user == null) return _buildLoginPrompt();
+
+    // Load books for the active tab on initial load (only once per tab)
+    final currentTabIndex = _tabController.index;
+    if ((currentTabIndex == 1 && !_exploreBooksLoaded) || (currentTabIndex == 0 && !_myBooksLoaded)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Load Explore Books data if it's the active tab and hasn't been loaded yet
+        if (_tabController.index == 1 && !_exploreBooksLoaded) {
+          debugPrint('🚀 Initial load from build - Explore Books tab');
+          _exploreBooksLoaded = true;
+          ref.read(unifiedLibraryProvider.notifier).ensureAllBooksLoaded();
+        }
+        // Load My Books data if it's the active tab and hasn't been loaded yet
+        if (_tabController.index == 0 && !_myBooksLoaded) {
+          debugPrint('🚀 Initial load from build - My Books tab');
+          _myBooksLoaded = true;
+          ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
+        }
+      });
+    }
 
     // If in reading mode, show the reading interface from mixin
     if (isReadingMode && _currentReadingBook != null) {
@@ -189,39 +215,23 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             ResponsiveFilterRow(
               children: [
                 DropdownButtonFormField<String>(
-                  value: _selectedSubject,
+                  value: _selectedCategory,
                   decoration: const InputDecoration(
-                    labelText: 'Subject',
-                    prefixIcon: Icon(Icons.subject),
+                    labelText: 'Category',
+                    prefixIcon: Icon(Icons.category),
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     isDense: true,
                   ),
-                  items: _getSubjects().map((subject) {
+                  items: _getCategories().map((category) {
                     return DropdownMenuItem(
-                      value: subject,
-                      child: Text(subject, style: const TextStyle(fontSize: 14)),
+                      value: category,
+                      child: Text(category, style: const TextStyle(fontSize: 14)),
                     );
                   }).toList(),
-                  onChanged: _handleSubjectChanged,
+                  onChanged: _handleCategoryChanged,
                 ),
-                DropdownButtonFormField<String>(
-                  value: _selectedGrade,
-                  decoration: const InputDecoration(
-                    labelText: 'Grade',
-                    prefixIcon: Icon(Icons.school),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    isDense: true,
-                  ),
-                  items: _getGrades().map((gradeEntry) {
-                    return DropdownMenuItem(
-                      value: gradeEntry['value'],
-                      child: Text(gradeEntry['display']!, style: const TextStyle(fontSize: 14)),
-                    );
-                  }).toList(),
-                  onChanged: _handleGradeChanged,
-              ),
-            ],
-          ),
+              ],
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -304,8 +314,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     final filteredBooks = ref.read(unifiedLibraryProvider.notifier).filterBooks(
       books: libraryState.myBooks,
       searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
-      subject: _selectedSubject,
-      grade: _selectedGrade,
+      subject: _selectedCategory,
+      grade: null, // No grade filtering
     );
 
     if (filteredBooks.isEmpty) {
@@ -355,7 +365,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
     final booksToShow = libraryState.exploreBooks;
 
-    if (booksToShow.isEmpty) {
+    // Apply client-side filters for category
+    final filteredBooks = ref.read(unifiedLibraryProvider.notifier).filterBooks(
+      books: booksToShow,
+      subject: _selectedCategory == 'All' ? null : _selectedCategory,
+      grade: null, // No grade filtering
+    );
+
+    if (filteredBooks.isEmpty) {
       return EmptyStateWidget(
         icon: Icons.explore_outlined,
         title: _searchQuery.isEmpty ? AppStrings.noBooksAvailable : AppStrings.noBooksFound,
@@ -370,9 +387,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       child: GridView.builder(
       padding: const EdgeInsets.all(AppConstants.defaultPadding),
         gridDelegate: ResponsiveGridHelpers.createResponsiveGridDelegate(context),
-      itemCount: booksToShow.length,
+      itemCount: filteredBooks.length,
       itemBuilder: (context, index) {
-        final book = booksToShow[index];
+        final book = filteredBooks[index];
         final isInLibrary = libraryState.isBookInLibrary(book.id);
         
         return BookCard(
@@ -413,20 +430,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     }
   }
 
-  void _handleSubjectChanged(String? subject) {
-    setState(() => _selectedSubject = subject);
-    _reloadBooksWithFilters();
-  }
-
-  void _handleGradeChanged(String? grade) {
-    setState(() => _selectedGrade = grade);
+  void _handleCategoryChanged(String? category) {
+    setState(() => _selectedCategory = category);
     _reloadBooksWithFilters();
   }
 
   void _reloadBooksWithFilters() {
     ref.read(unifiedLibraryProvider.notifier).refreshWithFilters(
-      subject: _selectedSubject == 'All' ? null : _selectedSubject,
-      grade: _selectedGrade == 'All' ? null : _selectedGrade,
+      subject: _selectedCategory == 'All' ? null : _selectedCategory,
+      grade: null, // No grade filtering
     );
   }
 
@@ -524,37 +536,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     }
   }
 
-  List<String> _getSubjects() {
+  List<String> _getCategories() {
     return [
       'All',
-      'Mathematics',
-      'Science',
-      'English',
+      'Fiction',
+      'Non-Fiction',
+      'Biography',
+      'Science & Technology',
       'History',
-      'Geography',
-      'Computer Science',
-      'Art',
-      'Music',
+      'Philosophy',
+      'Art & Literature',
+      'Business',
+      'Health & Wellness',
+      'Travel',
+      'Religion & Spirituality',
       'General'
-    ];
-  }
-
-  List<Map<String, String>> _getGrades() {
-    return [
-      {'value': 'All', 'display': 'All'},
-      {'value': '1', 'display': 'Grade 1'},
-      {'value': '2', 'display': 'Grade 2'},
-      {'value': '3', 'display': 'Grade 3'},
-      {'value': '4', 'display': 'Grade 4'},
-      {'value': '5', 'display': 'Grade 5'},
-      {'value': '6', 'display': 'Grade 6'},
-      {'value': '7', 'display': 'Grade 7'},
-      {'value': '8', 'display': 'Grade 8'},
-      {'value': '9', 'display': 'Grade 9'},
-      {'value': '10', 'display': 'Grade 10'},
-      {'value': '11', 'display': 'Grade 11'},
-      {'value': '12', 'display': 'Grade 12'},
-      {'value': 'College', 'display': 'College'},
     ];
   }
 }
