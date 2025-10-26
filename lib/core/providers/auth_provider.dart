@@ -225,7 +225,7 @@ class AuthNotifier extends StateNotifier<SimpleUser?> {
     }
   }
 
-  Future<void> register(String name, String email, String password, {String? classGrade}) async {
+  Future<void> register(String name, String email, String password) async {
     try {
       // Create user with Firebase Authentication
       final credential = await _firebaseAuth.createUserWithEmailAndPassword(
@@ -246,17 +246,6 @@ class AuthNotifier extends StateNotifier<SimpleUser?> {
         await user.reload();
         
         debugPrint('User registered successfully: $email with name: ${user.displayName}');
-        
-        // If classGrade is provided, save it via sync user call
-        if (classGrade != null && classGrade.isNotEmpty) {
-          try {
-            await ApiService().syncUser(classGrade: classGrade);
-            debugPrint('Class grade saved: $classGrade');
-          } catch (e) {
-            debugPrint('Error saving class grade: $e');
-            // Don't fail registration if class grade save fails
-          }
-        }
       }
     } on FirebaseAuthException catch (e) {
       debugPrint('Firebase registration error: ${e.code} - ${e.message}');

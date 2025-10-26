@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/constants/book_categories.dart';
 
 /// Dialog for uploading books with metadata
 class BookUploadDialog extends ConsumerStatefulWidget {
@@ -20,31 +21,9 @@ class _BookUploadDialogState extends ConsumerState<BookUploadDialog> {
   final _descriptionController = TextEditingController();
   final _tagsController = TextEditingController();
   
-  String _selectedSubject = 'General';
-  String _selectedGrade = '10';
+  String _selectedCategory = BookCategories.getDefault();
   PlatformFile? _selectedFile;
   bool _isUploading = false;
-
-  static const List<String> _subjects = [
-    'General', 'Mathematics', 'Science', 'English', 'History',
-    'Geography', 'Computer Science', 'Art', 'Music',
-  ];
-
-  static const List<Map<String, String>> _grades = [
-    {'value': '1', 'display': 'Grade 1'},
-    {'value': '2', 'display': 'Grade 2'},
-    {'value': '3', 'display': 'Grade 3'},
-    {'value': '4', 'display': 'Grade 4'},
-    {'value': '5', 'display': 'Grade 5'},
-    {'value': '6', 'display': 'Grade 6'},
-    {'value': '7', 'display': 'Grade 7'},
-    {'value': '8', 'display': 'Grade 8'},
-    {'value': '9', 'display': 'Grade 9'},
-    {'value': '10', 'display': 'Grade 10'},
-    {'value': '11', 'display': 'Grade 11'},
-    {'value': '12', 'display': 'Grade 12'},
-    {'value': 'College', 'display': 'College'},
-  ];
 
   @override
   void dispose() {
@@ -73,7 +52,7 @@ class _BookUploadDialogState extends ConsumerState<BookUploadDialog> {
                 const SizedBox(height: 16),
                 _buildTextField(_authorController, 'Author'),
                 const SizedBox(height: 16),
-                _buildSubjectGradeRow(),
+                _buildCategoryField(),
                 const SizedBox(height: 16),
                 _buildTextField(_descriptionController, 'Description', maxLines: 3),
                 const SizedBox(height: 16),
@@ -148,39 +127,19 @@ class _BookUploadDialogState extends ConsumerState<BookUploadDialog> {
     );
   }
 
-  Widget _buildSubjectGradeRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            value: _selectedSubject,
-            decoration: const InputDecoration(
-              labelText: 'Subject',
-              border: OutlineInputBorder(),
-            ),
-            items: _subjects.map((subject) => DropdownMenuItem(
-              value: subject,
-              child: Text(subject),
-            )).toList(),
-            onChanged: (value) => setState(() => _selectedSubject = value!),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            value: _selectedGrade,
-            decoration: const InputDecoration(
-              labelText: 'Grade',
-              border: OutlineInputBorder(),
-            ),
-            items: _grades.map((grade) => DropdownMenuItem(
-              value: grade['value'],
-              child: Text(grade['display']!),
-            )).toList(),
-            onChanged: (value) => setState(() => _selectedGrade = value!),
-          ),
-        ),
-      ],
+  Widget _buildCategoryField() {
+    return DropdownButtonFormField<String>(
+      value: _selectedCategory,
+      decoration: const InputDecoration(
+        labelText: 'Category',
+        prefixIcon: Icon(Icons.category),
+        border: OutlineInputBorder(),
+      ),
+      items: BookCategories.getSelectable().map((category) => DropdownMenuItem(
+        value: category,
+        child: Text(category),
+      )).toList(),
+      onChanged: (value) => setState(() => _selectedCategory = value!),
     );
   }
 
@@ -221,8 +180,8 @@ class _BookUploadDialogState extends ConsumerState<BookUploadDialog> {
       final metadata = {
         'title': _titleController.text.trim(),
         'author': _authorController.text.trim().isEmpty ? 'Unknown Author' : _authorController.text.trim(),
-        'subject': _selectedSubject,
-        'grade': _selectedGrade,
+        'subject': _selectedCategory,
+        'grade': 'General', // Using "General" for backward compatibility with backend
         'description': _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
         'tags': _tagsController.text.trim(),
       };

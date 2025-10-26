@@ -486,12 +486,34 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     try {
       final book = await _apiService.uploadBookFromBytes(bytes, fileName, metadata);
       
-      // Add the new book to the current list
+      // Add the new book to the all books list
       final currentBooks = state.allBooks;
-      state = state.copyWith(allBooks: [book, ...currentBooks]);
+      
+      // Add to user's library by default since they uploaded it
+      try {
+        await _apiService.addBookToLibrary(book.id);
+        
+        // Update state optimistically - add to all books and user's library
+        final updatedUserLibraryIds = Set<String>.from(state.userLibraryBookIds)..add(book.id);
+        final updatedUserLibraryBooks = [...state.userLibraryBooks, book];
+        
+        state = state.copyWith(
+          allBooks: [book, ...currentBooks],
+          userLibraryBookIds: updatedUserLibraryIds,
+          userLibraryBooks: updatedUserLibraryBooks,
+        );
+        
+        debugPrint('✅ Book "${book.title}" uploaded and added to user library');
+      } catch (addToLibraryError) {
+        debugPrint('⚠️ Error adding book to library (non-fatal): $addToLibraryError');
+        // Still add to all books list even if adding to library failed
+        state = state.copyWith(allBooks: [book, ...currentBooks]);
+        debugPrint('✅ Book "${book.title}" uploaded but failed to add to user library');
+      }
       
       return book;
     } catch (e) {
+      debugPrint('❌ Error uploading book: $e');
       rethrow;
     }
   }

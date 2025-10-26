@@ -37,6 +37,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   bool _isLoading = true;
   String? _error;
   html.IFrameElement? _iframeElement;
+  String? _pdfBlobUrl;
+  bool _pdfSent = false; // Track if PDF has been sent to viewer to prevent duplicate loads
   
   // Text selection overlay
   String _selectedText = '';
@@ -62,6 +64,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   @override
   void initState() {
     super.initState();
+    _pdfSent = false; // Reset flag on each load
     _loadPdfData();
     _startPeriodicProgressSave();
   }
@@ -76,6 +79,16 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       html.window.removeEventListener('message', _messageListener!);
       _messageListener = null;
     }
+    
+    // Clean up blob URL to prevent memory leaks
+    if (_pdfBlobUrl != null) {
+      html.Url.revokeObjectUrl(_pdfBlobUrl!);
+      _pdfBlobUrl = null;
+    }
+    
+    // Reset state for next load
+    _pdfSent = false;
+    _isLoading = true;
     
     super.dispose();
   }
@@ -108,11 +121,47 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     }
 
     print('✅ File URL is valid, proceeding to load');
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        _error = null;
-      });
+    
+    // Fetch PDF as blob and create blob URL to pass to viewer
+    try {
+      final backendUrl = '${AppConstants.baseUrl}/api/v1/books/${widget.book.id}/file';
+      print('🌐 Fetching PDF from backend: $backendUrl');
+      
+      final response = await html.window.fetch(backendUrl);
+      
+      // Note: FetchResponse doesn't expose status directly in Dart
+      print('✅ Backend response received');
+      
+      // Convert response to blob
+      final blob = await response.blob();
+      print('✅ PDF blob created, size: ${blob.size} bytes (${(blob.size / 1024 / 1024).toStringAsFixed(2)} MB)');
+      
+      // Create blob URL that the viewer can use
+      final blobUrl = html.Url.createObjectUrl(blob);
+      print('✅ Blob URL created: $blobUrl');
+      
+      if (mounted) {
+        setState(() {
+          _pdfBlobUrl = blobUrl;
+          _isLoading = false;
+          _error = null;
+        });
+        
+        // Try to send PDF URL to iframe if it's already loaded
+        Future.delayed(const Duration(milliseconds: 300), () {
+          _sendPdfUrlToIframe();
+        });
+      }
+      
+      print('✅ PDF data loaded successfully');
+    } catch (e) {
+      print('❌ Failed to fetch PDF: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Failed to load PDF: $e';
+        });
+      }
     }
   }
 
@@ -203,6 +252,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       return _buildFallbackContent();
     }
 
+    // Log the final PDF URL that will be requested
+    print('🎯 FINAL PDF URL THAT WILL BE LOADED: $fullUrl');
+
     return Stack(
       children: [
         Container(
@@ -231,16 +283,19 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     );
   }
 
+
   Widget _buildWebPdfViewer(String pdfUrl) {
     // Use Mozilla PDF.js for better web PDF viewing
     final viewType = 'pdf-viewer-${widget.book.id}';
     
-    // Use PDF.js viewer from backend (same origin as PDF files - no CORS issues)
-    final pdfJsUrl = '${AppConstants.baseUrl}/pdfjs/web/custom_viewer.html?file=${Uri.encodeComponent(pdfUrl)}';
+    // Use PDF.js viewer from Flutter app (same origin - avoids X-Frame-Options issues)
+    // Build iframe without file parameter - will send via postMessage when ready
+    final pdfJsUrl = '/pdfjs/web/custom_viewer.html';
     
     // Debug: Log the URLs
-    print('PDF URL: $pdfUrl');
-    print('PDF.js Viewer URL: $pdfJsUrl');
+    print('📚 Building PDF viewer for book: ${widget.book.title}');
+    print('📄 PDF URL to load: $pdfUrl');
+    print('🌐 PDF.js Viewer URL: $pdfJsUrl');
     
     // Register the view factory
     try {
@@ -273,12 +328,20 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
                     _currentPage = widget.book.progress!.currentPage;
                   });
                 }
+                
+                // CRITICAL: Send PDF URL via postMessage when iframe is ready
+                // Wait a bit for viewer to initialize, then send the PDF URL
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  _sendPdfUrlToIframe();
+                });
               }
             })
             ..onError.listen((event) {
+              print('❌ IFRAME ERROR: $event');
+              print('❌ Error loading PDF.js viewer');
               if (mounted) {
                 setState(() {
-                  _error = 'Failed to load PDF';
+                  _error = 'Failed to load PDF viewer: ${event.toString()}';
                   _isLoading = false;
                 });
               }
@@ -308,6 +371,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 24),
           Icon(
             Icons.picture_as_pdf,
             size: 64,
@@ -315,7 +380,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
           ),
           const SizedBox(height: 16),
           Text(
-            'PDF not available',
+            'Loading PDF...',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -324,7 +389,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
           ),
           const SizedBox(height: 8),
           Text(
-            'This book does not have a PDF file associated with it.',
+            _isLoading 
+              ? 'Fetching PDF from server...' 
+              : 'This book does not have a PDF file associated with it.',
             style: TextStyle(
               color: Colors.grey[500],
             ),
@@ -345,9 +412,23 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   String? _getFullPdfUrl() {
-    // Use the new endpoint that serves the PDF directly by book ID
+    // Use blob URL if available (PDF data loaded as blob to avoid origin issues)
+    if (_pdfBlobUrl != null) {
+      print('✅ Using blob URL for PDF: $_pdfBlobUrl');
+      return _pdfBlobUrl;
+    }
+    
+    // If blob URL is not ready yet, return null to wait
+    if (_isLoading) {
+      print('⏳ Waiting for blob URL to be created...');
+      return null;
+    }
+    
+    // Fallback to backend endpoint (for legacy support)
     final bookId = widget.book.id;
-    return '${AppConstants.baseUrl}/api/v1/books/$bookId/file';
+    final backendUrl = '${AppConstants.baseUrl}/api/v1/books/$bookId/file';
+    print('✅ Using backend endpoint for PDF: $backendUrl');
+    return backendUrl;
   }
 
   void _updateReadingProgress(int page) {
@@ -666,5 +747,47 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
 
   void _hideUnwantedButtons() {
     // This method is no longer needed as we're using local PDF.js with buttons already removed
+  }
+  
+  /// Send PDF URL to iframe via postMessage
+  void _sendPdfUrlToIframe() {
+    // Prevent sending PDF multiple times (which causes double rendering)
+    if (_pdfSent) {
+      print('⚠️ PDF already sent, skipping duplicate send');
+      return;
+    }
+    
+    print('🔍 _sendPdfUrlToIframe called');
+    print('🔍 _iframeElement: $_iframeElement');
+    print('🔍 _iframeElement?.contentWindow: ${_iframeElement?.contentWindow}');
+    print('🔍 _pdfBlobUrl: $_pdfBlobUrl');
+    
+    if (_iframeElement == null || _iframeElement!.contentWindow == null) {
+      print('⚠️ Cannot send PDF URL: iframe not ready');
+      print('   - iframe null: ${_iframeElement == null}');
+      print('   - contentWindow null: ${_iframeElement?.contentWindow == null}');
+      return;
+    }
+    
+    final pdfUrl = _pdfBlobUrl;
+    if (pdfUrl == null) {
+      print('⚠️ Cannot send PDF URL: blob URL not ready');
+      return;
+    }
+    
+    print('📨 Sending PDF URL to iframe: $pdfUrl');
+    print('📨 Message payload: {type: loadPDF, url: $pdfUrl}');
+    
+    try {
+      _iframeElement!.contentWindow!.postMessage({
+        'type': 'loadPDF',
+        'url': pdfUrl,
+      }, '*');
+      _pdfSent = true; // Mark as sent to prevent duplicate sends
+      print('✅ PDF URL sent successfully via postMessage');
+    } catch (e) {
+      print('❌ Failed to send PDF URL: $e');
+      print('❌ Stack trace: ${StackTrace.current}');
+    }
   }
 }

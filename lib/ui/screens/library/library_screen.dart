@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/constants/book_categories.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/app_providers.dart';
@@ -222,7 +223,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     isDense: true,
                   ),
-                  items: _getCategories().map((category) {
+                  items: BookCategories.getAll().map((category) {
                     return DropdownMenuItem(
                       value: category,
                       child: Text(category, style: const TextStyle(fontSize: 14)),
@@ -536,21 +537,4 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     }
   }
 
-  List<String> _getCategories() {
-    return [
-      'All',
-      'Fiction',
-      'Non-Fiction',
-      'Biography',
-      'Science & Technology',
-      'History',
-      'Philosophy',
-      'Art & Literature',
-      'Business',
-      'Health & Wellness',
-      'Travel',
-      'Religion & Spirituality',
-      'General'
-    ];
-  }
 }
