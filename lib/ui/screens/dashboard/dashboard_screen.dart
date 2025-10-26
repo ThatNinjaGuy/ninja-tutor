@@ -21,8 +21,6 @@ import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/profile_menu_button.dart';
 import '../../widgets/common/skeleton_loader.dart';
 import '../../widgets/common/modern_card.dart';
-import '../../widgets/common/modern_buttons.dart';
-import '../../widgets/common/quick_actions_fab.dart';
 import '../../widgets/gamification/streak_flame.dart';
 import '../../widgets/gamification/xp_progress_bar.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
@@ -210,40 +208,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ),
             
             // Bottom padding
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ],
         ),
-      ),
-      floatingActionButton: QuickActionsFAB(
-        actions: [
-          QuickAction(
-            icon: Icons.book,
-            label: 'Add Book',
-            color: AppTheme.readingColor,
-            onTap: () {
-              HapticsHelper.light();
-              context.push(AppRoutes.library);
-            },
-          ),
-          QuickAction(
-            icon: Icons.quiz,
-            label: 'Practice',
-            color: AppTheme.practiceColor,
-            onTap: () {
-              HapticsHelper.light();
-              context.push(AppRoutes.practice);
-            },
-          ),
-          QuickAction(
-            icon: Icons.sticky_note_2,
-            label: 'Notes',
-            color: AppTheme.noteColor,
-            onTap: () {
-              HapticsHelper.light();
-              context.push(AppRoutes.notes);
-            },
-          ),
-        ],
       ),
     );
   }

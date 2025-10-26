@@ -89,7 +89,15 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   Future<void> _loadPdfData() async {
+    print('🔍 DEBUG: Loading PDF for book: ${widget.book.title}');
+    print('🔍 DEBUG: Book ID: ${widget.book.id}');
+    print('🔍 DEBUG: fileUrl value: ${widget.book.fileUrl}');
+    print('🔍 DEBUG: fileUrl is null: ${widget.book.fileUrl == null}');
+    print('🔍 DEBUG: fileUrl isEmpty: ${widget.book.fileUrl?.isEmpty ?? true}');
+    print('🔍 DEBUG: totalPages: ${widget.book.totalPages}');
+    
     if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
+      print('❌ ERROR: No file URL available for this book');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -99,6 +107,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       return;
     }
 
+    print('✅ File URL is valid, proceeding to load');
     if (mounted) {
       setState(() {
         _isLoading = false;
@@ -336,31 +345,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   String? _getFullPdfUrl() {
-    if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
-      return null;
-    }
-
-    final fileUrl = widget.book.fileUrl!;
-    
-    // For Firebase Storage URLs, proxy through backend to avoid CORS issues
-    if (fileUrl.contains('firebasestorage.app') || 
-        fileUrl.contains('storage.googleapis.com')) {
-      // Encode the Firebase URL and proxy it through backend
-      final encodedUrl = Uri.encodeComponent(fileUrl);
-      return '${AppConstants.baseUrl}/api/v1/proxy/pdf?url=$encodedUrl';
-    }
-    
-    // If it's already a full URL (non-Firebase), return as-is
-    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-      return fileUrl;
-    }
-    
-    // If it's a local relative URL, prefix with backend base URL
-    if (fileUrl.startsWith('/uploads/')) {
-      return '${AppConstants.baseUrl}$fileUrl';
-    }
-    
-    return fileUrl;
+    // Use the new endpoint that serves the PDF directly by book ID
+    final bookId = widget.book.id;
+    return '${AppConstants.baseUrl}/api/v1/books/$bookId/file';
   }
 
   void _updateReadingProgress(int page) {

@@ -220,6 +220,10 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         final bookData = data['book'] as Map<String, dynamic>;
         final progressData = data['progress'] as Map<String, dynamic>?;
         
+        // DEBUG: Log raw book data
+        debugPrint('🔍 DEBUG: Raw bookData file_url: ${bookData['file_url']}');
+        debugPrint('🔍 DEBUG: bookData keys: ${bookData.keys}');
+        
         // Merge book and progress data for proper parsing
         final mergedData = Map<String, dynamic>.from(bookData);
         if (progressData != null) {
@@ -227,6 +231,11 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         }
         
         final book = BookModel.fromJson(mergedData);
+        
+        // DEBUG: Log parsed book data
+        debugPrint('🔍 DEBUG: Parsed book fileUrl: ${book.fileUrl}');
+        debugPrint('🔍 DEBUG: Book ID: ${book.id}');
+        debugPrint('🔍 DEBUG: Book Title: ${book.title}');
         
         // Debug: Log progress parsing
         if (progressData != null) {
