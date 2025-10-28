@@ -113,6 +113,7 @@ class NotesNotifier extends StateNotifier<NotesState> {
     required int pageNumber,
     required String content,
     String? title,
+    String? selectedText, // Optional: text selected from PDF
   }) async {
     try {
       final note = await _notesService.createNote(
@@ -120,6 +121,7 @@ class NotesNotifier extends StateNotifier<NotesState> {
         pageNumber: pageNumber,
         content: content,
         title: title,
+        selectedText: selectedText,
       );
       
       if (note != null) {
@@ -142,17 +144,57 @@ class NotesNotifier extends StateNotifier<NotesState> {
     }
   }
   
-  /// Delete a note
-  Future<bool> deleteNote({
-    required String bookId,
+  /// Update a note
+  Future<NoteModel?> updateNote({
     required String noteId,
-    required int pageNumber,
+    required String content,
+    String? title,
   }) async {
     try {
-      final success = await _notesService.deleteNote(
-        bookId: bookId,
+      // Find the note in state
+      final note = state.allNotes.firstWhere((n) => n.id == noteId, orElse: () => throw Exception('Note not found'));
+      
+      // Update via service
+      final updatedNote = await _notesService.updateNote(
         noteId: noteId,
-        pageNumber: pageNumber,
+        content: content,
+        title: title,
+      );
+      
+      if (updatedNote != null) {
+        // Update state
+        final updatedAllNotes = state.allNotes.map((n) => n.id == noteId ? updatedNote : n).toList();
+        final updatedNotesByPage = Map<int, List<NoteModel>>.from(state.notesByPage);
+        
+        if (updatedNotesByPage.containsKey(note.pageNumber)) {
+          updatedNotesByPage[note.pageNumber] = updatedNotesByPage[note.pageNumber]!
+            .map((n) => n.id == noteId ? updatedNote : n)
+            .toList();
+        }
+        
+        state = state.copyWith(
+          allNotes: updatedAllNotes,
+          notesByPage: updatedNotesByPage,
+        );
+      }
+      
+      return updatedNote;
+    } catch (e) {
+      print('Error updating note: $e');
+      return null;
+    }
+  }
+  
+  /// Delete a note
+  Future<bool> deleteNote(String noteId) async {
+    try {
+      // Find the note in state
+      final note = state.allNotes.firstWhere((n) => n.id == noteId, orElse: () => throw Exception('Note not found'));
+      
+      final success = await _notesService.deleteNote(
+        bookId: note.bookId,
+        noteId: noteId,
+        pageNumber: note.pageNumber,
       );
       
       if (success) {
@@ -161,8 +203,8 @@ class NotesNotifier extends StateNotifier<NotesState> {
           ..removeWhere((n) => n.id == noteId);
         
         final updatedNotesByPage = Map<int, List<NoteModel>>.from(state.notesByPage);
-        if (updatedNotesByPage.containsKey(pageNumber)) {
-          updatedNotesByPage[pageNumber] = updatedNotesByPage[pageNumber]!
+        if (updatedNotesByPage.containsKey(note.pageNumber)) {
+          updatedNotesByPage[note.pageNumber] = updatedNotesByPage[note.pageNumber]!
             .where((n) => n.id != noteId)
             .toList();
         }

@@ -19,12 +19,18 @@ class ReadingViewer extends ConsumerStatefulWidget {
     this.onTextSelected,
     this.onDefinitionRequest,
     this.onPageChanged,
+    this.onSelectedTextChanged,
+    this.onNoteClicked,
+    this.notes,
   });
 
   final BookModel book;
   final Function(String text, Offset position)? onTextSelected;
   final Function(String word)? onDefinitionRequest;
   final Function(int page)? onPageChanged;
+  final Function(String? selectedText)? onSelectedTextChanged;  // Callback for when text selection changes
+  final Function(String noteId)? onNoteClicked;  // Callback for when a note is clicked
+  final List<dynamic>? notes;  // List of notes to display on the PDF
 
   @override
   ConsumerState<ReadingViewer> createState() => _ReadingViewerState();
@@ -37,6 +43,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   bool _isLoading = true;
   String? _error;
   html.IFrameElement? _iframeElement;
+  String? _pdfBlobUrl;
+  bool _pdfSent = false; // Track if PDF has been sent to viewer to prevent duplicate loads
+  String? _currentViewType; // Track current view type to avoid re-registration
   
   // Text selection overlay
   String _selectedText = '';
@@ -56,26 +65,72 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   final List<Map<String, dynamic>> _capturedDrawings = [];
   final List<Map<String, dynamic>> _capturedHighlights = [];
   
+  // Notes for current book
+  List<dynamic> _notesForBook = [];
+  
   // Message listener reference for cleanup
   void Function(html.Event)? _messageListener;
 
   @override
   void initState() {
     super.initState();
+    _pdfSent = false; // Reset flag on each load
+    _pdfBlobUrl = null; // Clear previous blob URL
+    _iframeElement = null; // Reset iframe element to force re-creation
+    _isLoading = true; // Reset loading state
+    _error = null; // Clear any previous errors
+    _currentViewType = null; // Reset view type for fresh iframe
     _loadPdfData();
     _startPeriodicProgressSave();
+    
+    // Initialize notes from widget
+    if (widget.notes != null) {
+      _notesForBook = List.from(widget.notes!);
+    }
+  }
+
+  @override
+  void didUpdateWidget(ReadingViewer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If the book changed, reset everything and reload
+    if (oldWidget.book.id != widget.book.id) {
+      _pdfSent = false;
+      _pdfBlobUrl = null;
+      _iframeElement = null;
+      _isLoading = true;
+      _error = null;
+      _currentViewType = null; // Force new view type for new book
+      _loadPdfData();
+    }
+    
+    // Update notes when widget.notes changes
+    if (widget.notes != null && widget.notes != oldWidget.notes) {
+      _notesForBook = List.from(widget.notes!);
+      _sendNotesToPdfViewer(_notesForBook);
+    }
   }
 
   @override
   void dispose() {
     _progressSaveTimer?.cancel();
-    _saveProgressImmediately(); // Save any pending progress before disposing
+    // Don't save progress here - it should have been saved periodically
+    // Saving here causes "ref after disposal" errors
     
     // Remove message listener to prevent memory leaks
     if (_messageListener != null) {
       html.window.removeEventListener('message', _messageListener!);
       _messageListener = null;
     }
+    
+    // Clean up blob URL to prevent memory leaks
+    if (_pdfBlobUrl != null) {
+      html.Url.revokeObjectUrl(_pdfBlobUrl!);
+      _pdfBlobUrl = null;
+    }
+    
+    // Reset state for next load
+    _pdfSent = false;
+    _isLoading = true;
     
     super.dispose();
   }
@@ -85,7 +140,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     _progressSaveTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       _saveProgressImmediately();
     });
-    print('⏰ Started periodic progress save (every 60 seconds)');
   }
 
   Future<void> _loadPdfData() async {
@@ -98,12 +152,37 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       }
       return;
     }
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        _error = null;
-      });
+    
+    // Fetch PDF as blob and create blob URL to pass to viewer
+    try {
+      final backendUrl = '${AppConstants.baseUrl}/api/v1/books/${widget.book.id}/file';
+      final response = await html.window.fetch(backendUrl);
+      
+      // Convert response to blob
+      final blob = await response.blob();
+      
+      // Create blob URL that the viewer can use
+      final blobUrl = html.Url.createObjectUrl(blob);
+      
+      if (mounted) {
+        setState(() {
+          _pdfBlobUrl = blobUrl;
+          _isLoading = false;
+          _error = null;
+        });
+        
+        // Try to send PDF URL to iframe if it's already loaded
+        Future.delayed(const Duration(milliseconds: 300), () {
+          _sendPdfUrlToIframe();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Failed to load PDF: $e';
+        });
+      }
     }
   }
 
@@ -187,11 +266,55 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     );
   }
 
+  Widget _buildLoadingScreen() {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: theme.colorScheme.surface,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Loading ${widget.book.title}...',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Fetching from Firebase',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPdfViewer(ThemeData theme) {
     final fullUrl = _getFullPdfUrl();
     
-    if (fullUrl == null) {
+    // Show loading screen while blob URL is being created
+    if (fullUrl == null && _isLoading) {
+      return _buildLoadingScreen();
+    }
+    
+    // Show error screen if loading failed
+    if (fullUrl == null && _error == null && !_isLoading) {
       return _buildFallbackContent();
+    }
+
+    // Return loading screen if URL is still null at this point
+    if (fullUrl == null) {
+      return _buildLoadingScreen();
     }
 
     return Stack(
@@ -203,35 +326,44 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
           child: _buildWebPdfViewer(fullUrl),
         ),
         
-        // Text selection overlay
-        if (_showSelectionOverlay)
-          ReadingControlsOverlay(
-            bookId: widget.book.id,
-            selectedText: _selectedText,
-            pageNumber: _currentPage,
-            position: _selectionPosition,
-            onClose: () {
-              setState(() {
-                _showSelectionOverlay = false;
-                _selectedText = '';
-                _selectionPosition = null;
-              });
-            },
+        // Text selection overlay - positioned relative to the Stack
+        if (_showSelectionOverlay && _selectedText.isNotEmpty)
+          Positioned(
+            left: _selectionPosition?['x'] ?? 100,
+            top: _selectionPosition?['y'] != null 
+                ? (_selectionPosition!['y'] - 60) 
+                : 100,
+            child: ReadingControlsOverlay(
+              bookId: widget.book.id,
+              selectedText: _selectedText,
+              pageNumber: _currentPage,
+              position: null, // Don't pass position to avoid double positioning
+              onClose: () {
+                setState(() {
+                  _showSelectionOverlay = false;
+                  _selectedText = '';
+                  _selectionPosition = null;
+                });
+              },
+            ),
           ),
       ],
     );
   }
 
+
   Widget _buildWebPdfViewer(String pdfUrl) {
     // Use Mozilla PDF.js for better web PDF viewing
-    final viewType = 'pdf-viewer-${widget.book.id}';
+    // Only create a new view type if book changes
+    if (_currentViewType == null || !_currentViewType!.contains(widget.book.id)) {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      _currentViewType = 'pdf-viewer-${widget.book.id}-$timestamp';
+    }
+    final viewType = _currentViewType!;
     
-    // Use PDF.js viewer from backend (same origin as PDF files - no CORS issues)
-    final pdfJsUrl = '${AppConstants.baseUrl}/pdfjs/web/custom_viewer.html?file=${Uri.encodeComponent(pdfUrl)}';
-    
-    // Debug: Log the URLs
-    print('PDF URL: $pdfUrl');
-    print('PDF.js Viewer URL: $pdfJsUrl');
+    // Use PDF.js viewer from Flutter app (same origin - avoids X-Frame-Options issues)
+    // Build iframe without file parameter - will send via postMessage when ready
+    final pdfJsUrl = '/pdfjs/web/custom_viewer.html';
     
     // Register the view factory
     try {
@@ -264,12 +396,23 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
                     _currentPage = widget.book.progress!.currentPage;
                   });
                 }
+                
+                // CRITICAL: Send PDF URL via postMessage when iframe is ready
+                // Wait a bit for viewer to initialize, then send the PDF URL
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  _sendPdfUrlToIframe();
+                });
+                
+                // Also try to send if blob URL becomes available
+                Future.delayed(const Duration(milliseconds: 1000), () {
+                  _sendPdfUrlToIframe();
+                });
               }
             })
             ..onError.listen((event) {
               if (mounted) {
                 setState(() {
-                  _error = 'Failed to load PDF';
+                  _error = 'Failed to load PDF viewer: ${event.toString()}';
                   _isLoading = false;
                 });
               }
@@ -299,6 +442,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 24),
           Icon(
             Icons.picture_as_pdf,
             size: 64,
@@ -306,7 +451,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
           ),
           const SizedBox(height: 16),
           Text(
-            'PDF not available',
+            'Loading PDF...',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -315,7 +460,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
           ),
           const SizedBox(height: 8),
           Text(
-            'This book does not have a PDF file associated with it.',
+            _isLoading 
+              ? 'Fetching PDF from server...' 
+              : 'This book does not have a PDF file associated with it.',
             style: TextStyle(
               color: Colors.grey[500],
             ),
@@ -336,31 +483,23 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   String? _getFullPdfUrl() {
-    if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
+    // Use blob URL if available (PDF data loaded as blob to avoid origin issues)
+    if (_pdfBlobUrl != null) {
+      print('✅ Using blob URL for PDF: $_pdfBlobUrl');
+      return _pdfBlobUrl;
+    }
+    
+    // If blob URL is not ready yet, return null to wait
+    if (_isLoading) {
+      print('⏳ Waiting for blob URL to be created...');
       return null;
     }
-
-    final fileUrl = widget.book.fileUrl!;
     
-    // For Firebase Storage URLs, proxy through backend to avoid CORS issues
-    if (fileUrl.contains('firebasestorage.app') || 
-        fileUrl.contains('storage.googleapis.com')) {
-      // Encode the Firebase URL and proxy it through backend
-      final encodedUrl = Uri.encodeComponent(fileUrl);
-      return '${AppConstants.baseUrl}/api/v1/proxy/pdf?url=$encodedUrl';
-    }
-    
-    // If it's already a full URL (non-Firebase), return as-is
-    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-      return fileUrl;
-    }
-    
-    // If it's a local relative URL, prefix with backend base URL
-    if (fileUrl.startsWith('/uploads/')) {
-      return '${AppConstants.baseUrl}$fileUrl';
-    }
-    
-    return fileUrl;
+    // Fallback to backend endpoint (for legacy support)
+    final bookId = widget.book.id;
+    final backendUrl = '${AppConstants.baseUrl}/api/v1/books/$bookId/file';
+    print('✅ Using backend endpoint for PDF: $backendUrl');
+    return backendUrl;
   }
 
   void _updateReadingProgress(int page) {
@@ -368,9 +507,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     _pendingPage = page;
     _pendingProgressPercentage = page / widget.book.totalPages;
     
-    final totalTime = _pageTimesAccumulator.values.fold(0, (sum, time) => sum + time);
-    final pagesWithTime = _pageTimesAccumulator.length;
-    print('📝 Current page: $page/${widget.book.totalPages}, tracked $pagesWithTime pages, ${totalTime}s total since last save');
   }
   
   void _saveProgressImmediately() {
@@ -382,7 +518,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       if (currentPageTimeSeconds > 0) {
         final currentPageKey = _currentPage.toString();
         _pageTimesAccumulator[currentPageKey] = (_pageTimesAccumulator[currentPageKey] ?? 0) + currentPageTimeSeconds;
-        print('⏱️ Adding current page time: page $_currentPage spent ${currentPageTimeSeconds}s (still on this page)');
         
         // Reset the start time for the next interval
         _currentPageStartTime = DateTime.now();
@@ -391,16 +526,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     
     // Don't save if no time data accumulated
     if (_pageTimesAccumulator.isEmpty) {
-      print('⚠️ No page time data to save yet');
       return;
     }
-    
-    final totalTime = _pageTimesAccumulator.values.fold(0, (sum, time) => sum + time);
-    final pagesWithTime = _pageTimesAccumulator.length;
-    
-    print('💾 Saving progress to backend: page $_pendingPage/${widget.book.totalPages}');
-    print('📊 Page times being saved: $_pageTimesAccumulator');
-    print('⏱️ Total: $pagesWithTime pages, ${totalTime}s');
     
     // Call API with all accumulated page time data
     _saveProgressToBackend(
@@ -411,7 +538,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // Clear the accumulator after saving - backend has merged the times
     // This resets tracking for the next 60-second interval
     _pageTimesAccumulator.clear();
-    print('🔄 Page time accumulator cleared - tracking fresh for next interval');
   }
   
   Future<void> _saveProgressToBackend({
@@ -424,8 +550,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       progressPercentage: page / widget.book.totalPages,
       pageTimes: pageTimes,
     );
-    
-    print('✅ Progress saved successfully');
   }
 
   void _setupPdfMessageListener() {
@@ -437,14 +561,10 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       final messageEvent = event as html.MessageEvent;
       final data = messageEvent.data;
       
-      print('📨 Received message from PDF.js: $data');
-      
       // Handle both Map<String, dynamic> and LinkedMap from JavaScript
       if (data is Map) {
         final messageData = Map<String, dynamic>.from(data);
         _handlePdfMessage(messageData);
-      } else {
-        print('⚠️ Message data is not a Map: ${data.runtimeType}');
       }
     };
     
@@ -460,7 +580,17 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         _onPageChange(previousPage, newPage, timeSpent);
         break;
       case 'textSelection':
-        _onTextSelection(message['text'] ?? '', message['page'] ?? 1, message['position']);
+        // Convert LinkedMap to Map<String, dynamic>
+        Map<String, dynamic>? position;
+        if (message['position'] != null) {
+          try {
+            position = Map<String, dynamic>.from(message['position']);
+          } catch (e) {
+            position = null;
+          }
+        }
+        
+        _onTextSelection(message['text'] ?? '', message['page'] ?? 1, position);
         break;
       case 'highlight':
         _onHighlight(message['text'] ?? '', message['page'] ?? 1, message['color'] ?? 'yellow');
@@ -474,18 +604,42 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       case 'pdfReady':
         _onPdfReady(message['totalPages'] ?? 0, message['currentPage'] ?? 1);
         break;
+      case 'createNoteFromSelection':
+        _onCreateNoteFromSelection(message);
+        break;
+      case 'noteClicked':
+        widget.onNoteClicked?.call(message['noteId'] as String);
+        break;
+    }
+  }
+  
+  void _onCreateNoteFromSelection(Map<String, dynamic> message) {
+    final selectedText = message['selectedText'] as String?;
+    final page = message['page'] as int?;
+    final position = message['position'] as Map<String, dynamic>?;
+    
+    if (selectedText != null && page != null) {
+      // Trigger note creation dialog in parent
+      if (mounted) {
+        // Store the selection data temporarily
+        setState(() {
+          _selectedText = selectedText;
+          _selectionPosition = position;
+          _showSelectionOverlay = false; // Hide the selection overlay since we're creating a note
+        });
+        
+        // The actual dialog will be shown by ReadingInterfaceMixin
+        widget.onTextSelected?.call(selectedText, const Offset(0, 0));
+      }
     }
   }
 
   void _onPageChange(int previousPage, int newPage, int timeSpent) {
-    print('📄 Page changed: page $previousPage spent $timeSpent seconds, now on page $newPage');
     
     // Accumulate time for the previous page
     if (timeSpent > 0) {
       final pageKey = previousPage.toString();
       _pageTimesAccumulator[pageKey] = (_pageTimesAccumulator[pageKey] ?? 0) + timeSpent;
-      print('⏱️ Page $previousPage total time: ${_pageTimesAccumulator[pageKey]}s');
-      print('📚 All accumulated times: $_pageTimesAccumulator');
     }
     
     // Track when we started reading the new page
@@ -511,16 +665,24 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
 
   void _onTextSelection(String text, int pageNum, Map<String, dynamic>? position) {
     // Check if widget is still mounted before updating state
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     
-    // Store selection data and show overlay
+    // Just store the selected text - no overlay needed
+    // The notes dialog will be triggered by the Notes button in the UI
     setState(() {
       _selectedText = text;
-      _showSelectionOverlay = text.isNotEmpty;
+      _selectionPosition = position;
+      // Don't show overlay anymore
+      _showSelectionOverlay = false;
     });
     
+    // Notify parent about selected text change
+    widget.onSelectedTextChanged?.call(text.isNotEmpty ? text : null);
+    
     if (text.isNotEmpty && position != null) {
-      // Save to captured selections list
+      // Save to captured selections list for reference
       final selection = {
         'text': text,
         'page': pageNum,
@@ -530,10 +692,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       };
       
       _capturedTextSelections.add(selection);
-      
-      print('📝 Text selected #${_capturedTextSelections.length}: "$text" (${position['charCount'] ?? text.length} chars) on page $pageNum');
-      print('   Position: PDF(${position['pdfX']}, ${position['pdfY']}) Size: ${position['pdfWidth']}x${position['pdfHeight']}');
-      print('   Total selections captured: ${_capturedTextSelections.length}');
     }
   }
 
@@ -557,6 +715,48 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // Start tracking time for the initial page
     _currentPageStartTime = DateTime.now();
     print('📖 PDF ready - starting time tracking for page $currentPage');
+    
+    // Send notes to PDF viewer with a slight delay to ensure PDF.js is fully initialized
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted && _notesForBook.isNotEmpty) {
+        print('📤 Delayed sending ${_notesForBook.length} notes to PDF viewer');
+        _sendNotesToPdfViewer(_notesForBook);
+      }
+    });
+  }
+  
+  /// Send notes data to PDF viewer for highlighting
+  void _sendNotesToPdfViewer(List<dynamic> notes) {
+    if (notes.isEmpty) return;
+    
+    final notesData = notes.map((note) => {
+      'id': note.id,
+      'page': note.pageNumber,
+      'selectedText': note.selectedText,
+      'content': note.content,
+      'title': note.title,
+    }).toList();
+    
+    print('📤 Sending ${notesData.length} notes to PDF viewer');
+    // Debug: Check all notes for selectedText
+    if (notes.isNotEmpty) {
+      print('📝 Notes with selectedText:');
+      for (var note in notes) {
+        print('   ID: ${note.id}, Page: ${note.pageNumber}');
+        print('   selectedText: ${note.selectedText}');
+        print('   selectedText is null: ${note.selectedText == null}');
+        print('   selectedText is empty: ${note.selectedText?.isEmpty ?? true}');
+      }
+    }
+    // Debug: Check first note in notesData to see if conversion worked
+    if (notesData.isNotEmpty) {
+      print('📝 First note in notesData: ${notesData[0]}');
+      print('📝 Full notesData JSON: ${notesData.toString()}');
+    }
+    _iframeElement?.contentWindow?.postMessage({
+      'type': 'displayNotes',
+      'notes': notesData,
+    }, '*');
   }
 
   void _sendPageTimeData(int pageNum, int timeSpent) {
@@ -679,5 +879,47 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
 
   void _hideUnwantedButtons() {
     // This method is no longer needed as we're using local PDF.js with buttons already removed
+  }
+  
+  /// Send PDF URL to iframe via postMessage
+  void _sendPdfUrlToIframe() {
+    // Prevent sending PDF multiple times (which causes double rendering)
+    if (_pdfSent) {
+      print('⚠️ PDF already sent, skipping duplicate send');
+      return;
+    }
+    
+    print('🔍 _sendPdfUrlToIframe called');
+    print('🔍 _iframeElement: $_iframeElement');
+    print('🔍 _iframeElement?.contentWindow: ${_iframeElement?.contentWindow}');
+    print('🔍 _pdfBlobUrl: $_pdfBlobUrl');
+    
+    if (_iframeElement == null || _iframeElement!.contentWindow == null) {
+      print('⚠️ Cannot send PDF URL: iframe not ready');
+      print('   - iframe null: ${_iframeElement == null}');
+      print('   - contentWindow null: ${_iframeElement?.contentWindow == null}');
+      return;
+    }
+    
+    final pdfUrl = _pdfBlobUrl;
+    if (pdfUrl == null) {
+      print('⚠️ Cannot send PDF URL: blob URL not ready');
+      return;
+    }
+    
+    print('📨 Sending PDF URL to iframe: $pdfUrl');
+    print('📨 Message payload: {type: loadPDF, url: $pdfUrl}');
+    
+    try {
+      _iframeElement!.contentWindow!.postMessage({
+        'type': 'loadPDF',
+        'url': pdfUrl,
+      }, '*');
+      _pdfSent = true; // Mark as sent to prevent duplicate sends
+      print('✅ PDF URL sent successfully via postMessage');
+    } catch (e) {
+      print('❌ Failed to send PDF URL: $e');
+      print('❌ Stack trace: ${StackTrace.current}');
+    }
   }
 }

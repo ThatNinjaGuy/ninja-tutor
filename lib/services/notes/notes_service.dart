@@ -65,6 +65,7 @@ class NotesService {
     required int pageNumber,
     required String content,
     String? title,
+    String? selectedText,
   }) async {
     try {
       final note = await _apiService.createNote(
@@ -72,6 +73,7 @@ class NotesService {
         pageNumber: pageNumber,
         content: content,
         title: title,
+        selectedText: selectedText,
       );
       
       // Update caches
@@ -86,6 +88,45 @@ class NotesService {
       return note;
     } catch (e) {
       print('Error creating note: $e');
+      return null;
+    }
+  }
+  
+  /// Update a note
+  Future<NoteModel?> updateNote({
+    required String noteId,
+    required String content,
+    String? title,
+  }) async {
+    try {
+      final updatedNote = await _apiService.updateNote(
+        noteId: noteId,
+        content: content,
+        title: title,
+      );
+      
+      // Update caches
+      // Note: We need to find which book this note belongs to in the cache
+      for (var bookId in _notesCache.keys) {
+        final index = _notesCache[bookId]!.indexWhere((n) => n.id == noteId);
+        if (index != -1) {
+          _notesCache[bookId]![index] = updatedNote;
+          
+          // Update page cache as well
+          if (_pageNotesCache.containsKey(bookId) && 
+              _pageNotesCache[bookId]!.containsKey(updatedNote.pageNumber)) {
+            final pageIndex = _pageNotesCache[bookId]![updatedNote.pageNumber]!.indexWhere((n) => n.id == noteId);
+            if (pageIndex != -1) {
+              _pageNotesCache[bookId]![updatedNote.pageNumber]![pageIndex] = updatedNote;
+            }
+          }
+          break;
+        }
+      }
+      
+      return updatedNote;
+    } catch (e) {
+      print('Error updating note: $e');
       return null;
     }
   }

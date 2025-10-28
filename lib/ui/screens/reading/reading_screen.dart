@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/constants/book_categories.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -30,7 +31,7 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
     with ReadingInterfaceMixin {
   
   String _searchQuery = '';
-  String? _selectedSubject;
+  String? _selectedCategory;
 
   @override
   void initState() {
@@ -136,21 +137,21 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
       },
       filterWidgets: [
         DropdownButtonFormField<String>(
-          value: _selectedSubject,
+          value: _selectedCategory,
           decoration: const InputDecoration(
-            labelText: 'Subject',
-            prefixIcon: Icon(Icons.subject),
+            labelText: 'Category',
+            prefixIcon: Icon(Icons.category),
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             isDense: true,
           ),
-          items: _getSubjects().map((subject) {
+          items: BookCategories.getAll().map((category) {
             return DropdownMenuItem(
-              value: subject,
-              child: Text(subject, style: const TextStyle(fontSize: 14)),
+              value: category,
+              child: Text(category, style: const TextStyle(fontSize: 14)),
             );
           }).toList(),
           onChanged: (value) {
-            setState(() => _selectedSubject = value);
+            setState(() => _selectedCategory = value);
           },
         ),
       ],
@@ -169,28 +170,14 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
       }).toList();
     }
 
-    // Filter by subject
-    if (_selectedSubject != null && _selectedSubject != 'All') {
-      filtered = filtered.where((book) => book.subject == _selectedSubject).toList();
+    // Filter by category (which corresponds to the book's subject field in the model)
+    if (_selectedCategory != null && _selectedCategory != 'All') {
+      filtered = filtered.where((book) => book.subject == _selectedCategory).toList();
     }
 
     return filtered;
   }
 
-  List<String> _getSubjects() {
-    return [
-      'All',
-      'Mathematics',
-      'Science',
-      'English',
-      'History',
-      'Geography',
-      'Computer Science',
-      'Art',
-      'Music',
-      'General'
-    ];
-  }
 
   Widget _buildBookList(List<BookModel> books) {
     final theme = Theme.of(context);

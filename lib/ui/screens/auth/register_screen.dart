@@ -55,8 +55,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
         );
         
-        // Navigate to login screen
-        context.go('/login');
+        // Wait for auth state to update (user will be logged in automatically)
+        await Future.delayed(const Duration(milliseconds: 1500));
+        
+        // Navigate to library screen so user can explore books for their grade
+        if (mounted) {
+          context.go(AppRoutes.library);
+        }
       }
     } catch (e) {
       if (mounted) {

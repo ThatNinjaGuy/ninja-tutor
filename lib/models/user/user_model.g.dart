@@ -78,6 +78,7 @@ class UserPreferencesAdapter extends TypeAdapter<UserPreferences> {
       aiTipsEnabled: fields[3] as bool,
       notificationsEnabled: fields[4] as bool,
       soundEnabled: fields[5] as bool,
+      classGrade: fields[7] as String?,
       readingPreferences: fields[6] as ReadingPreferences,
     );
   }
@@ -85,7 +86,7 @@ class UserPreferencesAdapter extends TypeAdapter<UserPreferences> {
   @override
   void write(BinaryWriter writer, UserPreferences obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.language)
       ..writeByte(1)
@@ -99,7 +100,9 @@ class UserPreferencesAdapter extends TypeAdapter<UserPreferences> {
       ..writeByte(5)
       ..write(obj.soundEnabled)
       ..writeByte(6)
-      ..write(obj.readingPreferences);
+      ..write(obj.readingPreferences)
+      ..writeByte(7)
+      ..write(obj.classGrade);
   }
 
   @override
@@ -307,6 +310,7 @@ UserPreferences _$UserPreferencesFromJson(Map<String, dynamic> json) =>
       aiTipsEnabled: json['aiTipsEnabled'] as bool? ?? true,
       notificationsEnabled: json['notificationsEnabled'] as bool? ?? true,
       soundEnabled: json['soundEnabled'] as bool? ?? true,
+      classGrade: json['classGrade'] as String?,
       readingPreferences: ReadingPreferences.fromJson(
           json['readingPreferences'] as Map<String, dynamic>),
     );
@@ -320,6 +324,7 @@ Map<String, dynamic> _$UserPreferencesToJson(UserPreferences instance) =>
       'notificationsEnabled': instance.notificationsEnabled,
       'soundEnabled': instance.soundEnabled,
       'readingPreferences': instance.readingPreferences,
+      'classGrade': instance.classGrade,
     };
 
 ReadingPreferences _$ReadingPreferencesFromJson(Map<String, dynamic> json) =>

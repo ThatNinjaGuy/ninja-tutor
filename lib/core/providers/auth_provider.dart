@@ -233,11 +233,20 @@ class AuthNotifier extends StateNotifier<SimpleUser?> {
         password: password,
       );
       
-      // Update display name
-      await credential.user?.updateDisplayName(name);
-      await credential.user?.reload();
-      
-      debugPrint('User registered successfully: $email');
+      // Update display name - ensure it's saved properly
+      final user = credential.user;
+      if (user != null) {
+        await user.updateDisplayName(name);
+        await user.reload();
+        
+        // Wait a bit to ensure display name is saved
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // Re-fetch user to get the updated display name
+        await user.reload();
+        
+        debugPrint('User registered successfully: $email with name: ${user.displayName}');
+      }
     } on FirebaseAuthException catch (e) {
       debugPrint('Firebase registration error: ${e.code} - ${e.message}');
       

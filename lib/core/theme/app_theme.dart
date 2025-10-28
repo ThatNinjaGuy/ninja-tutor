@@ -180,6 +180,117 @@ class AppTheme {
   static const noteColor = Color(0xFF06B6D4); // Cyan for notes
   static const practiceColor = Color(0xFFEC4899); // Pink for practice
   static const readingColor = Color(0xFF10B981); // Green for reading
+  
+  /// Gamification colors
+  static const xpColor = Color(0xFFFBBF24); // Gold for XP
+  static const achievementColor = Color(0xFFF59E0B); // Amber for achievements
+  static const streakColor = Color(0xFFEF4444); // Red/Orange for streak flame
+  
+  /// Badge tier colors
+  static const bronzeColor = Color(0xFFCD7F32);
+  static const silverColor = Color(0xFFC0C0C0);
+  static const goldColor = Color(0xFFFFD700);
+  static const platinumColor = Color(0xFFE5E4E2);
+  
+  /// Gradient definitions
+  static const primaryGradient = LinearGradient(
+    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const successGradient = LinearGradient(
+    colors: [Color(0xFF10B981), Color(0xFF059669)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const errorGradient = LinearGradient(
+    colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const xpGradient = LinearGradient(
+    colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const streakGradient = LinearGradient(
+    colors: [Color(0xFFEF4444), Color(0xFFF97316), Color(0xFFFBBF24)],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+  
+  /// Glass morphism utilities
+  static BoxDecoration glassDecoration({
+    Color? color,
+    double opacity = 0.1,
+    double borderOpacity = 0.2,
+    double blurAmount = 10.0,
+  }) {
+    return BoxDecoration(
+      color: (color ?? Colors.white).withOpacity(opacity),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(
+        color: Colors.white.withOpacity(borderOpacity),
+        width: 1.5,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.1),
+          blurRadius: blurAmount,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
+  
+  /// Create glow effect
+  static List<BoxShadow> createGlow(Color color, {double intensity = 0.5}) {
+    return [
+      BoxShadow(
+        color: color.withOpacity(intensity * 0.3),
+        blurRadius: 20,
+        offset: const Offset(0, 4),
+      ),
+      BoxShadow(
+        color: color.withOpacity(intensity * 0.2),
+        blurRadius: 10,
+        offset: const Offset(0, 2),
+      ),
+    ];
+  }
+  
+  /// Premium card decoration
+  static BoxDecoration premiumCardDecoration(BuildContext context, {Color? accentColor}) {
+    final theme = Theme.of(context);
+    final color = accentColor ?? theme.colorScheme.primary;
+    
+    return BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          theme.colorScheme.surface,
+          theme.colorScheme.surface.withOpacity(0.95),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(
+        color: color.withOpacity(0.2),
+        width: 1,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: color.withOpacity(0.15),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
 }
 
 /// Extension to access custom colors from BuildContext

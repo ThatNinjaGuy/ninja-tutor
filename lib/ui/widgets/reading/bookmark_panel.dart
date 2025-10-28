@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../models/content/book_model.dart';
 import '../../../models/bookmark/bookmark_model.dart';
 import '../../../core/providers/bookmark_provider.dart';
+import '../../../core/providers/reading_page_provider.dart';
 import '../../../core/constants/app_constants.dart';
 
 /// Bookmark Panel for managing bookmarks
@@ -160,9 +161,13 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
   }
 
   Widget _buildCurrentPageSection(ThemeData theme, BookmarkState bookmarkState) {
-    final isCurrentPageBookmarked = bookmarkState.isPageBookmarked(widget.currentPage);
+    // Watch reading page provider for dynamic updates
+    final pageState = ref.watch(readingPageProvider);
+    final currentPage = pageState.bookId == widget.bookId ? pageState.currentPage : widget.currentPage;
     
-    print('🔷 Building current page section: page=${widget.currentPage}, isBookmarked=$isCurrentPageBookmarked, isLoading=${bookmarkState.isLoading}');
+    final isCurrentPageBookmarked = bookmarkState.isPageBookmarked(currentPage);
+    
+    print('🔷 Building current page section: page=$currentPage, isBookmarked=$isCurrentPageBookmarked, isLoading=${bookmarkState.isLoading}');
     
     return Container(
       padding: const EdgeInsets.all(16),
@@ -191,7 +196,7 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Page ${widget.currentPage}',
+                  'Page $currentPage',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -220,13 +225,13 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
               // Capture the CURRENT state BEFORE the async operation
               final wasBookmarked = isCurrentPageBookmarked;
               
-              print('🔵 Add/Remove button pressed for page ${widget.currentPage}');
+              print('🔵 Add/Remove button pressed for page $currentPage');
               print('🔵 Was bookmarked: $wasBookmarked');
               
               try {
                 final success = await ref.read(bookmarkProvider.notifier).toggleBookmark(
                   widget.bookId, 
-                  widget.currentPage,
+                  currentPage,
                 );
                 
                 print('🔵 Toggle result: $success');
@@ -237,8 +242,8 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
                       SnackBar(
                         content: Text(
                           wasBookmarked
-                              ? 'Bookmark removed from page ${widget.currentPage}'
-                              : 'Bookmark added to page ${widget.currentPage}',
+                              ? 'Bookmark removed from page $currentPage'
+                              : 'Bookmark added to page $currentPage',
                         ),
                         duration: const Duration(seconds: 2),
                         behavior: SnackBarBehavior.floating,
@@ -348,7 +353,10 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
   }
 
   Widget _buildBookmarkItem(ThemeData theme, BookmarkModel bookmark) {
-    final isCurrentPage = bookmark.pageNumber == widget.currentPage;
+    // Watch reading page provider for dynamic updates
+    final pageState = ref.watch(readingPageProvider);
+    final currentPage = pageState.bookId == widget.bookId ? pageState.currentPage : widget.currentPage;
+    final isCurrentPage = bookmark.pageNumber == currentPage;
     final dateFormat = DateFormat('MMM d, HH:mm');
     
     return Container(

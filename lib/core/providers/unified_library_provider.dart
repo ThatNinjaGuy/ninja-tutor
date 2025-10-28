@@ -220,6 +220,10 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         final bookData = data['book'] as Map<String, dynamic>;
         final progressData = data['progress'] as Map<String, dynamic>?;
         
+        // DEBUG: Log raw book data
+        debugPrint('🔍 DEBUG: Raw bookData file_url: ${bookData['file_url']}');
+        debugPrint('🔍 DEBUG: bookData keys: ${bookData.keys}');
+        
         // Merge book and progress data for proper parsing
         final mergedData = Map<String, dynamic>.from(bookData);
         if (progressData != null) {
@@ -227,6 +231,11 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         }
         
         final book = BookModel.fromJson(mergedData);
+        
+        // DEBUG: Log parsed book data
+        debugPrint('🔍 DEBUG: Parsed book fileUrl: ${book.fileUrl}');
+        debugPrint('🔍 DEBUG: Book ID: ${book.id}');
+        debugPrint('🔍 DEBUG: Book Title: ${book.title}');
         
         // Debug: Log progress parsing
         if (progressData != null) {
@@ -291,29 +300,48 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     state = state.copyWith(searchResults: []);
   }
 
-  /// Add book to user's library
+  /// Add book to user's library with optimistic update
   Future<bool> addBookToLibrary(String bookId) async {
     if (_authToken == null) return false;
 
     try {
-      await _apiService.addBookToLibrary(bookId);
-      
-      // Update local state immediately for better UX
-      final updatedIds = Set<String>.from(state.userLibraryBookIds)..add(bookId);
-      
-      // Find the book in all books and add to user library books
+      // Find the book in all books for optimistic update
       final book = state.allBooks.firstWhere((b) => b.id == bookId);
+      
+      // Optimistic update - update UI immediately
+      final updatedIds = Set<String>.from(state.userLibraryBookIds)..add(bookId);
       final updatedUserBooks = [...state.userLibraryBooks, book];
       
+      // Store previous state for rollback
+      final previousIds = state.userLibraryBookIds;
+      final previousUserBooks = state.userLibraryBooks;
+      
+      // Apply optimistic update
       state = state.copyWith(
         userLibraryBookIds: updatedIds,
         userLibraryBooks: updatedUserBooks,
       );
       
+      // Make API call in background
+      await _apiService.addBookToLibrary(bookId);
+      
       return true;
     } catch (e) {
       debugPrint('Error adding book to library: $e');
-      // Auth errors are handled by interceptor - just return false
+      
+      // Rollback optimistic update on error
+      try {
+        final book = state.allBooks.firstWhere((b) => b.id == bookId);
+        final rollbackIds = Set<String>.from(state.userLibraryBookIds)..remove(bookId);
+        final rollbackUserBooks = state.userLibraryBooks.where((b) => b.id != bookId).toList();
+        
+        state = state.copyWith(
+          userLibraryBookIds: rollbackIds,
+          userLibraryBooks: rollbackUserBooks,
+        );
+      } catch (_) {}
+      
+      // Auth errors are handled by interceptor
       if (e is ApiException && e.isAuthError) {
         return false;
       }
@@ -321,26 +349,44 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     }
   }
 
-  /// Remove book from user's library
+  /// Remove book from user's library with optimistic update
   Future<bool> removeBookFromLibrary(String bookId) async {
     if (_authToken == null) return false;
 
     try {
-      await _apiService.removeBookFromLibrary(bookId);
+      // Store previous state for rollback
+      final removedBook = state.userLibraryBooks.firstWhere((b) => b.id == bookId);
       
-      // Update local state immediately for better UX
+      // Optimistic update - update UI immediately
       final updatedIds = Set<String>.from(state.userLibraryBookIds)..remove(bookId);
       final updatedUserBooks = state.userLibraryBooks.where((b) => b.id != bookId).toList();
       
+      // Apply optimistic update
       state = state.copyWith(
         userLibraryBookIds: updatedIds,
         userLibraryBooks: updatedUserBooks,
       );
       
+      // Make API call in background
+      await _apiService.removeBookFromLibrary(bookId);
+      
       return true;
     } catch (e) {
       debugPrint('Error removing book from library: $e');
-      // Auth errors are handled by interceptor - just return false
+      
+      // Rollback optimistic update on error
+      try {
+        final removedBook = state.allBooks.firstWhere((b) => b.id == bookId);
+        final rollbackIds = Set<String>.from(state.userLibraryBookIds)..add(bookId);
+        final rollbackUserBooks = [...state.userLibraryBooks, removedBook];
+        
+        state = state.copyWith(
+          userLibraryBookIds: rollbackIds,
+          userLibraryBooks: rollbackUserBooks,
+        );
+      } catch (_) {}
+      
+      // Auth errors are handled by interceptor
       if (e is ApiException && e.isAuthError) {
         return false;
       }
@@ -403,7 +449,25 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     }
 
     if (grade != null && grade != 'All') {
-      filtered = filtered.where((book) => book.grade == grade).toList();
+      // Normalize grade for comparison: "10" should match "Grade 10" or "10" or just "10"
+      filtered = filtered.where((book) {
+        // Match exact strings
+        if (book.grade == grade) return true;
+        
+        // Match if book.grade contains the grade value (e.g., "Grade 10" contains "10")
+        if (book.grade.toLowerCase().contains(grade.toLowerCase())) return true;
+        
+        // Match if grade value is in the book's grade (e.g., "10" in "Grade 10")
+        if (grade.toLowerCase() == 'college') {
+          return book.grade.toLowerCase().contains('college');
+        }
+        
+        // Extract numeric part for comparison
+        final bookGradeNum = book.grade.replaceAll(RegExp(r'[^0-9]'), '');
+        final filterGradeNum = grade.replaceAll(RegExp(r'[^0-9]'), '');
+        
+        return bookGradeNum == filterGradeNum && bookGradeNum.isNotEmpty;
+      }).toList();
     }
 
     return filtered;
@@ -422,12 +486,34 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     try {
       final book = await _apiService.uploadBookFromBytes(bytes, fileName, metadata);
       
-      // Add the new book to the current list
+      // Add the new book to the all books list
       final currentBooks = state.allBooks;
-      state = state.copyWith(allBooks: [book, ...currentBooks]);
+      
+      // Add to user's library by default since they uploaded it
+      try {
+        await _apiService.addBookToLibrary(book.id);
+        
+        // Update state optimistically - add to all books and user's library
+        final updatedUserLibraryIds = Set<String>.from(state.userLibraryBookIds)..add(book.id);
+        final updatedUserLibraryBooks = [...state.userLibraryBooks, book];
+        
+        state = state.copyWith(
+          allBooks: [book, ...currentBooks],
+          userLibraryBookIds: updatedUserLibraryIds,
+          userLibraryBooks: updatedUserLibraryBooks,
+        );
+        
+        debugPrint('✅ Book "${book.title}" uploaded and added to user library');
+      } catch (addToLibraryError) {
+        debugPrint('⚠️ Error adding book to library (non-fatal): $addToLibraryError');
+        // Still add to all books list even if adding to library failed
+        state = state.copyWith(allBooks: [book, ...currentBooks]);
+        debugPrint('✅ Book "${book.title}" uploaded but failed to add to user library');
+      }
       
       return book;
     } catch (e) {
+      debugPrint('❌ Error uploading book: $e');
       rethrow;
     }
   }

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../models/content/book_model.dart';
 
 /// Layout modes for the BookCard component
@@ -51,20 +55,36 @@ class BookCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Card(
-      elevation: AppConstants.cardElevation,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-        child: Padding(
-          padding: EdgeInsets.all(_getPadding()),
-          child: _buildLayoutContent(context, theme),
+    return Hero(
+      tag: 'book_${book.id}',
+      child: Card(
+        elevation: AppConstants.cardElevation,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        ),
+        child: InkWell(
+          onTap: () {
+            // Add haptic feedback
+            HapticFeedback.lightImpact();
+            onTap?.call();
+          },
+          onLongPress: () {
+            // Add haptic feedback
+            HapticFeedback.mediumImpact();
+            onLongPress?.call();
+          },
+          borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+          child: Padding(
+            padding: EdgeInsets.all(_getPadding()),
+            child: _buildLayoutContent(context, theme),
+          ),
         ),
       ),
+    ).animate().fadeIn(duration: 300.ms).scale(
+      begin: const Offset(0.95, 0.95),
+      end: const Offset(1.0, 1.0),
+      duration: 300.ms,
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -233,10 +253,21 @@ class BookCard extends StatelessWidget {
       child: book.coverUrl != null
           ? ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: Image.network(
-                book.coverUrl!,
+              child: CachedNetworkImage(
+                imageUrl: book.coverUrl!,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => _buildDefaultCover(theme),
+                placeholder: (context, url) => Container(
+                  color: _getSubjectColor().withOpacity(0.1),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _getSubjectColor(),
+                    ),
+                  ),
+                ),
+                errorWidget: (context, url, error) => _buildDefaultCover(theme),
+                fadeInDuration: const Duration(milliseconds: 300),
+                fadeOutDuration: const Duration(milliseconds: 100),
               ),
             )
           : _buildDefaultCover(theme),
@@ -355,10 +386,36 @@ class BookCard extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         
-        LinearProgressIndicator(
-          value: book.progressPercentage,
-          backgroundColor: theme.colorScheme.outline.withOpacity(0.2),
-          valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Stack(
+            children: [
+              Container(
+                height: 4,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.outline.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              FractionallySizedBox(
+                widthFactor: book.progressPercentage,
+                child: Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.successGradient,
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.readingColor.withOpacity(0.3),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -439,10 +496,21 @@ class BookCard extends StatelessWidget {
             child: book.coverUrl != null
                 ? ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      book.coverUrl!,
+                    child: CachedNetworkImage(
+                      imageUrl: book.coverUrl!,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => _buildDefaultCover(theme, 32),
+                      placeholder: (context, url) => Container(
+                        color: _getSubjectColor().withOpacity(0.1),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _getSubjectColor(),
+                          ),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => _buildDefaultCover(theme, 32),
+                      fadeInDuration: const Duration(milliseconds: 300),
+                      fadeOutDuration: const Duration(milliseconds: 100),
                     ),
                   )
                 : _buildDefaultCover(theme, 32),
@@ -528,13 +596,21 @@ class BookCard extends StatelessWidget {
     );
   }
 
-  /// Build library action button (Add/Remove)
+  /// Build library action button (Add/Remove) with visual feedback
   Widget _buildLibraryButton(ThemeData theme) {
     return SizedBox(
       width: double.infinity,
       height: 28,
       child: ElevatedButton(
-        onPressed: isInLibrary ? onRemoveFromLibrary : onAddToLibrary,
+        onPressed: () {
+          // Add haptic feedback
+          HapticFeedback.lightImpact();
+          if (isInLibrary) {
+            onRemoveFromLibrary?.call();
+          } else {
+            onAddToLibrary?.call();
+          }
+        },
         style: ElevatedButton.styleFrom(
           backgroundColor: isInLibrary 
               ? theme.colorScheme.error.withOpacity(0.1)
@@ -552,13 +628,13 @@ class BookCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isInLibrary ? Icons.remove_circle_outline : Icons.add_circle_outline,
+              isInLibrary ? Icons.check_circle : Icons.add_circle_outline,
               size: 14,
             ),
             const SizedBox(width: 4),
             Flexible(
               child: Text(
-                isInLibrary ? 'Remove' : 'Add',
+                isInLibrary ? 'Added' : 'Add',
                 style: theme.textTheme.labelSmall?.copyWith(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
@@ -569,7 +645,13 @@ class BookCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ).animate(target: isInLibrary ? 1 : 0)
+      .scale(
+        begin: const Offset(1.0, 1.0),
+        end: const Offset(1.05, 1.05),
+        duration: 200.ms,
+        curve: Curves.easeOut,
+      );
   }
 
   Color _getSubjectColor() {

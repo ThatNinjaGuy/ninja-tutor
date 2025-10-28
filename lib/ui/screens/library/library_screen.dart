@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/constants/book_categories.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/utils/debouncer.dart';
+import '../../../core/utils/haptics_helper.dart';
 import '../../../models/content/book_model.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/common/responsive_grid_helpers.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/search_filter_bar.dart';
 import '../../widgets/common/profile_menu_button.dart';
+import '../../widgets/common/skeleton_loader.dart';
 import '../../widgets/library/add_book_bottom_sheet.dart';
 import '../../widgets/library/book_options_sheet.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
@@ -25,36 +30,48 @@ class LibraryScreen extends ConsumerStatefulWidget {
   ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
 }
 
+enum ViewMode { grid, list, compact }
+
 class _LibraryScreenState extends ConsumerState<LibraryScreen> 
     with TickerProviderStateMixin, ReadingInterfaceMixin {
   late TabController _tabController;
-  String? _selectedSubject = 'All';
-  String? _selectedGrade = 'All';
+  String? _selectedCategory = 'All';
   String _searchQuery = '';
+  late Debouncer _searchDebouncer;
+  ViewMode _viewMode = ViewMode.grid;
   
   // Current book being read
   BookModel? _currentReadingBook;
+  bool _exploreBooksLoaded = false;
+  bool _myBooksLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    // Start with Explore Books tab (index 1) instead of My Books tab (index 0)
+    _tabController = TabController(length: 2, vsync: this, initialIndex: 1);
+    _searchDebouncer = Debouncer(duration: const Duration(milliseconds: 300));
     
     // Listen to tab changes to lazy load data
     _tabController.addListener(_handleTabChange);
-    
-    // Load My Books by default (first tab)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
-    });
   }
-
+  
   void _handleTabChange() {
-    // Only load when tab change is complete (not during animation)
+    // Load books only when switching to a tab that hasn't been loaded yet
+    // The provider's ensure* methods have cache checks, so safe to call multiple times
     if (!_tabController.indexIsChanging) {
-      if (_tabController.index == 1) {
-        // Explore Books tab - load all books only when this tab is opened
+      if (_tabController.index == 1 && !_exploreBooksLoaded) {
+        // Explore Books tab - load all books only when this tab is opened for the first time
+        debugPrint('📚 Switching to Explore Books tab - loading all books');
+        _exploreBooksLoaded = true;
         ref.read(unifiedLibraryProvider.notifier).ensureAllBooksLoaded();
+      } else if (_tabController.index == 0 && !_myBooksLoaded) {
+        // My Books tab - load user library only when this tab is opened for the first time
+        debugPrint('📚 Switching to My Books tab - loading user library');
+        _myBooksLoaded = true;
+        ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
+      } else {
+        debugPrint('📚 Tab switched to: ${_tabController.index == 1 ? "Explore Books" : "My Books"} (already loaded)');
       }
     }
   }
@@ -62,6 +79,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchDebouncer.dispose();
     super.dispose();
   }
 
@@ -72,6 +90,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
     // Show login prompt if not authenticated
     if (user == null) return _buildLoginPrompt();
+
+    // Load books for the active tab on initial load (only once per tab)
+    final currentTabIndex = _tabController.index;
+    if ((currentTabIndex == 1 && !_exploreBooksLoaded) || (currentTabIndex == 0 && !_myBooksLoaded)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Load Explore Books data if it's the active tab and hasn't been loaded yet
+        if (_tabController.index == 1 && !_exploreBooksLoaded) {
+          debugPrint('🚀 Initial load from build - Explore Books tab');
+          _exploreBooksLoaded = true;
+          ref.read(unifiedLibraryProvider.notifier).ensureAllBooksLoaded();
+        }
+        // Load My Books data if it's the active tab and hasn't been loaded yet
+        if (_tabController.index == 0 && !_myBooksLoaded) {
+          debugPrint('🚀 Initial load from build - My Books tab');
+          _myBooksLoaded = true;
+          ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
+        }
+      });
+    }
 
     // If in reading mode, show the reading interface from mixin
     if (isReadingMode && _currentReadingBook != null) {
@@ -159,71 +196,107 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 
   Widget _buildSearchAndFilters() {
-    return SearchFilterBar(
-      searchHint: 'Search books...',
-      searchQuery: _searchQuery,
-      onSearchChanged: (value) {
-        setState(() => _searchQuery = value);
-        if (value.isEmpty) {
-                        ref.read(unifiedLibraryProvider.notifier).clearSearch();
-        } else {
-          _handleSearchChanged(value);
-        }
-      },
-      filterWidgets: [
-        ResponsiveFilterRow(
-          children: [
-            DropdownButtonFormField<String>(
-              value: _selectedSubject,
-              decoration: const InputDecoration(
-                labelText: 'Subject',
-                prefixIcon: Icon(Icons.subject),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                isDense: true,
-              ),
-              items: _getSubjects().map((subject) {
-                return DropdownMenuItem(
-                  value: subject,
-                  child: Text(subject, style: const TextStyle(fontSize: 14)),
-                );
-              }).toList(),
-              onChanged: _handleSubjectChanged,
+    final theme = Theme.of(context);
+    
+    return Column(
+      children: [
+        SearchFilterBar(
+          searchHint: 'Search books...',
+          searchQuery: _searchQuery,
+          onSearchChanged: (value) {
+            setState(() => _searchQuery = value);
+            if (value.isEmpty) {
+              ref.read(unifiedLibraryProvider.notifier).clearSearch();
+            } else {
+              // Debounce search to avoid excessive API calls
+              _searchDebouncer.call(() => _handleSearchChanged(value));
+            }
+          },
+          filterWidgets: [
+            ResponsiveFilterRow(
+              children: [
+                DropdownButtonFormField<String>(
+                  value: _selectedCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'Category',
+                    prefixIcon: Icon(Icons.category),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    isDense: true,
+                  ),
+                  items: BookCategories.getAll().map((category) {
+                    return DropdownMenuItem(
+                      value: category,
+                      child: Text(category, style: const TextStyle(fontSize: 14)),
+                    );
+                  }).toList(),
+                  onChanged: _handleCategoryChanged,
+                ),
+              ],
             ),
-            DropdownButtonFormField<String>(
-              value: _selectedGrade,
-              decoration: const InputDecoration(
-                labelText: 'Grade',
-                prefixIcon: Icon(Icons.school),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                isDense: true,
+          ],
+        ),
+        const SizedBox(height: 12),
+        
+        // View mode toggle
+        Row(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
               ),
-              items: _getGrades().map((gradeEntry) {
-                return DropdownMenuItem(
-                  value: gradeEntry['value'],
-                  child: Text(gradeEntry['display']!, style: const TextStyle(fontSize: 14)),
-                );
-              }).toList(),
-              onChanged: _handleGradeChanged,
-          ),
-        ],
-      ),
+              padding: const EdgeInsets.all(4),
+              child: Row(
+                children: [
+                  _buildViewModeButton(ViewMode.grid, Icons.grid_view, theme),
+                  _buildViewModeButton(ViewMode.list, Icons.view_list, theme),
+                  _buildViewModeButton(ViewMode.compact, Icons.view_compact, theme),
+                ],
+              ),
+            ),
+            const Spacer(),
+            // Sort indicator
+            TextButton.icon(
+              onPressed: () {
+                // TODO: Implement sort options
+              },
+              icon: const Icon(Icons.sort, size: 18),
+              label: const Text('Sort', style: TextStyle(fontSize: 13)),
+            ),
+          ],
+        ),
       ],
+    );
+  }
+  
+  Widget _buildViewModeButton(ViewMode mode, IconData icon, ThemeData theme) {
+    final isSelected = _viewMode == mode;
+    return Material(
+      color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: () {
+          setState(() => _viewMode = mode);
+          HapticsHelper.light();
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(
+            icon,
+            size: 20,
+            color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
     );
   }
 
   /// Build My Books tab - shows only user's personal library with search and filters
   Widget _buildMyBooksGrid(LibraryState libraryState) {
-    if (libraryState.isLoadingUserLibrary) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(AppStrings.loadingYourBooks),
-          ],
-        ),
-      );
+    // Show skeleton loader instead of spinner for better UX
+    if (libraryState.isLoadingUserLibrary && libraryState.myBooks.isEmpty) {
+      return const GridSkeletonLoader(itemCount: 6);
     }
 
     if (libraryState.error != null) {
@@ -242,8 +315,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     final filteredBooks = ref.read(unifiedLibraryProvider.notifier).filterBooks(
       books: libraryState.myBooks,
       searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
-      subject: _selectedSubject,
-      grade: _selectedGrade,
+      subject: _selectedCategory,
+      grade: null, // No grade filtering
     );
 
     if (filteredBooks.isEmpty) {
@@ -281,17 +354,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   /// Build Explore Books tab - shows all available books with add functionality
   Widget _buildExploreBooksGrid(LibraryState libraryState) {
-    if (libraryState.isLoadingAllBooks || libraryState.isSearching) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(libraryState.isSearching ? AppStrings.searchingBooks : AppStrings.loadingBooks),
-          ],
-        ),
-      );
+    // Show skeleton loader instead of spinner for better UX
+    if ((libraryState.isLoadingAllBooks || libraryState.isSearching) && 
+        libraryState.allBooks.isEmpty && libraryState.searchResults.isEmpty) {
+      return const GridSkeletonLoader(itemCount: 6);
     }
 
     if (libraryState.error != null) {
@@ -300,7 +366,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
     final booksToShow = libraryState.exploreBooks;
 
-    if (booksToShow.isEmpty) {
+    // Apply client-side filters for category
+    final filteredBooks = ref.read(unifiedLibraryProvider.notifier).filterBooks(
+      books: booksToShow,
+      subject: _selectedCategory == 'All' ? null : _selectedCategory,
+      grade: null, // No grade filtering
+    );
+
+    if (filteredBooks.isEmpty) {
       return EmptyStateWidget(
         icon: Icons.explore_outlined,
         title: _searchQuery.isEmpty ? AppStrings.noBooksAvailable : AppStrings.noBooksFound,
@@ -315,9 +388,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       child: GridView.builder(
       padding: const EdgeInsets.all(AppConstants.defaultPadding),
         gridDelegate: ResponsiveGridHelpers.createResponsiveGridDelegate(context),
-      itemCount: booksToShow.length,
+      itemCount: filteredBooks.length,
       itemBuilder: (context, index) {
-        final book = booksToShow[index];
+        final book = filteredBooks[index];
         final isInLibrary = libraryState.isBookInLibrary(book.id);
         
         return BookCard(
@@ -358,20 +431,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     }
   }
 
-  void _handleSubjectChanged(String? subject) {
-    setState(() => _selectedSubject = subject);
-    _reloadBooksWithFilters();
-  }
-
-  void _handleGradeChanged(String? grade) {
-    setState(() => _selectedGrade = grade);
+  void _handleCategoryChanged(String? category) {
+    setState(() => _selectedCategory = category);
     _reloadBooksWithFilters();
   }
 
   void _reloadBooksWithFilters() {
     ref.read(unifiedLibraryProvider.notifier).refreshWithFilters(
-      subject: _selectedSubject == 'All' ? null : _selectedSubject,
-      grade: _selectedGrade == 'All' ? null : _selectedGrade,
+      subject: _selectedCategory == 'All' ? null : _selectedCategory,
+      grade: null, // No grade filtering
     );
   }
 
@@ -399,65 +467,74 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   /// Add book to user's personal library
   Future<void> _addBookToLibrary(String bookId) async {
+    // Haptic feedback
+    HapticFeedback.mediumImpact();
+    
     final success = await ref.read(unifiedLibraryProvider.notifier).addBookToLibrary(bookId);
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? AppStrings.bookAddedToLibrary : AppStrings.failedToAddBook),
-          backgroundColor: success ? Colors.green : Colors.red,
-          duration: const Duration(seconds: 2),
+          content: Row(
+            children: [
+              Icon(
+                success ? Icons.check_circle : Icons.error,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(success ? AppStrings.bookAddedToLibrary : AppStrings.failedToAddBook),
+              ),
+            ],
+          ),
+          backgroundColor: success ? Colors.green.shade600 : Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          duration: const Duration(milliseconds: 2000),
         ),
       );
+      
+      if (success) {
+        HapticFeedback.lightImpact();
+      }
     }
   }
 
   /// Remove book from user's personal library
   Future<void> _removeBookFromLibrary(String bookId) async {
+    // Haptic feedback
+    HapticFeedback.mediumImpact();
+    
     final success = await ref.read(unifiedLibraryProvider.notifier).removeBookFromLibrary(bookId);
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? AppStrings.bookRemovedFromLibrary : AppStrings.failedToRemoveBook),
-          backgroundColor: success ? Colors.orange : Colors.red,
-          duration: const Duration(seconds: 2),
+          content: Row(
+            children: [
+              Icon(
+                success ? Icons.remove_circle : Icons.error,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(success ? AppStrings.bookRemovedFromLibrary : AppStrings.failedToRemoveBook),
+              ),
+            ],
+          ),
+          backgroundColor: success ? Colors.orange.shade600 : Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          duration: const Duration(milliseconds: 2000),
         ),
       );
+      
+      if (success) {
+        HapticFeedback.lightImpact();
+      }
     }
   }
 
-  List<String> _getSubjects() {
-    return [
-      'All',
-      'Mathematics',
-      'Science',
-      'English',
-      'History',
-      'Geography',
-      'Computer Science',
-      'Art',
-      'Music',
-      'General'
-    ];
-  }
-
-  List<Map<String, String>> _getGrades() {
-    return [
-      {'value': 'All', 'display': 'All'},
-      {'value': '1', 'display': 'Grade 1'},
-      {'value': '2', 'display': 'Grade 2'},
-      {'value': '3', 'display': 'Grade 3'},
-      {'value': '4', 'display': 'Grade 4'},
-      {'value': '5', 'display': 'Grade 5'},
-      {'value': '6', 'display': 'Grade 6'},
-      {'value': '7', 'display': 'Grade 7'},
-      {'value': '8', 'display': 'Grade 8'},
-      {'value': '9', 'display': 'Grade 9'},
-      {'value': '10', 'display': 'Grade 10'},
-      {'value': '11', 'display': 'Grade 11'},
-      {'value': '12', 'display': 'Grade 12'},
-      {'value': 'College', 'display': 'College'},
-    ];
-  }
 }

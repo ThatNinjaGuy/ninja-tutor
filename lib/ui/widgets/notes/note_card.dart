@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/haptics_helper.dart';
 import '../../../models/note/note_model.dart';
 
 /// Note card widget for displaying note information
@@ -11,20 +14,24 @@ class NoteCard extends StatelessWidget {
     this.onTap,
     this.onEdit,
     this.onDelete,
+    this.onFavorite,
     this.compact = false,
+    this.enableSwipeActions = true,
   });
 
   final NoteModel note;
   final VoidCallback? onTap;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onFavorite;
   final bool compact;
+  final bool enableSwipeActions;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Card(
+    final cardWidget = Card(
       elevation: compact ? 1 : AppConstants.cardElevation,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppConstants.borderRadius),
@@ -42,6 +49,67 @@ class NoteCard extends StatelessWidget {
         ),
       ),
     );
+
+    // Wrap with Slidable for swipe actions
+    if (enableSwipeActions && (onEdit != null || onDelete != null || onFavorite != null)) {
+      return Slidable(
+        key: ValueKey(note.id),
+        startActionPane: ActionPane(
+          motion: const StretchMotion(),
+          children: [
+            if (onFavorite != null)
+              SlidableAction(
+                onPressed: (_) {
+                  HapticsHelper.light();
+                  onFavorite!();
+                },
+                backgroundColor: note.isFavorite ? Colors.grey : Colors.pink,
+                foregroundColor: Colors.white,
+                icon: note.isFavorite ? Icons.favorite_border : Icons.favorite,
+                label: note.isFavorite ? 'Unfavorite' : 'Favorite',
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(AppConstants.borderRadius),
+                  bottomLeft: Radius.circular(AppConstants.borderRadius),
+                ),
+              ),
+            if (onEdit != null)
+              SlidableAction(
+                onPressed: (_) {
+                  HapticsHelper.light();
+                  onEdit!();
+                },
+                backgroundColor: AppTheme.aiTipColor,
+                foregroundColor: Colors.white,
+                icon: Icons.edit,
+                label: 'Edit',
+              ),
+          ],
+        ),
+        endActionPane: ActionPane(
+          motion: const StretchMotion(),
+          children: [
+            if (onDelete != null)
+              SlidableAction(
+                onPressed: (_) {
+                  HapticsHelper.heavy();
+                  onDelete!();
+                },
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                icon: Icons.delete,
+                label: 'Delete',
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(AppConstants.borderRadius),
+                  bottomRight: Radius.circular(AppConstants.borderRadius),
+                ),
+              ),
+          ],
+        ),
+        child: cardWidget,
+      );
+    }
+
+    return cardWidget;
   }
 
   Widget _buildFullLayout(BuildContext context, ThemeData theme) {
