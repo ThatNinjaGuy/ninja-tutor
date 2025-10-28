@@ -481,12 +481,11 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
             child: AiChatPanel(
               bookId: book.id,
               currentPage: _currentPage,
-              selectedText: _selectedText,
+              selectedText: _selectedTextFromPdf,  // Use PDF selected text instead
               onClose: () {
                 Navigator.of(dialogContext).pop();
                 setState(() {
                   _showAiPanel = false;
-                  _selectedText = null;
                 });
               },
             ),
@@ -501,7 +500,6 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       if (mounted) {
         setState(() {
           _showAiPanel = false;
-          _selectedText = null;
         });
       }
     });

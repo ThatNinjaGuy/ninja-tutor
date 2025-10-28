@@ -26,10 +26,16 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
+  
+  // State for selected text pill
+  bool _isPillExpanded = true;  // Expanded by default on first open
+  String? _previousSelectedText;  // Track if selected text has changed
 
   @override
   void initState() {
     super.initState();
+    _previousSelectedText = widget.selectedText;
+    
     // Update context when panel opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(readingAiProvider.notifier).updateContext(
@@ -51,6 +57,14 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
         selectedText: widget.selectedText,
         bookId: widget.bookId,
       );
+      
+      // If selected text changed, expand the pill
+      if (oldWidget.selectedText != widget.selectedText) {
+        setState(() {
+          _isPillExpanded = true;
+          _previousSelectedText = widget.selectedText;
+        });
+      }
     }
   }
 
@@ -80,6 +94,14 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
 
     _textController.clear();
     ref.read(readingAiProvider.notifier).askQuestion(message, widget.bookId);
+    
+    // Collapse the pill after first question
+    if (_isPillExpanded) {
+      setState(() {
+        _isPillExpanded = false;
+      });
+    }
+    
     _scrollToBottom();
     _focusNode.requestFocus();
   }
@@ -93,13 +115,25 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
       return;
     }
 
-    ref.read(readingAiProvider.notifier).quickAction(
-      action: action,
-      text: text,
-      bookId: widget.bookId,
-      pageNumber: widget.currentPage,
-    );
-    _scrollToBottom();
+    // Build the prompt based on the action
+    String prompt;
+    switch (action) {
+      case 'define':
+        prompt = 'Define the term or phrase: "$text"';
+        break;
+      case 'explain':
+        prompt = 'Explain this text: "$text"';
+        break;
+      case 'summarize':
+        prompt = 'Summarize this text: "$text"';
+        break;
+      default:
+        prompt = 'Explain this text: "$text"';
+    }
+
+    // Set the text in the controller and send the message
+    _textController.text = prompt;
+    _sendMessage();
   }
 
   @override
@@ -127,9 +161,9 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
               // Header
               _buildHeader(theme),
 
-              // Context indicator
-              if (widget.selectedText != null || aiState.currentPage > 0)
-                _buildContextIndicator(theme, aiState),
+              // Selected text pill
+              if (widget.selectedText != null)
+                _buildSelectedTextPill(theme),
 
               // Error message
               if (aiState.error != null)
@@ -197,42 +231,115 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
     );
   }
 
-  Widget _buildContextIndicator(ThemeData theme, ReadingAiState aiState) {
+  Widget _buildSelectedTextPill(ThemeData theme) {
+    final selectedText = widget.selectedText ?? '';
+    final truncatedText = selectedText.length > 100 
+        ? '${selectedText.substring(0, 100)}...' 
+        : selectedText;
+    
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withOpacity(0.1),
         border: Border(
           bottom: BorderSide(
             color: theme.colorScheme.outline.withOpacity(0.2),
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.info_outline,
-            size: 16,
-            color: theme.colorScheme.primary,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              widget.selectedText != null
-                  ? 'Page ${widget.currentPage} • Text selected'
-                  : 'Page ${widget.currentPage}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.primary,
+          Row(
+            children: [
+              if (_isPillExpanded) Expanded(child: Container()),
+              Expanded(
+                child: Center(
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _isPillExpanded = !_isPillExpanded;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.text_fields,
+                            size: 16,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _isPillExpanded ? 'Selected Text' : truncatedText,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: _isPillExpanded ? null : 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            _isPillExpanded ? Icons.expand_less : Icons.expand_more,
+                            size: 18,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              if (_isPillExpanded) ...[
+                Expanded(child: Container()),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () {
+                    ref.read(readingAiProvider.notifier).clearSelectedText();
+                  },
+                  icon: const Icon(Icons.close, size: 20),
+                  tooltip: 'Clear selection',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ],
           ),
-          if (widget.selectedText != null)
-            TextButton.icon(
-              onPressed: () {
-                ref.read(readingAiProvider.notifier).clearSelectedText();
-              },
-              icon: const Icon(Icons.close, size: 14),
-              label: const Text('Clear', style: TextStyle(fontSize: 12)),
+          if (_isPillExpanded)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 12, right: 12),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.5,
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      selectedText,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
         ],
       ),
