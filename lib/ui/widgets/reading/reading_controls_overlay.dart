@@ -32,10 +32,7 @@ class _ReadingControlsOverlayState extends ConsumerState<ReadingControlsOverlay>
       return const SizedBox.shrink();
     }
 
-    return Positioned(
-      left: widget.position?['x'] ?? 0,
-      top: (widget.position?['y'] ?? 0) - 60, // Position above selection
-      child: Container(
+    return Container(
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
@@ -113,7 +110,6 @@ class _ReadingControlsOverlayState extends ConsumerState<ReadingControlsOverlay>
             ),
           ],
         ),
-      ),
     );
   }
 
@@ -191,13 +187,21 @@ class _ReadingControlsOverlayState extends ConsumerState<ReadingControlsOverlay>
   }
 
   void _addNote() {
-    // TODO: Implement note creation
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Note feature coming soon!'),
-        duration: Duration(seconds: 1),
-      ),
-    );
+    // Send message to parent Flutter window to trigger note creation
+    _sendMessageToFlutter({
+      'type': 'createNoteFromSelection',
+      'selectedText': widget.selectedText,
+      'page': widget.pageNumber,
+      'position': widget.position,
+    });
+    
+    // Close overlay
+    widget.onClose?.call();
+  }
+  
+  void _sendMessageToFlutter(Map<String, dynamic> data) {
+    // Send message to parent Flutter window
+    html.window.parent?.postMessage(data, '*');
   }
 
   void _defineWord() {

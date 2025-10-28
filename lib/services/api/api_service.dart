@@ -866,6 +866,7 @@ class ApiService {
     required int pageNumber,
     required String content,
     String? title,
+    String? selectedText,
   }) async {
     try {
       final response = await _dio.post('/notes', data: {
@@ -873,6 +874,7 @@ class ApiService {
         'type': 'text',
         'content': content,
         'title': title,
+        'selected_text': selectedText, // Send selected text from PDF
         'position': {
           'page': pageNumber,
           'x': 0.0,
@@ -904,6 +906,7 @@ class ApiService {
         'isFavorite': data['is_favorite'] ?? false,
         'linkedText': data['linked_text'],
         'aiInsights': data['ai_insights'],
+        'selectedText': data['selected_text'],
       };
       
       return NoteModel.fromJson(transformedData);
@@ -942,10 +945,56 @@ class ApiService {
           'isFavorite': noteData['is_favorite'] ?? false,
           'linkedText': noteData['linked_text'],
           'aiInsights': noteData['ai_insights'],
+          'selected_text': noteData['selected_text'], // Use snake_case key for JSON parsing
         };
         notes.add(NoteModel.fromJson(transformedData));
       }
       return notes;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Update a note
+  Future<NoteModel> updateNote({
+    required String noteId,
+    required String content,
+    String? title,
+  }) async {
+    try {
+      final response = await _dio.put('/notes/$noteId', data: {
+        'content': content,
+        'title': title,
+      });
+      
+      // Transform snake_case response to camelCase for NoteModel
+      final data = response.data as Map<String, dynamic>;
+      final transformedData = {
+        'id': data['id'],
+        'bookId': data['book_id'],
+        'pageNumber': data['position']['page'],
+        'type': data['type'],
+        'content': data['content'],
+        'title': data['title'],
+        'tags': data['tags'] ?? [],
+        'createdAt': data['created_at'],
+        'updatedAt': data['updated_at'] ?? data['created_at'],
+        'position': data['position'],
+        'style': data['style'] ?? {
+          'color': '#2196F3',
+          'opacity': 1.0,
+          'fontSize': 14.0,
+          'fontFamily': 'Inter',
+          'isBold': false,
+          'isItalic': false,
+        },
+        'isFavorite': data['is_favorite'] ?? false,
+        'linkedText': data['linked_text'],
+        'aiInsights': data['ai_insights'],
+        'selectedText': data['selected_text'],
+      };
+      
+      return NoteModel.fromJson(transformedData);
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
@@ -994,6 +1043,7 @@ class ApiService {
           'isFavorite': noteData['is_favorite'] ?? false,
           'linkedText': noteData['linked_text'],
           'aiInsights': noteData['ai_insights'],
+          'selected_text': noteData['selected_text'], // Use snake_case key for JSON parsing
         };
         notes.add(NoteModel.fromJson(transformedData));
       }

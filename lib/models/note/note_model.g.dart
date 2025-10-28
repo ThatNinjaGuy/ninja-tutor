@@ -31,13 +31,14 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       isFavorite: fields[11] as bool,
       linkedText: fields[12] as String?,
       aiInsights: fields[13] as AiInsights?,
+      selectedText: fields[14] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, NoteModel obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -65,7 +66,9 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       ..writeByte(12)
       ..write(obj.linkedText)
       ..writeByte(13)
-      ..write(obj.aiInsights);
+      ..write(obj.aiInsights)
+      ..writeByte(14)
+      ..write(obj.selectedText);
   }
 
   @override
@@ -418,6 +421,7 @@ NoteModel _$NoteModelFromJson(Map<String, dynamic> json) => NoteModel(
       aiInsights: json['aiInsights'] == null
           ? null
           : AiInsights.fromJson(json['aiInsights'] as Map<String, dynamic>),
+      selectedText: json['selected_text'] as String?,
     );
 
 Map<String, dynamic> _$NoteModelToJson(NoteModel instance) => <String, dynamic>{
@@ -435,6 +439,7 @@ Map<String, dynamic> _$NoteModelToJson(NoteModel instance) => <String, dynamic>{
       'isFavorite': instance.isFavorite,
       'linkedText': instance.linkedText,
       'aiInsights': instance.aiInsights,
+      'selected_text': instance.selectedText,
     };
 
 const _$NoteTypeEnumMap = {

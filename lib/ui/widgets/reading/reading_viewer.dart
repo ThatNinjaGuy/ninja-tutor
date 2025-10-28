@@ -19,12 +19,18 @@ class ReadingViewer extends ConsumerStatefulWidget {
     this.onTextSelected,
     this.onDefinitionRequest,
     this.onPageChanged,
+    this.onSelectedTextChanged,
+    this.onNoteClicked,
+    this.notes,
   });
 
   final BookModel book;
   final Function(String text, Offset position)? onTextSelected;
   final Function(String word)? onDefinitionRequest;
   final Function(int page)? onPageChanged;
+  final Function(String? selectedText)? onSelectedTextChanged;  // Callback for when text selection changes
+  final Function(String noteId)? onNoteClicked;  // Callback for when a note is clicked
+  final List<dynamic>? notes;  // List of notes to display on the PDF
 
   @override
   ConsumerState<ReadingViewer> createState() => _ReadingViewerState();
@@ -59,6 +65,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   final List<Map<String, dynamic>> _capturedDrawings = [];
   final List<Map<String, dynamic>> _capturedHighlights = [];
   
+  // Notes for current book
+  List<dynamic> _notesForBook = [];
+  
   // Message listener reference for cleanup
   void Function(html.Event)? _messageListener;
 
@@ -74,6 +83,12 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     _currentViewType = null; // Reset view type for fresh iframe
     _loadPdfData();
     _startPeriodicProgressSave();
+    
+    // Initialize notes from widget
+    if (widget.notes != null) {
+      print('📝 initState: Initializing ${widget.notes!.length} notes');
+      _notesForBook = List.from(widget.notes!);
+    }
   }
 
   @override
@@ -89,6 +104,13 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       _error = null;
       _currentViewType = null; // Force new view type for new book
       _loadPdfData();
+    }
+    
+    // Update notes when widget.notes changes
+    if (widget.notes != null && widget.notes != oldWidget.notes) {
+      print('📝 Notes updated, sending to PDF viewer: ${widget.notes!.length} notes');
+      _notesForBook = List.from(widget.notes!);
+      _sendNotesToPdfViewer(_notesForBook);
     }
   }
 
@@ -331,20 +353,26 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
           child: _buildWebPdfViewer(fullUrl),
         ),
         
-        // Text selection overlay
-        if (_showSelectionOverlay)
-          ReadingControlsOverlay(
-            bookId: widget.book.id,
-            selectedText: _selectedText,
-            pageNumber: _currentPage,
-            position: _selectionPosition,
-            onClose: () {
-              setState(() {
-                _showSelectionOverlay = false;
-                _selectedText = '';
-                _selectionPosition = null;
-              });
-            },
+        // Text selection overlay - positioned relative to the Stack
+        if (_showSelectionOverlay && _selectedText.isNotEmpty)
+          Positioned(
+            left: _selectionPosition?['x'] ?? 100,
+            top: _selectionPosition?['y'] != null 
+                ? (_selectionPosition!['y'] - 60) 
+                : 100,
+            child: ReadingControlsOverlay(
+              bookId: widget.book.id,
+              selectedText: _selectedText,
+              pageNumber: _currentPage,
+              position: null, // Don't pass position to avoid double positioning
+              onClose: () {
+                setState(() {
+                  _showSelectionOverlay = false;
+                  _selectedText = '';
+                  _selectionPosition = null;
+                });
+              },
+            ),
           ),
       ],
     );
@@ -597,15 +625,35 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   void _handlePdfMessage(Map<String, dynamic> message) {
+    print('📬 Processing PDF message type: ${message['type']}');
+    
     switch (message['type']) {
       case 'pageChange':
+        print('📬 Received pageChange from PDF.js');
         final previousPage = message['previousPage'] ?? 1;
         final newPage = message['newPage'] ?? 1;
         final timeSpent = message['timeSpent'] ?? 0;
+        print('   Previous: $previousPage → New: $newPage');
         _onPageChange(previousPage, newPage, timeSpent);
         break;
       case 'textSelection':
-        _onTextSelection(message['text'] ?? '', message['page'] ?? 1, message['position']);
+        print('📝 Text selection message received');
+        print('   Text: ${message['text']}');
+        print('   Page: ${message['page']}');
+        print('   Position: ${message['position']}');
+        
+        // Convert LinkedMap to Map<String, dynamic>
+        Map<String, dynamic>? position;
+        if (message['position'] != null) {
+          try {
+            position = Map<String, dynamic>.from(message['position']);
+          } catch (e) {
+            print('⚠️ Failed to convert position: $e');
+            position = null;
+          }
+        }
+        
+        _onTextSelection(message['text'] ?? '', message['page'] ?? 1, position);
         break;
       case 'highlight':
         _onHighlight(message['text'] ?? '', message['page'] ?? 1, message['color'] ?? 'yellow');
@@ -619,6 +667,34 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       case 'pdfReady':
         _onPdfReady(message['totalPages'] ?? 0, message['currentPage'] ?? 1);
         break;
+      case 'createNoteFromSelection':
+        _onCreateNoteFromSelection(message);
+        break;
+      case 'noteClicked':
+        print('📌 Note clicked from PDF: ${message['noteId']}');
+        widget.onNoteClicked?.call(message['noteId'] as String);
+        break;
+    }
+  }
+  
+  void _onCreateNoteFromSelection(Map<String, dynamic> message) {
+    final selectedText = message['selectedText'] as String?;
+    final page = message['page'] as int?;
+    final position = message['position'] as Map<String, dynamic>?;
+    
+    if (selectedText != null && page != null) {
+      // Trigger note creation dialog in parent
+      if (mounted) {
+        // Store the selection data temporarily
+        setState(() {
+          _selectedText = selectedText;
+          _selectionPosition = position;
+          _showSelectionOverlay = false; // Hide the selection overlay since we're creating a note
+        });
+        
+        // The actual dialog will be shown by ReadingInterfaceMixin
+        widget.onTextSelected?.call(selectedText, const Offset(0, 0));
+      }
     }
   }
 
@@ -655,17 +731,34 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   void _onTextSelection(String text, int pageNum, Map<String, dynamic>? position) {
-    // Check if widget is still mounted before updating state
-    if (!mounted) return;
+    print('📝 _onTextSelection called with text length: ${text.length}');
+    print('   Text: "$text"');
+    print('   Page: $pageNum');
+    print('   Position: $position');
     
-    // Store selection data and show overlay
+    // Check if widget is still mounted before updating state
+    if (!mounted) {
+      print('⚠️ Widget not mounted, skipping');
+      return;
+    }
+    
+    // Just store the selected text - no overlay needed
+    // The notes dialog will be triggered by the Notes button in the UI
     setState(() {
       _selectedText = text;
-      _showSelectionOverlay = text.isNotEmpty;
+      _selectionPosition = position;
+      // Don't show overlay anymore
+      _showSelectionOverlay = false;
     });
     
+    print('✅ Selected text stored: "$_selectedText"');
+    print('✅ Ready to be used in notes dialog');
+    
+    // Notify parent about selected text change
+    widget.onSelectedTextChanged?.call(text.isNotEmpty ? text : null);
+    
     if (text.isNotEmpty && position != null) {
-      // Save to captured selections list
+      // Save to captured selections list for reference
       final selection = {
         'text': text,
         'page': pageNum,
@@ -676,9 +769,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       
       _capturedTextSelections.add(selection);
       
-      print('📝 Text selected #${_capturedTextSelections.length}: "$text" (${position['charCount'] ?? text.length} chars) on page $pageNum');
-      print('   Position: PDF(${position['pdfX']}, ${position['pdfY']}) Size: ${position['pdfWidth']}x${position['pdfHeight']}');
-      print('   Total selections captured: ${_capturedTextSelections.length}');
+      print('📝 Text selected #${_capturedTextSelections.length}: "$text" on page $pageNum');
     }
   }
 
@@ -702,6 +793,48 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // Start tracking time for the initial page
     _currentPageStartTime = DateTime.now();
     print('📖 PDF ready - starting time tracking for page $currentPage');
+    
+    // Send notes to PDF viewer with a slight delay to ensure PDF.js is fully initialized
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted && _notesForBook.isNotEmpty) {
+        print('📤 Delayed sending ${_notesForBook.length} notes to PDF viewer');
+        _sendNotesToPdfViewer(_notesForBook);
+      }
+    });
+  }
+  
+  /// Send notes data to PDF viewer for highlighting
+  void _sendNotesToPdfViewer(List<dynamic> notes) {
+    if (notes.isEmpty) return;
+    
+    final notesData = notes.map((note) => {
+      'id': note.id,
+      'page': note.pageNumber,
+      'selectedText': note.selectedText,
+      'content': note.content,
+      'title': note.title,
+    }).toList();
+    
+    print('📤 Sending ${notesData.length} notes to PDF viewer');
+    // Debug: Check all notes for selectedText
+    if (notes.isNotEmpty) {
+      print('📝 Notes with selectedText:');
+      for (var note in notes) {
+        print('   ID: ${note.id}, Page: ${note.pageNumber}');
+        print('   selectedText: ${note.selectedText}');
+        print('   selectedText is null: ${note.selectedText == null}');
+        print('   selectedText is empty: ${note.selectedText?.isEmpty ?? true}');
+      }
+    }
+    // Debug: Check first note in notesData to see if conversion worked
+    if (notesData.isNotEmpty) {
+      print('📝 First note in notesData: ${notesData[0]}');
+      print('📝 Full notesData JSON: ${notesData.toString()}');
+    }
+    _iframeElement?.contentWindow?.postMessage({
+      'type': 'displayNotes',
+      'notes': notesData,
+    }, '*');
   }
 
   void _sendPageTimeData(int pageNum, int timeSpent) {

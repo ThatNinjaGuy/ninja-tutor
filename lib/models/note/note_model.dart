@@ -50,6 +50,10 @@ class NoteModel extends Equatable {
   @HiveField(13)
   final AiInsights? aiInsights; // AI-generated insights
   
+  @HiveField(14)
+  @JsonKey(name: 'selected_text')
+  final String? selectedText; // Text selected from PDF that the note was created for
+  
   const NoteModel({
     required this.id,
     required this.bookId,
@@ -65,6 +69,7 @@ class NoteModel extends Equatable {
     this.isFavorite = false,
     this.linkedText,
     this.aiInsights,
+    this.selectedText,
   });
   
   factory NoteModel.fromJson(Map<String, dynamic> json) => 
@@ -103,6 +108,7 @@ class NoteModel extends Equatable {
     bool? isFavorite,
     String? linkedText,
     AiInsights? aiInsights,
+    String? selectedText,
   }) {
     return NoteModel(
       id: id ?? this.id,
@@ -119,6 +125,7 @@ class NoteModel extends Equatable {
       isFavorite: isFavorite ?? this.isFavorite,
       linkedText: linkedText ?? this.linkedText,
       aiInsights: aiInsights ?? this.aiInsights,
+      selectedText: selectedText ?? this.selectedText,
     );
   }
   
@@ -138,6 +145,7 @@ class NoteModel extends Equatable {
         isFavorite,
         linkedText,
         aiInsights,
+        selectedText,
       ];
 }
 

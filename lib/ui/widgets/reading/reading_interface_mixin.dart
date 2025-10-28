@@ -10,6 +10,7 @@ import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/reading_ai_provider.dart';
 import '../../../core/providers/bookmark_provider.dart';
 import '../../../core/providers/notes_provider.dart';
+import '../../../core/providers/reading_page_provider.dart';
 import '../../../core/constants/app_constants.dart';
 import 'reading_viewer.dart';
 import 'ai_chat_panel.dart';
@@ -17,6 +18,7 @@ import 'bookmark_panel.dart';
 import 'notes_panel.dart';
 import 'notes_tooltip.dart';
 import 'note_creation_dialog.dart';
+import 'note_edit_dialog.dart';
 
 /// Mixin providing shared reading interface functionality
 /// Used by both LibraryScreen and ReadingScreen to avoid code duplication
@@ -25,6 +27,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   bool _isReadingMode = false;
   bool _showAiPanel = false;
   String? _selectedText;
+  String? _selectedTextFromPdf;  // Store selected text from PDF
   int _currentPage = 1;
   
   // Bookmark and notes tooltip state
@@ -63,6 +66,15 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
         _showNotesTooltip = false;
       }
     });
+    
+    // Update the reading page provider after setState completes
+    if (_currentBookId != null) {
+      Future.microtask(() {
+        if (mounted) {
+          ref.read(readingPageProvider.notifier).updatePage(_currentBookId!, value);
+        }
+      });
+    }
   }
   
   /// Build the complete reading interface
@@ -75,6 +87,8 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       // Use microtask to ensure it runs only once per build cycle
       Future.microtask(() {
         if (mounted && _currentBookId == book.id) {
+          // Update reading page provider after build phase
+          ref.read(readingPageProvider.notifier).updatePage(book.id, _currentPage);
           ref.read(bookmarkProvider.notifier).loadBookmarks(book.id);
           ref.read(notesProvider.notifier).loadNotes(book.id);
         }
@@ -154,6 +168,9 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
                   onTextSelected: _handleTextSelection,
                   onDefinitionRequest: _handleDefinitionRequest,
                   onPageChanged: (page) => setCurrentPage(page),
+                  onSelectedTextChanged: _handlePdfTextSelection,
+                  onNoteClicked: _handleNoteClick,
+                  notes: ref.watch(notesProvider).allNotes.where((note) => note.bookId == book.id).toList(),
                 ),
               ),
               // Vertical helper panel on the right
@@ -171,6 +188,9 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
                   onTextSelected: _handleTextSelection,
                   onDefinitionRequest: _handleDefinitionRequest,
                   onPageChanged: (page) => setCurrentPage(page),
+                  onSelectedTextChanged: _handlePdfTextSelection,
+                  onNoteClicked: _handleNoteClick,
+                  notes: ref.watch(notesProvider).allNotes.where((note) => note.bookId == book.id).toList(),
                 ),
               ),
               // Horizontal helper panel at the bottom
@@ -577,6 +597,8 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
               key: ValueKey('notes_${book.id}'),
               bookId: book.id,
               getCurrentPage: () => _currentPage,  // Pass callback to get current page dynamically
+              selectedText: _selectedTextFromPdf,  // Pass selected text from PDF
+              onNoteClicked: _handleNoteClick,  // Handle note clicks from sidebar
               onClose: () {
                 Navigator.of(dialogContext).pop();
                 setState(() {
@@ -641,8 +663,100 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   void _handleTextSelection(String text, Offset position) {
     setState(() {
       _selectedText = text;
-      _showAiPanel = true;
+      // Don't auto-open AI panel anymore, let user choose
     });
+    
+    // Show note creation dialog if we have a current book
+    if (_currentBookId != null && text.isNotEmpty) {
+      _showNoteCreationDialogWithSelection(_currentBookId!, text);
+    }
+  }
+  
+  // Handler for PDF text selection changes from ReadingViewer
+  void _handlePdfTextSelection(String? selectedText) {
+    setState(() {
+      _selectedTextFromPdf = selectedText;
+    });
+    print('📝 PDF text selection changed: ${selectedText?.substring(0, selectedText.length > 50 ? 50 : selectedText.length)}...');
+  }
+  
+  /// Handle note click from PDF or sidebar
+  Future<void> _handleNoteClick(String noteId) async {
+    print('📌 Note clicked: $noteId');
+    
+    // Find the note in the provider
+    final notes = ref.read(notesProvider).allNotes;
+    final note = notes.firstWhere((n) => n.id == noteId, orElse: () => throw Exception('Note not found'));
+    
+    if (!mounted) return;
+    
+    // Show edit dialog
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => NoteEditDialog(
+        note: note,
+        onSave: (content, title, noteId) async {
+          // Update note via provider
+          await ref.read(notesProvider.notifier).updateNote(
+            noteId: noteId ?? note.id,
+            content: content,
+            title: title,
+          );
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Note updated'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+        onDelete: (noteId) async {
+          // Delete note via provider
+          await ref.read(notesProvider.notifier).deleteNote(noteId);
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Note deleted'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+  
+  /// Show note creation dialog with selected text
+  Future<void> _showNoteCreationDialogWithSelection(String bookId, String selectedText) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => NoteCreationDialog(
+        pageNumber: _currentPage,
+        selectedText: selectedText,
+        onSave: (content, title, selectedText) async {
+          final note = await ref.read(notesProvider.notifier).createNote(
+            bookId: bookId,
+            pageNumber: _currentPage,
+            content: content,
+            title: title,
+            selectedText: selectedText,
+          );
+          
+          if (note != null && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Note added to page $_currentPage'),
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
+      ),
+    );
   }
 
   void _handleDefinitionRequest(String word) {
@@ -657,12 +771,14 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       context: context,
       builder: (context) => NoteCreationDialog(
         pageNumber: _currentPage,
-        onSave: (content, title) async {
+        selectedText: _selectedTextFromPdf,
+        onSave: (content, title, selectedText) async {
           final note = await ref.read(notesProvider.notifier).createNote(
             bookId: bookId,
             pageNumber: _currentPage,
             content: content,
             title: title,
+            selectedText: selectedText,
           );
           
           if (note != null && mounted) {
@@ -702,11 +818,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     );
     
     if (confirm == true) {
-      final success = await ref.read(notesProvider.notifier).deleteNote(
-        bookId: bookId,
-        noteId: note.id,
-        pageNumber: note.pageNumber,
-      );
+      final success = await ref.read(notesProvider.notifier).deleteNote(note.id);
       
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

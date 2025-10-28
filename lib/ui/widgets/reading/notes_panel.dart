@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/note/note_model.dart';
 import '../../../core/providers/notes_provider.dart';
+import '../../../core/providers/reading_page_provider.dart';
 import '../../../core/constants/app_constants.dart';
 import 'note_creation_dialog.dart';
 
@@ -12,12 +13,16 @@ class NotesPanel extends ConsumerStatefulWidget {
   final String bookId;
   final int Function() getCurrentPage;  // Changed to callback
   final VoidCallback onClose;
+  final String? selectedText;  // Optional: pre-selected text from PDF
+  final Function(String noteId)? onNoteClicked;  // Callback when a note is clicked
 
   const NotesPanel({
     super.key,
     required this.bookId,
     required this.getCurrentPage,
     required this.onClose,
+    this.selectedText,
+    this.onNoteClicked,
   });
 
   @override
@@ -61,11 +66,7 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
     setState(() => _isProcessing = true);
     
     try {
-      final success = await ref.read(notesProvider.notifier).deleteNote(
-        bookId: widget.bookId,
-        noteId: note.id,
-        pageNumber: note.pageNumber,
-      );
+      final success = await ref.read(notesProvider.notifier).deleteNote(note.id);
       
       if (mounted) {
         if (success) {
@@ -97,12 +98,15 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
   Future<void> _showNoteCreationDialog() async {
     if (_isProcessing) return;
     
-    final currentPage = widget.getCurrentPage();  // Get current page at dialog time
+    // Get current page at dialog time - use provider or fallback to callback
+    final pageState = ref.read(readingPageProvider);
+    final currentPage = pageState.bookId == widget.bookId ? pageState.currentPage : widget.getCurrentPage();
     await showDialog(
       context: context,
       builder: (context) => NoteCreationDialog(
         pageNumber: currentPage,
-        onSave: (String content, String? title) async {
+        selectedText: widget.selectedText,  // Pass selected text from PDF
+        onSave: (String content, String? title, String? selectedText) async {
           setState(() => _isProcessing = true);
           
           try {
@@ -111,6 +115,7 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
               pageNumber: currentPage,
               content: content,
               title: title,
+              selectedText: selectedText, // Pass selected text to provider
             );
 
             if (mounted) {
@@ -190,7 +195,9 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
   }
 
   Widget _buildHeader(ThemeData theme, NotesState notesState) {
-    final currentPage = widget.getCurrentPage();  // Get current page dynamically
+    // Watch reading page provider for dynamic updates
+    final pageState = ref.watch(readingPageProvider);
+    final currentPage = pageState.bookId == widget.bookId ? pageState.currentPage : widget.getCurrentPage();
     final displayedNotes = _showCurrentPageOnly
         ? notesState.getNotesForPage(currentPage)
         : notesState.allNotes;
@@ -272,7 +279,9 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
   }
 
   Widget _buildNotesList(ThemeData theme, NotesState notesState) {
-    final currentPage = widget.getCurrentPage();  // Get current page dynamically
+    // Watch reading page provider for dynamic updates
+    final pageState = ref.watch(readingPageProvider);
+    final currentPage = pageState.bookId == widget.bookId ? pageState.currentPage : widget.getCurrentPage();
     final displayedNotes = _showCurrentPageOnly
         ? notesState.getNotesForPage(currentPage)
         : notesState.allNotes;
@@ -336,11 +345,16 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
   }
 
   Widget _buildNoteItem(ThemeData theme, NoteModel note) {
-    final currentPage = widget.getCurrentPage();  // Get current page dynamically
+    // Watch reading page provider for dynamic updates
+    final pageState = ref.watch(readingPageProvider);
+    final currentPage = pageState.bookId == widget.bookId ? pageState.currentPage : widget.getCurrentPage();
     final isCurrentPage = note.pageNumber == currentPage;
     final dateFormat = DateFormat('MMM d, HH:mm');
 
-    return Container(
+    return InkWell(
+      onTap: () => widget.onNoteClicked?.call(note.id),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isCurrentPage
@@ -407,6 +421,50 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
                 ),
               ),
             ],
+            // Display selected text (context from PDF) if available
+            if (note.selectedText != null && note.selectedText!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: theme.colorScheme.primary.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.text_fields,
+                          size: 16,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Selected text',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      note.selectedText!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Text(
               note.content,
@@ -415,11 +473,14 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
           ],
         ),
       ),
+      ),
     );
   }
 
   Widget _buildAddNoteSection(ThemeData theme) {
-    final currentPage = widget.getCurrentPage();  // Get current page dynamically
+    // Watch reading page provider for dynamic updates
+    final pageState = ref.watch(readingPageProvider);
+    final currentPage = pageState.bookId == widget.bookId ? pageState.currentPage : widget.getCurrentPage();
     final currentPageNotesCount = ref.watch(notesProvider).getNotesCountForPage(currentPage);
 
     return Container(
