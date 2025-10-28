@@ -84,8 +84,10 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  assets:
-    - web/pdfjs/
+  # Note: web/ directory files are served directly by Flutter web, not as assets
+  # assets:
+  #   - web/pdfjs/
+  #   - web/epubjs/
 
   # fonts:
   #   - family: Inter

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 import 'dart:async';
+import 'dart:js_util' as js_util;
 import 'reading_controls_overlay.dart';
 
 import '../../../models/content/book_model.dart';
@@ -43,9 +44,13 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   bool _isLoading = true;
   String? _error;
   html.IFrameElement? _iframeElement;
-  String? _pdfBlobUrl;
   bool _pdfSent = false; // Track if PDF has been sent to viewer to prevent duplicate loads
   String? _currentViewType; // Track current view type to avoid re-registration
+  
+  // EPUB support
+  bool _isEpubFormat = false;
+  String? _epubBlobUrl;
+  bool _epubSent = false;
   
   // Text selection overlay
   String _selectedText = '';
@@ -75,18 +80,32 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   void initState() {
     super.initState();
     _pdfSent = false; // Reset flag on each load
-    _pdfBlobUrl = null; // Clear previous blob URL
     _iframeElement = null; // Reset iframe element to force re-creation
     _isLoading = true; // Reset loading state
     _error = null; // Clear any previous errors
     _currentViewType = null; // Reset view type for fresh iframe
-    _loadPdfData();
+    
+    // Detect format and load appropriate viewer
+    _isEpubFormat = _detectEpubFormat(widget.book);
+    if (_isEpubFormat) {
+      _loadEpubData();
+    } else {
+      _loadPdfData();
+    }
     _startPeriodicProgressSave();
     
     // Initialize notes from widget
     if (widget.notes != null) {
       _notesForBook = List.from(widget.notes!);
     }
+  }
+  
+  /// Detect if the book is in EPUB format
+  bool _detectEpubFormat(BookModel book) {
+    final fileUrl = book.fileUrl ?? '';
+    final format = book.metadata.format?.toLowerCase();
+    return fileUrl.toLowerCase().endsWith('.epub') || 
+           format == 'epub';
   }
 
   @override
@@ -95,12 +114,20 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // If the book changed, reset everything and reload
     if (oldWidget.book.id != widget.book.id) {
       _pdfSent = false;
-      _pdfBlobUrl = null;
+      _epubSent = false;
+      _epubBlobUrl = null;
       _iframeElement = null;
       _isLoading = true;
       _error = null;
       _currentViewType = null; // Force new view type for new book
-      _loadPdfData();
+      
+      // Re-detect format and load appropriate viewer
+      _isEpubFormat = _detectEpubFormat(widget.book);
+      if (_isEpubFormat) {
+        _loadEpubData();
+      } else {
+        _loadPdfData();
+      }
     }
     
     // Update notes when widget.notes changes
@@ -122,14 +149,15 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       _messageListener = null;
     }
     
-    // Clean up blob URL to prevent memory leaks
-    if (_pdfBlobUrl != null) {
-      html.Url.revokeObjectUrl(_pdfBlobUrl!);
-      _pdfBlobUrl = null;
+    // Clean up blob URLs to prevent memory leaks
+    if (_epubBlobUrl != null) {
+      html.Url.revokeObjectUrl(_epubBlobUrl!);
+      _epubBlobUrl = null;
     }
     
     // Reset state for next load
     _pdfSent = false;
+    _epubSent = false;
     _isLoading = true;
     
     super.dispose();
@@ -153,34 +181,109 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       return;
     }
     
-    // Fetch PDF as blob and create blob URL to pass to viewer
+    // For PDF files, use direct URL (no blob pre-fetching)
+    // PDF.js will handle range requests automatically for streaming
+    debugPrint('📄 PDF detected - using direct URL for streaming (no blob pre-fetch)');
+    
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _error = null;
+        // Don't set _pdfBlobUrl - we'll use the backend endpoint directly
+      });
+      
+      // Try to send PDF URL to iframe if it's already loaded
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _sendPdfUrlToIframe();
+      });
+    }
+  }
+
+  Future<void> _loadEpubData() async {
+    debugPrint('📕 Starting EPUB load for book: ${widget.book.title}');
+    debugPrint('📕 Book fileUrl: ${widget.book.fileUrl}');
+    debugPrint('📕 Book format: ${widget.book.metadata.format}');
+    
+    if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
+      debugPrint('❌ No EPUB file URL available');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'No EPUB file available for this book';
+        });
+      }
+      return;
+    }
+    
+    // Fetch EPUB as blob and convert to base64 data URI for EPUB.js
     try {
       final backendUrl = '${AppConstants.baseUrl}/api/v1/books/${widget.book.id}/file';
+      debugPrint('📕 Fetching EPUB from: $backendUrl');
+      
       final response = await html.window.fetch(backendUrl);
+      
+      // Use JS interop to access status safely
+      final status = _getResponseStatus(response);
+      final statusText = _getResponseStatusText(response);
+      final isOk = _isResponseOk(response);
+      debugPrint('📕 Fetch response status: $status');
+      debugPrint('📕 Response OK: $isOk');
+      
+      if (!isOk) {
+        throw Exception('HTTP $status: $statusText');
+      }
       
       // Convert response to blob
       final blob = await response.blob();
+      debugPrint('📕 Blob created, size: ${blob.size} bytes, type: ${blob.type}');
       
-      // Create blob URL that the viewer can use
-      final blobUrl = html.Url.createObjectUrl(blob);
+      // Convert blob to base64 data URI for EPUB.js
+      // EPUB.js has issues with blob: URLs for ZIP files, so we use data URI
+      final reader = html.FileReader();
+      reader.readAsDataUrl(blob);
+      await reader.onLoad.first;
+      String dataUrl = reader.result as String;
+      
+      debugPrint('📕 Data URL created, length: ${dataUrl.length} chars');
+      debugPrint('📕 Data URL prefix: ${dataUrl.substring(0, 50)}...');
+      
+      // Fix the MIME type in the data URI (backend now sets correct type, but fix just in case)
+      if (dataUrl.startsWith('data:application/pdf')) {
+        debugPrint('⚠️ Fixing incorrect MIME type from application/pdf to application/epub+zip');
+        dataUrl = dataUrl.replaceFirst('data:application/pdf', 'data:application/epub+zip');
+      }
+      
+      final blobUrl = dataUrl;
       
       if (mounted) {
         setState(() {
-          _pdfBlobUrl = blobUrl;
+          _epubBlobUrl = blobUrl;
           _isLoading = false;
           _error = null;
         });
         
-        // Try to send PDF URL to iframe if it's already loaded
+        debugPrint('✅ EPUB blob URL set, will send to iframe');
+        
+        // Try to send EPUB URL to iframe if it's already loaded
         Future.delayed(const Duration(milliseconds: 300), () {
-          _sendPdfUrlToIframe();
+          _sendEpubUrlToIframe();
+        });
+        
+        // Retry sending after 1 second if needed
+        Future.delayed(const Duration(milliseconds: 1000), () {
+          if (!_epubSent) {
+            debugPrint('⚠️ EPUB not sent after 1s, retrying...');
+            _sendEpubUrlToIframe();
+          }
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('❌ Failed to load EPUB: $e');
+      debugPrint('❌ Stack trace: $stackTrace');
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Failed to load PDF: $e';
+          _error = 'Failed to load EPUB: $e';
         });
       }
     }
@@ -189,6 +292,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    
+    debugPrint('📖 ReadingViewer build: isEpubFormat=$_isEpubFormat, isLoading=$_isLoading, error=$_error');
     
     return Container(
       color: theme.colorScheme.surface,
@@ -199,6 +304,13 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
             _buildLoadingState(theme)
           else if (_error != null)
               _buildErrorState(theme)
+            else if (_isEpubFormat) ...[
+              // Show debug info for EPUB
+              () {
+                debugPrint('📕 Rendering EPUB viewer for: ${widget.book.title}');
+                return _buildEpubViewer(theme);
+              }()
+            ]
             else
               _buildPdfViewer(theme),
             
@@ -208,6 +320,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   Widget _buildLoadingState(ThemeData theme) {
+    final formatName = _isEpubFormat ? 'EPUB' : 'PDF';
+    
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -220,6 +334,13 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
             'Loading ${widget.book.title}...',
             style: theme.textTheme.titleMedium?.copyWith(
               color: theme.colorScheme.onSurface.withOpacity(0.7),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Format: $formatName',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
             ),
           ),
         ],
@@ -436,6 +557,158 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     );
   }
 
+  Widget _buildEpubViewer(ThemeData theme) {
+    final fullUrl = _getFullEpubUrl();
+    
+    // Show loading screen while blob URL is being created
+    if (fullUrl == null && _isLoading) {
+      return _buildLoadingScreen();
+    }
+    
+    // Show error screen if loading failed
+    if (fullUrl == null && _error == null && !_isLoading) {
+      return _buildFallbackContent();
+    }
+
+    // Return loading screen if URL is still null at this point
+    if (fullUrl == null) {
+      return _buildLoadingScreen();
+    }
+
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          height: double.infinity,
+          color: Colors.grey[200],
+          child: _buildWebEpubViewer(fullUrl),
+        ),
+        
+        // Text selection overlay - positioned relative to the Stack
+        if (_showSelectionOverlay && _selectedText.isNotEmpty)
+          Positioned(
+            left: _selectionPosition?['x'] ?? 100,
+            top: _selectionPosition?['y'] != null 
+                ? (_selectionPosition!['y'] - 60) 
+                : 100,
+            child: ReadingControlsOverlay(
+              bookId: widget.book.id,
+              selectedText: _selectedText,
+              pageNumber: _currentPage,
+              position: null,
+              onClose: () {
+                setState(() {
+                  _showSelectionOverlay = false;
+                  _selectedText = '';
+                  _selectionPosition = null;
+                });
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildWebEpubViewer(String epubUrl) {
+    // Use EPUB.js for web EPUB viewing
+    // Only create a new view type if book changes
+    if (_currentViewType == null || !_currentViewType!.contains(widget.book.id)) {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      _currentViewType = 'epub-viewer-${widget.book.id}-$timestamp';
+    }
+    final viewType = _currentViewType!;
+    
+    // Use EPUB.js viewer from Flutter app
+    final epubJsUrl = '/epubjs/web/custom_epub_viewer.html';
+    
+    debugPrint('📕 Creating EPUB viewer iframe with viewType: $viewType');
+    debugPrint('📕 EPUB viewer URL: $epubJsUrl');
+    
+    // Register the view factory
+    try {
+      ui_web.platformViewRegistry.registerViewFactory(
+        viewType,
+        (int viewId) {
+          debugPrint('📕 View factory called for viewId: $viewId');
+          
+          _iframeElement = html.IFrameElement()
+            ..src = epubJsUrl
+            ..style.border = 'none'
+            ..style.width = '100%'
+            ..style.height = '100%'
+            ..style.display = 'block'
+            ..allowFullscreen = true
+            ..onLoad.listen((_) {
+              debugPrint('✅ EPUB iframe loaded successfully');
+              
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                });
+                
+                // Setup message listener for EPUB.js communication
+                _setupPdfMessageListener();
+                
+                // Jump to last read page if available
+                if (widget.book.progress?.currentPage != null && 
+                    widget.book.progress!.currentPage > 0) {
+                  setState(() {
+                    _currentPage = widget.book.progress!.currentPage;
+                  });
+                }
+                
+                // Send EPUB URL via postMessage when iframe is ready
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  debugPrint('📕 Attempting to send EPUB URL (500ms delay)');
+                  _sendEpubUrlToIframe();
+                });
+                
+                // Also try to send if blob URL becomes available
+                Future.delayed(const Duration(milliseconds: 1000), () {
+                  debugPrint('📕 Attempting to send EPUB URL (1000ms delay)');
+                  _sendEpubUrlToIframe();
+                });
+                
+                // Additional retry after 2 seconds
+                Future.delayed(const Duration(milliseconds: 2000), () {
+                  if (!_epubSent && mounted) {
+                    debugPrint('📕 Final retry to send EPUB URL (2000ms delay)');
+                    _sendEpubUrlToIframe();
+                  }
+                });
+              }
+            })
+            ..onError.listen((event) {
+              debugPrint('❌ EPUB iframe error: $event');
+              if (mounted) {
+                setState(() {
+                  _error = 'Failed to load EPUB viewer iframe: ${event.toString()}';
+                  _isLoading = false;
+                });
+              }
+            });
+          
+          debugPrint('📕 Returning EPUB iframe element');
+          return _iframeElement!;
+        },
+      );
+    } catch (e, stackTrace) {
+      // View factory might already be registered
+      debugPrint('⚠️ View factory registration error (might be already registered): $e');
+      debugPrint('⚠️ Stack trace: $stackTrace');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.white,
+      child: HtmlElementView(viewType: viewType),
+    );
+  }
+
   Widget _buildFallbackContent() {
     return Container(
       padding: const EdgeInsets.all(32),
@@ -483,22 +756,31 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   String? _getFullPdfUrl() {
-    // Use blob URL if available (PDF data loaded as blob to avoid origin issues)
-    if (_pdfBlobUrl != null) {
-      print('✅ Using blob URL for PDF: $_pdfBlobUrl');
-      return _pdfBlobUrl;
+    // Use direct backend endpoint for streaming with Range requests
+    // No more blob URL - PDF.js will fetch the PDF incrementally
+    final bookId = widget.book.id;
+    final backendUrl = '${AppConstants.baseUrl}/api/v1/books/$bookId/file';
+    debugPrint('✅ Using backend endpoint for PDF streaming: $backendUrl');
+    return backendUrl;
+  }
+
+  String? _getFullEpubUrl() {
+    // Use blob URL if available (EPUB data loaded as blob to avoid origin issues)
+    if (_epubBlobUrl != null) {
+      print('✅ Using blob URL for EPUB: $_epubBlobUrl');
+      return _epubBlobUrl;
     }
     
     // If blob URL is not ready yet, return null to wait
     if (_isLoading) {
-      print('⏳ Waiting for blob URL to be created...');
+      print('⏳ Waiting for EPUB blob URL to be created...');
       return null;
     }
     
-    // Fallback to backend endpoint (for legacy support)
+    // Fallback to backend endpoint
     final bookId = widget.book.id;
     final backendUrl = '${AppConstants.baseUrl}/api/v1/books/$bookId/file';
-    print('✅ Using backend endpoint for PDF: $backendUrl');
+    print('✅ Using backend endpoint for EPUB: $backendUrl');
     return backendUrl;
   }
 
@@ -572,6 +854,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   void _handlePdfMessage(Map<String, dynamic> message) {
+    debugPrint('📨 Received message from viewer: ${message['type']}');
+    
     switch (message['type']) {
       case 'pageChange':
         final previousPage = message['previousPage'] ?? 1;
@@ -604,12 +888,29 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       case 'pdfReady':
         _onPdfReady(message['totalPages'] ?? 0, message['currentPage'] ?? 1);
         break;
+      case 'bookReady':
+        // Handle EPUB book ready message (same as pdfReady)
+        debugPrint('📕 EPUB book ready message received');
+        _onPdfReady(message['totalPages'] ?? 0, message['currentPage'] ?? 1);
+        break;
+      case 'error':
+        // Handle error messages from viewer
+        debugPrint('❌ Error from viewer: ${message['message']}');
+        if (mounted) {
+          setState(() {
+            _error = 'Viewer error: ${message['message']}';
+            _isLoading = false;
+          });
+        }
+        break;
       case 'createNoteFromSelection':
         _onCreateNoteFromSelection(message);
         break;
       case 'noteClicked':
         widget.onNoteClicked?.call(message['noteId'] as String);
         break;
+      default:
+        debugPrint('⚠️ Unknown message type: ${message['type']}');
     }
   }
   
@@ -885,30 +1186,26 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   void _sendPdfUrlToIframe() {
     // Prevent sending PDF multiple times (which causes double rendering)
     if (_pdfSent) {
-      print('⚠️ PDF already sent, skipping duplicate send');
+      debugPrint('⚠️ PDF already sent, skipping duplicate send');
       return;
     }
     
-    print('🔍 _sendPdfUrlToIframe called');
-    print('🔍 _iframeElement: $_iframeElement');
-    print('🔍 _iframeElement?.contentWindow: ${_iframeElement?.contentWindow}');
-    print('🔍 _pdfBlobUrl: $_pdfBlobUrl');
+    debugPrint('🔍 _sendPdfUrlToIframe called');
     
     if (_iframeElement == null || _iframeElement!.contentWindow == null) {
-      print('⚠️ Cannot send PDF URL: iframe not ready');
-      print('   - iframe null: ${_iframeElement == null}');
-      print('   - contentWindow null: ${_iframeElement?.contentWindow == null}');
+      debugPrint('⚠️ Cannot send PDF URL: iframe not ready');
       return;
     }
     
-    final pdfUrl = _pdfBlobUrl;
+    // Get direct backend URL (no blob)
+    final pdfUrl = _getFullPdfUrl();
     if (pdfUrl == null) {
-      print('⚠️ Cannot send PDF URL: blob URL not ready');
+      debugPrint('⚠️ Cannot send PDF URL: URL not available');
       return;
     }
     
-    print('📨 Sending PDF URL to iframe: $pdfUrl');
-    print('📨 Message payload: {type: loadPDF, url: $pdfUrl}');
+    debugPrint('📨 Sending PDF URL to iframe for streaming: $pdfUrl');
+    debugPrint('📨 PDF.js will use HTTP Range requests for incremental loading');
     
     try {
       _iframeElement!.contentWindow!.postMessage({
@@ -916,10 +1213,101 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         'url': pdfUrl,
       }, '*');
       _pdfSent = true; // Mark as sent to prevent duplicate sends
-      print('✅ PDF URL sent successfully via postMessage');
+      debugPrint('✅ PDF URL sent successfully - streaming enabled');
     } catch (e) {
-      print('❌ Failed to send PDF URL: $e');
-      print('❌ Stack trace: ${StackTrace.current}');
+      debugPrint('❌ Failed to send PDF URL: $e');
+    }
+  }
+  
+  /// Send EPUB URL to iframe via postMessage
+  void _sendEpubUrlToIframe() {
+    // Prevent sending EPUB multiple times (which causes double rendering)
+    if (_epubSent) {
+      debugPrint('⚠️ EPUB already sent, skipping duplicate send');
+      return;
+    }
+    
+    debugPrint('🔍 _sendEpubUrlToIframe called');
+    debugPrint('🔍 _iframeElement: $_iframeElement');
+    debugPrint('🔍 _iframeElement?.contentWindow: ${_iframeElement?.contentWindow}');
+    debugPrint('🔍 _epubBlobUrl length: ${_epubBlobUrl?.length ?? 0}');
+    
+    if (_iframeElement == null || _iframeElement!.contentWindow == null) {
+      debugPrint('⚠️ Cannot send EPUB URL: iframe not ready');
+      debugPrint('   - iframe null: ${_iframeElement == null}');
+      debugPrint('   - contentWindow null: ${_iframeElement?.contentWindow == null}');
+      return;
+    }
+    
+    final epubUrl = _epubBlobUrl;
+    if (epubUrl == null) {
+      debugPrint('⚠️ Cannot send EPUB URL: blob URL not ready');
+      return;
+    }
+    
+    debugPrint('📨 Sending EPUB URL to iframe (data URI length: ${epubUrl.length} chars)');
+    debugPrint('📨 Message payload: {type: loadEPUB, url: [data URI]}');
+    
+    try {
+      _iframeElement!.contentWindow!.postMessage({
+        'type': 'loadEPUB',
+        'url': epubUrl,
+      }, '*');
+      _epubSent = true; // Mark as sent to prevent duplicate sends
+      debugPrint('✅ EPUB URL sent successfully via postMessage');
+    } catch (e, stackTrace) {
+      debugPrint('❌ Failed to send EPUB URL: $e');
+      debugPrint('❌ Stack trace: $stackTrace');
+      
+      // Update error state
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to send EPUB to viewer: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  
+  /// Helper method to safely get response status from web Response object
+  int _getResponseStatus(dynamic response) {
+    try {
+      // Access the underlying JS object's status property using JS interop
+      return js_util.getProperty(response, 'status') as int? ?? 200;
+    } catch (e) {
+      // Fallback: check if response is OK
+      final isOk = _isResponseOk(response);
+      return isOk ? 200 : 500;
+    }
+  }
+  
+  /// Helper method to safely get response status text from web Response object
+  String _getResponseStatusText(dynamic response) {
+    try {
+      // Use JS interop to get statusText
+      return js_util.getProperty(response, 'statusText') as String? ?? 'Unknown';
+    } catch (e) {
+      return 'Unknown';
+    }
+  }
+  
+  /// Helper method to safely check if response is OK
+  bool _isResponseOk(dynamic response) {
+    try {
+      // Use JS interop to get 'ok' property
+      final ok = js_util.getProperty(response, 'ok') as bool?;
+      
+      // If 'ok' property is not available, check status code
+      if (ok != null) {
+        return ok;
+      }
+      
+      // Fallback: check if status is between 200-299
+      final status = _getResponseStatus(response);
+      return status >= 200 && status < 300;
+    } catch (e) {
+      // Last resort: default to false for error state
+      return false;
     }
   }
 }
