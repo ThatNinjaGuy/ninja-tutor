@@ -81,6 +81,13 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   Widget buildReadingInterface(BookModel book) {
     // Load bookmarks and notes when book changes (only once)
     if (_currentBookId != book.id) {
+      // Clear selected text when switching books
+      final hadSelectedText = _selectedTextFromPdf != null;
+      if (hadSelectedText) {
+        setState(() {
+          _selectedTextFromPdf = null;
+        });
+      }
       _currentBookId = book.id;
       // Reset current page when switching books
       _currentPage = book.progress?.currentPage ?? 1;
@@ -91,6 +98,15 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
           ref.read(readingPageProvider.notifier).updatePage(book.id, _currentPage);
           ref.read(bookmarkProvider.notifier).loadBookmarks(book.id);
           ref.read(notesProvider.notifier).loadNotes(book.id);
+          // Clear AI context when book changes
+          if (hadSelectedText) {
+            ref.read(readingAiProvider.notifier).clearSelectedText();
+          }
+          ref.read(readingAiProvider.notifier).updateContext(
+            page: _currentPage,
+            selectedText: null,
+            bookId: book.id,
+          );
         }
       });
     }
@@ -122,7 +138,6 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       onKeyEvent: (KeyEvent event) {
         if (event is KeyDownEvent && event.logicalKey.keyLabel == 'Escape') {
           if (_showBookmarkPanel || _showNotesPanel || _showNotesTooltip) {
-            print('🔴 Escape key pressed - closing panels');
             setState(() {
               _showBookmarkPanel = false;
               _showNotesPanel = false;
@@ -135,7 +150,6 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
         onTap: () {
         // Close panels when tapping outside
         if (_showBookmarkPanel || _showNotesPanel || _showNotesTooltip) {
-          print('🔴 Tap outside panels - closing all');
           setState(() {
             _showBookmarkPanel = false;
             _showNotesPanel = false;
@@ -262,11 +276,9 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
             top: 180,
             child: MouseRegion(
               onEnter: (_) {
-                print('🟢 Mouse entered notes tooltip');
                 _hideNotesTimer?.cancel();
               },
               onExit: (_) {
-                print('🔴 Mouse left notes tooltip - auto-hiding in 2s');
                 _hideNotesTimer = Timer(const Duration(seconds: 2), () {
                   if (mounted) {
                     setState(() => _showNotesTooltip = false);
@@ -278,11 +290,9 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
                 allBookNotes: notesState.allNotes,
                 currentPage: _currentPage,
                 onNoteDelete: (note) {
-                  print('🗑️ Delete note: ${note.id}');
                   _deleteNote(book.id, note);
                 },
                 onClose: () {
-                  print('🔴 Close notes tooltip');
                   setState(() => _showNotesTooltip = false);
                 },
               ),
@@ -632,11 +642,10 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       for (var iframe in iframes) {
         if (iframe is html.IFrameElement) {
           iframe.style.pointerEvents = 'none';
-          print('🚫 Disabled PDF pointer events');
         }
       }
     } catch (e) {
-      print('Could not disable PDF pointer events: $e');
+      // Silently handle error
     }
   }
   
@@ -647,11 +656,10 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       for (var iframe in iframes) {
         if (iframe is html.IFrameElement) {
           iframe.style.pointerEvents = 'auto';
-          print('✅ Enabled PDF pointer events');
         }
       }
     } catch (e) {
-      print('Could not enable PDF pointer events: $e');
+      // Silently handle error
     }
   }
   
@@ -675,13 +683,10 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     setState(() {
       _selectedTextFromPdf = selectedText;
     });
-    print('📝 PDF text selection changed: ${selectedText?.substring(0, selectedText.length > 50 ? 50 : selectedText.length)}...');
   }
   
   /// Handle note click from PDF or sidebar
   Future<void> _handleNoteClick(String noteId) async {
-    print('📌 Note clicked: $noteId');
-    
     // Find the note in the provider
     final notes = ref.read(notesProvider).allNotes;
     final note = notes.firstWhere((n) => n.id == noteId, orElse: () => throw Exception('Note not found'));

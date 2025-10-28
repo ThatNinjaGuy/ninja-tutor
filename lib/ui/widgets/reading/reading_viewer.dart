@@ -74,7 +74,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   @override
   void initState() {
     super.initState();
-    print('🔄 ReadingViewer initState - Resetting state for new book load');
     _pdfSent = false; // Reset flag on each load
     _pdfBlobUrl = null; // Clear previous blob URL
     _iframeElement = null; // Reset iframe element to force re-creation
@@ -86,7 +85,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     
     // Initialize notes from widget
     if (widget.notes != null) {
-      print('📝 initState: Initializing ${widget.notes!.length} notes');
       _notesForBook = List.from(widget.notes!);
     }
   }
@@ -96,7 +94,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     super.didUpdateWidget(oldWidget);
     // If the book changed, reset everything and reload
     if (oldWidget.book.id != widget.book.id) {
-      print('🔄 Book changed, resetting state for: ${widget.book.title}');
       _pdfSent = false;
       _pdfBlobUrl = null;
       _iframeElement = null;
@@ -108,7 +105,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     
     // Update notes when widget.notes changes
     if (widget.notes != null && widget.notes != oldWidget.notes) {
-      print('📝 Notes updated, sending to PDF viewer: ${widget.notes!.length} notes');
       _notesForBook = List.from(widget.notes!);
       _sendNotesToPdfViewer(_notesForBook);
     }
@@ -117,7 +113,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   @override
   void dispose() {
     _progressSaveTimer?.cancel();
-    _saveProgressImmediately(); // Save any pending progress before disposing
+    // Don't save progress here - it should have been saved periodically
+    // Saving here causes "ref after disposal" errors
     
     // Remove message listener to prevent memory leaks
     if (_messageListener != null) {
@@ -143,19 +140,10 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     _progressSaveTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       _saveProgressImmediately();
     });
-    print('⏰ Started periodic progress save (every 60 seconds)');
   }
 
   Future<void> _loadPdfData() async {
-    print('🔍 DEBUG: Loading PDF for book: ${widget.book.title}');
-    print('🔍 DEBUG: Book ID: ${widget.book.id}');
-    print('🔍 DEBUG: fileUrl value: ${widget.book.fileUrl}');
-    print('🔍 DEBUG: fileUrl is null: ${widget.book.fileUrl == null}');
-    print('🔍 DEBUG: fileUrl isEmpty: ${widget.book.fileUrl?.isEmpty ?? true}');
-    print('🔍 DEBUG: totalPages: ${widget.book.totalPages}');
-    
     if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
-      print('❌ ERROR: No file URL available for this book');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -164,26 +152,17 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       }
       return;
     }
-
-    print('✅ File URL is valid, proceeding to load');
     
     // Fetch PDF as blob and create blob URL to pass to viewer
     try {
       final backendUrl = '${AppConstants.baseUrl}/api/v1/books/${widget.book.id}/file';
-      print('🌐 Fetching PDF from backend: $backendUrl');
-      
       final response = await html.window.fetch(backendUrl);
-      
-      // Note: FetchResponse doesn't expose status directly in Dart
-      print('✅ Backend response received');
       
       // Convert response to blob
       final blob = await response.blob();
-      print('✅ PDF blob created, size: ${blob.size} bytes (${(blob.size / 1024 / 1024).toStringAsFixed(2)} MB)');
       
       // Create blob URL that the viewer can use
       final blobUrl = html.Url.createObjectUrl(blob);
-      print('✅ Blob URL created: $blobUrl');
       
       if (mounted) {
         setState(() {
@@ -197,10 +176,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
           _sendPdfUrlToIframe();
         });
       }
-      
-      print('✅ PDF data loaded successfully');
     } catch (e) {
-      print('❌ Failed to fetch PDF: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -336,9 +312,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       return _buildFallbackContent();
     }
 
-    // Log the final PDF URL that will be requested
-    print('🎯 FINAL PDF URL THAT WILL BE LOADED: $fullUrl');
-
     // Return loading screen if URL is still null at this point
     if (fullUrl == null) {
       return _buildLoadingScreen();
@@ -392,11 +365,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // Build iframe without file parameter - will send via postMessage when ready
     final pdfJsUrl = '/pdfjs/web/custom_viewer.html';
     
-    // Debug: Log the URLs
-    print('📚 Building PDF viewer for book: ${widget.book.title}');
-    print('📄 PDF URL to load: $pdfUrl');
-    print('🌐 PDF.js Viewer URL: $pdfJsUrl');
-    
     // Register the view factory
     try {
       ui_web.platformViewRegistry.registerViewFactory(
@@ -442,8 +410,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
               }
             })
             ..onError.listen((event) {
-              print('❌ IFRAME ERROR: $event');
-              print('❌ Error loading PDF.js viewer');
               if (mounted) {
                 setState(() {
                   _error = 'Failed to load PDF viewer: ${event.toString()}';
@@ -541,9 +507,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     _pendingPage = page;
     _pendingProgressPercentage = page / widget.book.totalPages;
     
-    final totalTime = _pageTimesAccumulator.values.fold(0, (sum, time) => sum + time);
-    final pagesWithTime = _pageTimesAccumulator.length;
-    print('📝 Current page: $page/${widget.book.totalPages}, tracked $pagesWithTime pages, ${totalTime}s total since last save');
   }
   
   void _saveProgressImmediately() {
@@ -555,7 +518,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       if (currentPageTimeSeconds > 0) {
         final currentPageKey = _currentPage.toString();
         _pageTimesAccumulator[currentPageKey] = (_pageTimesAccumulator[currentPageKey] ?? 0) + currentPageTimeSeconds;
-        print('⏱️ Adding current page time: page $_currentPage spent ${currentPageTimeSeconds}s (still on this page)');
         
         // Reset the start time for the next interval
         _currentPageStartTime = DateTime.now();
@@ -564,16 +526,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     
     // Don't save if no time data accumulated
     if (_pageTimesAccumulator.isEmpty) {
-      print('⚠️ No page time data to save yet');
       return;
     }
-    
-    final totalTime = _pageTimesAccumulator.values.fold(0, (sum, time) => sum + time);
-    final pagesWithTime = _pageTimesAccumulator.length;
-    
-    print('💾 Saving progress to backend: page $_pendingPage/${widget.book.totalPages}');
-    print('📊 Page times being saved: $_pageTimesAccumulator');
-    print('⏱️ Total: $pagesWithTime pages, ${totalTime}s');
     
     // Call API with all accumulated page time data
     _saveProgressToBackend(
@@ -584,7 +538,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // Clear the accumulator after saving - backend has merged the times
     // This resets tracking for the next 60-second interval
     _pageTimesAccumulator.clear();
-    print('🔄 Page time accumulator cleared - tracking fresh for next interval');
   }
   
   Future<void> _saveProgressToBackend({
@@ -597,8 +550,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       progressPercentage: page / widget.book.totalPages,
       pageTimes: pageTimes,
     );
-    
-    print('✅ Progress saved successfully');
   }
 
   void _setupPdfMessageListener() {
@@ -610,14 +561,10 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       final messageEvent = event as html.MessageEvent;
       final data = messageEvent.data;
       
-      print('📨 Received message from PDF.js: $data');
-      
       // Handle both Map<String, dynamic> and LinkedMap from JavaScript
       if (data is Map) {
         final messageData = Map<String, dynamic>.from(data);
         _handlePdfMessage(messageData);
-      } else {
-        print('⚠️ Message data is not a Map: ${data.runtimeType}');
       }
     };
     
@@ -625,30 +572,20 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   void _handlePdfMessage(Map<String, dynamic> message) {
-    print('📬 Processing PDF message type: ${message['type']}');
-    
     switch (message['type']) {
       case 'pageChange':
-        print('📬 Received pageChange from PDF.js');
         final previousPage = message['previousPage'] ?? 1;
         final newPage = message['newPage'] ?? 1;
         final timeSpent = message['timeSpent'] ?? 0;
-        print('   Previous: $previousPage → New: $newPage');
         _onPageChange(previousPage, newPage, timeSpent);
         break;
       case 'textSelection':
-        print('📝 Text selection message received');
-        print('   Text: ${message['text']}');
-        print('   Page: ${message['page']}');
-        print('   Position: ${message['position']}');
-        
         // Convert LinkedMap to Map<String, dynamic>
         Map<String, dynamic>? position;
         if (message['position'] != null) {
           try {
             position = Map<String, dynamic>.from(message['position']);
           } catch (e) {
-            print('⚠️ Failed to convert position: $e');
             position = null;
           }
         }
@@ -671,7 +608,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         _onCreateNoteFromSelection(message);
         break;
       case 'noteClicked':
-        print('📌 Note clicked from PDF: ${message['noteId']}');
         widget.onNoteClicked?.call(message['noteId'] as String);
         break;
     }
@@ -699,14 +635,11 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   void _onPageChange(int previousPage, int newPage, int timeSpent) {
-    print('📄 Page changed: page $previousPage spent $timeSpent seconds, now on page $newPage');
     
     // Accumulate time for the previous page
     if (timeSpent > 0) {
       final pageKey = previousPage.toString();
       _pageTimesAccumulator[pageKey] = (_pageTimesAccumulator[pageKey] ?? 0) + timeSpent;
-      print('⏱️ Page $previousPage total time: ${_pageTimesAccumulator[pageKey]}s');
-      print('📚 All accumulated times: $_pageTimesAccumulator');
     }
     
     // Track when we started reading the new page
@@ -731,14 +664,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   void _onTextSelection(String text, int pageNum, Map<String, dynamic>? position) {
-    print('📝 _onTextSelection called with text length: ${text.length}');
-    print('   Text: "$text"');
-    print('   Page: $pageNum');
-    print('   Position: $position');
-    
     // Check if widget is still mounted before updating state
     if (!mounted) {
-      print('⚠️ Widget not mounted, skipping');
       return;
     }
     
@@ -750,9 +677,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       // Don't show overlay anymore
       _showSelectionOverlay = false;
     });
-    
-    print('✅ Selected text stored: "$_selectedText"');
-    print('✅ Ready to be used in notes dialog');
     
     // Notify parent about selected text change
     widget.onSelectedTextChanged?.call(text.isNotEmpty ? text : null);
@@ -768,8 +692,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       };
       
       _capturedTextSelections.add(selection);
-      
-      print('📝 Text selected #${_capturedTextSelections.length}: "$text" on page $pageNum');
     }
   }
 

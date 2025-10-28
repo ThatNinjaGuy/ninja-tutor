@@ -30,11 +30,15 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
   // State for selected text pill
   bool _isPillExpanded = true;  // Expanded by default on first open
   String? _previousSelectedText;  // Track if selected text has changed
+  bool _isAtBottom = true;  // Track if scrolled to bottom
 
   @override
   void initState() {
     super.initState();
     _previousSelectedText = widget.selectedText;
+    
+    // Listen to scroll position
+    _scrollController.addListener(_onScroll);
     
     // Update context when panel opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -44,6 +48,19 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
         bookId: widget.bookId,
       );
     });
+  }
+  
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    
+    final position = _scrollController.position;
+    final isAtBottom = position.pixels >= position.maxScrollExtent - 50.0;
+    
+    if (isAtBottom != _isAtBottom) {
+      setState(() {
+        _isAtBottom = isAtBottom;
+      });
+    }
   }
 
   @override
@@ -71,6 +88,7 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
   @override
   void dispose() {
     _textController.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -84,6 +102,10 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
+        // Update bottom state after scrolling
+        setState(() {
+          _isAtBottom = true;
+        });
       }
     });
   }
@@ -169,16 +191,16 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
               if (aiState.error != null)
                 _buildErrorBanner(theme, aiState.error!),
 
-              // Quick actions
-              if (widget.selectedText != null)
-                _buildQuickActions(theme),
-
               // Message list
               Expanded(
                 child: aiState.messages.isEmpty
                     ? _buildEmptyState(theme)
                     : _buildMessageList(theme, aiState),
               ),
+
+              // Quick actions (only show at bottom when text is selected)
+              if (widget.selectedText != null && _isAtBottom)
+                _buildQuickActions(theme),
 
               // Input field
               _buildInputField(theme, aiState),
@@ -233,9 +255,6 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
 
   Widget _buildSelectedTextPill(ThemeData theme) {
     final selectedText = widget.selectedText ?? '';
-    final truncatedText = selectedText.length > 100 
-        ? '${selectedText.substring(0, 100)}...' 
-        : selectedText;
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -281,13 +300,11 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            _isPillExpanded ? 'Selected Text' : truncatedText,
+                            _isPillExpanded ? 'Selected Text' : 'Source',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.primary,
                               fontWeight: FontWeight.w500,
                             ),
-                            maxLines: _isPillExpanded ? null : 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(width: 8),
                           Icon(
