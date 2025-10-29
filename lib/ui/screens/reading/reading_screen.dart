@@ -46,7 +46,28 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
   @override
   Widget build(BuildContext context) {
     final currentBook = ref.watch(currentBookProvider);
-    final user = ref.watch(authProvider);
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+
+    // Show loading screen while syncing
+    if (authState.isLoading || authState.isSyncing) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text(AppStrings.selectBookToRead),
+          centerTitle: true,
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(AppStrings.loadingYourBooks),
+            ],
+          ),
+        ),
+      );
+    }
 
     // Check if user is authenticated
     if (user == null) {

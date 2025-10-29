@@ -1,0 +1,9 @@
+# Android Signing Configuration
+# Copy this file to key.properties and fill in your signing details
+# IMPORTANT: Add key.properties to .gitignore to keep it secure
+
+storePassword=<your-store-password>
+keyPassword=<your-key-password>
+keyAlias=<your-key-alias>
+storeFile=<path-to-your-keystore-file>
+

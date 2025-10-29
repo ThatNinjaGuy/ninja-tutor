@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/content/book_model.dart';
 import '../../services/api/api_service.dart';
+import '../../core/constants/book_categories.dart';
 import 'auth_provider.dart';
 import 'app_providers.dart';
 
@@ -73,16 +74,16 @@ final unifiedLibraryProvider = StateNotifierProvider<UnifiedLibraryNotifier, Lib
   final notifier = UnifiedLibraryNotifier(apiService);
   
   // Listen to auth changes and update token
-  ref.listen<SimpleUser?>(authProvider, (previous, next) {
-    if (previous?.id != next?.id) {
+  ref.listen<AuthenticationState>(authProvider, (previous, next) {
+    if (previous?.user?.id != next.user?.id) {
       // Auth changed - update token and reset initialization
-      notifier.updateAuthToken(next?.token);
+      notifier.updateAuthToken(next.user?.token);
     }
   });
   
   // Set initial token
   final authState = ref.read(authProvider);
-  notifier.updateAuthToken(authState?.token);
+  notifier.updateAuthToken(authState.user?.token);
   
   return notifier;
 });
@@ -131,6 +132,7 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
   }
 
   /// Ensure All Books are loaded (for Explore tab)
+  /// Fetches all books in a single optimized API call, then groups by category on frontend
   Future<void> ensureAllBooksLoaded() async {
     if (state.allBooks.isNotEmpty) {
       debugPrint('📦 All Books already cached (${state.allBooks.length} books), skipping fetch');
@@ -143,8 +145,45 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
       return;
     }
     
-    debugPrint('🔄 Fetching All Books from API...');
-    await _loadAllBooks();
+    debugPrint('🔄 Fetching All Books from API (single optimized call)...');
+    await _loadAllBooksOptimized();
+  }
+  
+  /// Load all books in a single API call with balanced category distribution
+  /// Backend handles grouping and returns 10 books per category
+  Future<void> _loadAllBooksOptimized() async {
+    if (_authToken == null) return;
+
+    try {
+      state = state.copyWith(isLoadingAllBooks: true, error: null);
+      
+      // Use the new per_category parameter to get balanced books (5 per category)
+      // This makes a single API call, backend groups by category server-side
+      final books = await _apiService.getBooks(
+        subject: null, // No filter - get all books
+        page: 1,
+        limit: 20, // Ignored when per_category is set, but required by API
+        perCategory: 5, // Get 5 books per category for balanced distribution
+      );
+      
+      debugPrint('✅ All Books loaded: ${books.length} total books (balanced per category) in single API call');
+      
+      state = state.copyWith(
+        allBooks: books,
+        isLoadingAllBooks: false,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error loading All Books: $e');
+      // Don't set error state for auth errors - dialog will handle it
+      if (e is ApiException && e.isAuthError) {
+        state = state.copyWith(isLoadingAllBooks: false);
+      } else {
+        state = state.copyWith(
+          isLoadingAllBooks: false,
+          error: e.toString(),
+        );
+      }
+    }
   }
 
   /// Legacy method for backward compatibility - loads My Books only
@@ -267,7 +306,7 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
   }
 
   /// Search books
-  Future<void> searchBooks(String query) async {
+  Future<void> searchBooks(String query, {String searchIn = 'title'}) async {
     if (query.isEmpty) {
       state = state.copyWith(searchResults: [], isSearching: false);
       return;
@@ -276,7 +315,7 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     try {
       state = state.copyWith(isSearching: true, error: null);
       
-      final results = await _apiService.searchBooks(query);
+      final results = await _apiService.searchBooks(query, searchIn: searchIn);
       
       state = state.copyWith(
         searchResults: results,
@@ -431,16 +470,29 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     String? searchQuery,
     String? subject,
     String? grade,
+    String searchIn = 'all', // Default to searching all fields
   }) {
     var filtered = books;
 
     if (searchQuery != null && searchQuery.isNotEmpty) {
       final query = searchQuery.toLowerCase();
       filtered = filtered.where((book) {
-        return book.title.toLowerCase().contains(query) ||
-               book.author.toLowerCase().contains(query) ||
-               book.subject.toLowerCase().contains(query) ||
-               (book.description?.toLowerCase().contains(query) ?? false);
+        switch (searchIn) {
+          case 'title':
+            return book.title.toLowerCase().contains(query);
+          case 'author':
+            return book.author.toLowerCase().contains(query);
+          case 'subject':
+            return book.subject.toLowerCase().contains(query);
+          case 'description':
+            return (book.description?.toLowerCase().contains(query) ?? false);
+          case 'all':
+          default:
+            return book.title.toLowerCase().contains(query) ||
+                   book.author.toLowerCase().contains(query) ||
+                   book.subject.toLowerCase().contains(query) ||
+                   (book.description?.toLowerCase().contains(query) ?? false);
+        }
       }).toList();
     }
 
@@ -520,7 +572,12 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
 
   /// Refresh all data
   Future<void> refresh() async {
-    state = state.copyWith(isInitialized: false);
-    await _loadInitialData();
+    // Clear all books to force reload with per_category parameter
+    state = state.copyWith(
+      allBooks: [],
+      isInitialized: false,
+    );
+    // Reload using the optimized per_category method
+    await ensureAllBooksLoaded();
   }
 }

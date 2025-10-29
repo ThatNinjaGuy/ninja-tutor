@@ -37,6 +37,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   late TabController _tabController;
   String? _selectedCategory = 'All';
   String _searchQuery = '';
+  String _searchCriteria = 'title'; // Default: search in title only
   late Debouncer _searchDebouncer;
   ViewMode _viewMode = ViewMode.grid;
   
@@ -50,7 +51,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     super.initState();
     // Start with Explore Books tab (index 1) instead of My Books tab (index 0)
     _tabController = TabController(length: 2, vsync: this, initialIndex: 1);
-    _searchDebouncer = Debouncer(duration: const Duration(milliseconds: 300));
+    _searchDebouncer = Debouncer(duration: const Duration(milliseconds: 800));
     
     // Listen to tab changes to lazy load data
     _tabController.addListener(_handleTabChange);
@@ -86,7 +87,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   @override
   Widget build(BuildContext context) {
     final libraryState = ref.watch(unifiedLibraryProvider);
-    final user = ref.watch(authProvider);
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+
+    // Show loading screen while syncing
+    if (authState.isLoading || authState.isSyncing) {
+      return Scaffold(
+        appBar: AppBar(title: const Text(AppStrings.library)),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(AppStrings.loadingYourLibrary),
+            ],
+          ),
+        ),
+      );
+    }
 
     // Show login prompt if not authenticated
     if (user == null) return _buildLoginPrompt();
@@ -231,6 +250,55 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                   }).toList(),
                   onChanged: _handleCategoryChanged,
                 ),
+                DropdownButtonFormField<String>(
+                  value: _searchCriteria,
+                  decoration: const InputDecoration(
+                    labelText: 'Search In',
+                    prefixIcon: Icon(Icons.search),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'title',
+                      child: Text('Book Name', style: TextStyle(fontSize: 14)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'author',
+                      child: Text('Author', style: TextStyle(fontSize: 14)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'subject',
+                      child: Text('Category', style: TextStyle(fontSize: 14)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'description',
+                      child: Text('Description', style: TextStyle(fontSize: 14)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'all',
+                      child: Text('All Fields', style: TextStyle(fontSize: 14)),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _searchCriteria = value ?? 'title';
+                    });
+                    // Re-search if there's an active search query
+                    // For Explore Books, this triggers remote search API
+                    // For My Books, this triggers UI rebuild with new local filter
+                    if (_searchQuery.isNotEmpty) {
+                      final currentTabIndex = _tabController.index;
+                      if (currentTabIndex == 1) {
+                        // Explore Books - use remote search
+                        _searchDebouncer.call(() => _handleSearchChanged(_searchQuery));
+                      } else {
+                        // My Books - just trigger rebuild (local filtering happens in build)
+                        setState(() {});
+                      }
+                    }
+                  },
+                ),
               ],
             ),
           ],
@@ -293,6 +361,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 
   /// Build My Books tab - shows only user's personal library with search and filters
+  /// Organized by category in carousels (similar to Explore Books)
   Widget _buildMyBooksGrid(LibraryState libraryState) {
     // Show skeleton loader instead of spinner for better UX
     if (libraryState.isLoadingUserLibrary && libraryState.myBooks.isEmpty) {
@@ -311,12 +380,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       );
     }
 
-    // Apply search and filters to user's library books
+    // Apply local search and filters to user's library books
     final filteredBooks = ref.read(unifiedLibraryProvider.notifier).filterBooks(
       books: libraryState.myBooks,
       searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
       subject: _selectedCategory,
       grade: null, // No grade filtering
+      searchIn: _searchCriteria, // Use the selected search criteria
     );
 
     if (filteredBooks.isEmpty) {
@@ -329,30 +399,129 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => ref.read(unifiedLibraryProvider.notifier).refresh(),
-      child: GridView.builder(
-      padding: const EdgeInsets.all(AppConstants.defaultPadding),
-        gridDelegate: ResponsiveGridHelpers.createResponsiveGridDelegate(context),
-      itemCount: filteredBooks.length,
-      itemBuilder: (context, index) {
-        final book = filteredBooks[index];
+    // If search is active, show search results in a simple grid (no category grouping)
+    if (_searchQuery.isNotEmpty) {
+      return RefreshIndicator(
+        onRefresh: () async {
+          await ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
+        },
+        child: GridView.builder(
+          padding: const EdgeInsets.all(AppConstants.defaultPadding),
+          gridDelegate: ResponsiveGridHelpers.createResponsiveGridDelegate(context),
+          itemCount: filteredBooks.length,
+          itemBuilder: (context, index) {
+            final book = filteredBooks[index];
             
-        return BookCard(
-          book: book,
-          layout: BookCardLayout.grid,
-          showAddToLibrary: true,
-          isInLibrary: true, // Always true in My Books tab
-          onTap: () => _openBook(book),
-          onLongPress: () => _showBookOptions(book),
-          onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
-        );
+            return BookCard(
+              book: book,
+              layout: BookCardLayout.grid,
+              showAddToLibrary: true,
+              isInLibrary: true, // Always true in My Books tab
+              onTap: () => _openBook(book),
+              onLongPress: () => _showBookOptions(book),
+              onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+            );
+          },
+        ),
+      );
+    }
+
+    // Group books by category for category-based display (similar to Explore Books)
+    final booksToGroup = _selectedCategory == 'All' 
+        ? filteredBooks
+        : filteredBooks; // Already filtered by category above
+
+    if (booksToGroup.isEmpty) {
+      return EmptyStateWidget(
+        icon: Icons.library_books_outlined,
+        title: AppStrings.noBooksInLibrary,
+        subtitle: AppStrings.addBooksFromExplore,
+      );
+    }
+
+    // Group books by category
+    final Map<String, List<BookModel>> booksByCategory = {};
+    for (final book in booksToGroup) {
+      final category = book.subject.isEmpty ? 'General' : book.subject;
+      booksByCategory.putIfAbsent(category, () => []).add(book);
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
       },
+      child: ListView.builder(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        itemCount: booksByCategory.length,
+        itemBuilder: (context, categoryIndex) {
+          final category = booksByCategory.keys.elementAt(categoryIndex);
+          final categoryBooks = booksByCategory[category]!;
+          
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Category header with View All button
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      category,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    // Always show View All button for each category
+                    TextButton(
+                      onPressed: () {
+                        context.push('/library/category/${Uri.encodeComponent(category)}');
+                      },
+                      child: const Text('View All'),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Books carousel (horizontal scroll) for this category
+              SizedBox(
+                height: ResponsiveGridHelpers.getMaxCardWidth(context) * 
+                       (1 / ResponsiveGridHelpers.getChildAspectRatio(context)) + 100,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+                  itemCount: categoryBooks.length,
+                  itemBuilder: (context, index) {
+                    final book = categoryBooks[index];
+                    
+                    return SizedBox(
+                      width: ResponsiveGridHelpers.getMaxCardWidth(context),
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: BookCard(
+                          book: book,
+                          layout: BookCardLayout.grid,
+                          showAddToLibrary: true,
+                          isInLibrary: true, // Always true in My Books tab
+                          onTap: () => _openBook(book),
+                          onLongPress: () => _showBookOptions(book),
+                          onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              
+              const SizedBox(height: 32), // Spacing between categories
+            ],
+          );
+        },
       ),
     );
   }
 
-  /// Build Explore Books tab - shows all available books with add functionality
+  /// Build Explore Books tab - shows books grouped by category with 2 rows per category
   Widget _buildExploreBooksGrid(LibraryState libraryState) {
     // Show skeleton loader instead of spinner for better UX
     if ((libraryState.isLoadingAllBooks || libraryState.isSearching) && 
@@ -364,49 +533,133 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       return _buildErrorState(libraryState.error!);
     }
 
-    final booksToShow = libraryState.exploreBooks;
+    // If search is active, show search results in a simple grid (no category grouping)
+    if (_searchQuery.isNotEmpty && libraryState.searchResults.isNotEmpty) {
+      return RefreshIndicator(
+        onRefresh: () => ref.read(unifiedLibraryProvider.notifier).refresh(),
+        child: GridView.builder(
+          padding: const EdgeInsets.all(AppConstants.defaultPadding),
+          gridDelegate: ResponsiveGridHelpers.createResponsiveGridDelegate(context),
+          itemCount: libraryState.searchResults.length,
+          itemBuilder: (context, index) {
+            final book = libraryState.searchResults[index];
+            final isInLibrary = libraryState.isBookInLibrary(book.id);
+            
+            return BookCard(
+              book: book,
+              layout: BookCardLayout.grid,
+              showAddToLibrary: true,
+              isInLibrary: isInLibrary,
+              onTap: () => _openBook(book),
+              onLongPress: () => _showBookOptions(book),
+              onAddToLibrary: () => _addBookToLibrary(book.id),
+              onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+            );
+          },
+        ),
+      );
+    }
 
-    // Apply client-side filters for category
-    final filteredBooks = ref.read(unifiedLibraryProvider.notifier).filterBooks(
-      books: booksToShow,
-      subject: _selectedCategory == 'All' ? null : _selectedCategory,
-      grade: null, // No grade filtering
-    );
+    // Group books by category for category-based display
+    final booksToGroup = _selectedCategory == 'All' 
+        ? libraryState.allBooks
+        : ref.read(unifiedLibraryProvider.notifier).filterBooks(
+            books: libraryState.allBooks,
+            subject: _selectedCategory,
+            grade: null,
+          );
 
-    if (filteredBooks.isEmpty) {
+    if (booksToGroup.isEmpty) {
       return EmptyStateWidget(
         icon: Icons.explore_outlined,
-        title: _searchQuery.isEmpty ? AppStrings.noBooksAvailable : AppStrings.noBooksFound,
-        subtitle: _searchQuery.isEmpty 
-            ? AppStrings.checkBackLater
-            : AppStrings.tryAdjustingFilters,
+        title: AppStrings.noBooksAvailable,
+        subtitle: AppStrings.checkBackLater,
       );
+    }
+
+    // Group books by category
+    final Map<String, List<BookModel>> booksByCategory = {};
+    for (final book in booksToGroup) {
+      final category = book.subject.isEmpty ? 'General' : book.subject;
+      booksByCategory.putIfAbsent(category, () => []).add(book);
     }
 
     return RefreshIndicator(
       onRefresh: () => ref.read(unifiedLibraryProvider.notifier).refresh(),
-      child: GridView.builder(
-      padding: const EdgeInsets.all(AppConstants.defaultPadding),
-        gridDelegate: ResponsiveGridHelpers.createResponsiveGridDelegate(context),
-      itemCount: filteredBooks.length,
-      itemBuilder: (context, index) {
-        final book = filteredBooks[index];
-        final isInLibrary = libraryState.isBookInLibrary(book.id);
-        
-        return BookCard(
-          book: book,
-          layout: BookCardLayout.grid,
-          showAddToLibrary: true,
-          isInLibrary: isInLibrary,
-          onTap: () => _openBook(book),
-          onLongPress: () => _showBookOptions(book),
-          onAddToLibrary: () => _addBookToLibrary(book.id),
-          onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
-        );
-      },
+      child: ListView.builder(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        itemCount: booksByCategory.length,
+        itemBuilder: (context, categoryIndex) {
+          final category = booksByCategory.keys.elementAt(categoryIndex);
+          final categoryBooks = booksByCategory[category]!;
+          final totalBooks = categoryBooks.length;
+          
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Category header with View All button
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      category,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    // Always show View All button for each category
+                    TextButton(
+                      onPressed: () {
+                        context.push('/library/category/${Uri.encodeComponent(category)}');
+                      },
+                      child: const Text('View All'),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Books carousel (horizontal scroll) for this category
+              SizedBox(
+                height: ResponsiveGridHelpers.getMaxCardWidth(context) * 
+                       (1 / ResponsiveGridHelpers.getChildAspectRatio(context)) + 100,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+                  itemCount: categoryBooks.length,
+                  itemBuilder: (context, index) {
+                    final book = categoryBooks[index];
+                    final isInLibrary = libraryState.isBookInLibrary(book.id);
+                    
+                    return SizedBox(
+                      width: ResponsiveGridHelpers.getMaxCardWidth(context),
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: BookCard(
+                          book: book,
+                          layout: BookCardLayout.grid,
+                          showAddToLibrary: true,
+                          isInLibrary: isInLibrary,
+                          onTap: () => _openBook(book),
+                          onLongPress: () => _showBookOptions(book),
+                          onAddToLibrary: () => _addBookToLibrary(book.id),
+                          onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              
+              const SizedBox(height: 32), // Spacing between categories
+            ],
+          );
+        },
       ),
     );
   }
+
 
 
 
@@ -417,23 +670,42 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       title: AppStrings.errorLoadingBooks,
       subtitle: error,
       actionText: AppStrings.retry,
-      onAction: () => ref.read(unifiedLibraryProvider.notifier).refresh(),
+      onAction: () {
+        // Retry loading all books with the same per_category parameter
+        ref.read(unifiedLibraryProvider.notifier).ensureAllBooksLoaded();
+      },
     );
   }
 
   // Event handlers
   void _handleSearchChanged(String value) {
     setState(() => _searchQuery = value);
-    if (value.isNotEmpty) {
-      ref.read(unifiedLibraryProvider.notifier).searchBooks(value);
-    } else {
+    
+    // Only call remote API for Explore Books tab - My Books uses local filtering
+    final currentTabIndex = _tabController.index;
+    
+    if (value.isEmpty) {
       ref.read(unifiedLibraryProvider.notifier).clearSearch();
+    } else {
+      // For Explore Books tab (index 1), use remote search API
+      if (currentTabIndex == 1) {
+        ref.read(unifiedLibraryProvider.notifier).searchBooks(value, searchIn: _searchCriteria);
+      }
+      // For My Books tab (index 0), local filtering is handled in _buildMyBooksGrid
+      // No API call needed - books are already loaded
     }
   }
 
   void _handleCategoryChanged(String? category) {
     setState(() => _selectedCategory = category);
-    _reloadBooksWithFilters();
+    
+    // Only reload from API for Explore Books tab - My Books uses local filtering
+    final currentTabIndex = _tabController.index;
+    if (currentTabIndex == 1) {
+      // Explore Books - reload with filters
+      _reloadBooksWithFilters();
+    }
+    // For My Books (index 0), no API call needed - local filtering happens in build
   }
 
   void _reloadBooksWithFilters() {

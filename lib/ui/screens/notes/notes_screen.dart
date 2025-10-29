@@ -18,11 +18,12 @@ import '../../widgets/common/profile_menu_button.dart';
 /// Only fetches when user is authenticated
 final combinedNotesProvider = FutureProvider<List<NoteModel>>((ref) async {
   // Wait for auth to be ready
-  final authUser = ref.watch(authProvider);
+  final authState = ref.watch(authProvider);
+  final authUser = authState.user;
   
-  // Return empty list if not authenticated
-  if (authUser == null) {
-    debugPrint('⚠️ No authenticated user, skipping notes/bookmarks fetch');
+  // Return empty list if not authenticated or still loading
+  if (authState.isLoading || authState.isSyncing || authUser == null) {
+    debugPrint('⚠️ Auth not ready or no authenticated user, skipping notes/bookmarks fetch');
     return [];
   }
   
@@ -118,8 +119,26 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
 
   @override
   Widget build(BuildContext context) {
-    final authUser = ref.watch(authProvider);
+    final authState = ref.watch(authProvider);
+    final authUser = authState.user;
     final notesAsync = ref.watch(combinedNotesProvider);
+
+    // Show loading screen while syncing
+    if (authState.isLoading || authState.isSyncing) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Notes')),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading...'),
+            ],
+          ),
+        ),
+      );
+    }
 
     // Show login prompt if not authenticated
     if (authUser == null) {

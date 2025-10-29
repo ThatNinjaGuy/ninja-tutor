@@ -27,8 +27,11 @@ android/.gradle
 android/captures/
 android/app/src/main/kotlin/com/example/ninja_tutor/
 android/app/build/
+android/key.properties
 *.apk
 *.aab
+*.jks
+*.keystore
 
 # iOS-specific
 ios/.symlinks/

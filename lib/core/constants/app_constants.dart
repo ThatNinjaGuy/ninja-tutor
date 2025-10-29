@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// Core application constants used throughout the app
 class AppConstants {
   // App Information
@@ -5,8 +7,23 @@ class AppConstants {
   static const String appVersion = '1.0.0';
   
   // API Configuration
-  static const String baseUrl = 'http://localhost:8000';
-  // static const String baseUrl = 'https://1c0d96e8d006.ngrok-free.app';
+  // Production backend URL (Google Cloud Run)
+  // Replace with your actual Cloud Run URL after deployment
+  // static const String productionBaseUrl = 'https://ninja-tutor-backend-dsjg6miqrq-uc.a.run.app';
+  static const String productionBaseUrl = 'https://ninja-tutor-backend-764764156207.us-central1.run.app';
+  static const String developmentBaseUrl = 'http://localhost:8000';
+  
+  // Detect environment and set base URL
+  // In production builds, this will use the production URL
+  static String get baseUrl {
+    // For now, use development URL
+    // After Cloud Run deployment, update this to production URL
+    return developmentBaseUrl;
+    // return productionBaseUrl;
+    // Uncomment below after deployment:
+    // return kReleaseMode ? productionBaseUrl : developmentBaseUrl;
+  }
+  
   static const String apiVersion = 'api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
   
@@ -67,6 +84,7 @@ class AppRoutes {
   static const String bookDetail = '/book/:bookId';
   static const String practiceSession = '/practice/:sessionId';
   static const String noteDetail = '/note/:noteId';
+  static const String categoryBooks = '/library/category/:category';
 }
 
 /// Hive box names for local storage

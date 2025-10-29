@@ -7,6 +7,7 @@ import '../../ui/screens/dashboard/dashboard_screen.dart';
 import '../../ui/screens/reading/reading_screen.dart';
 import '../../ui/screens/practice/practice_screen.dart';
 import '../../ui/screens/library/library_screen.dart';
+import '../../ui/screens/library/category_books_screen.dart';
 import '../../ui/screens/notes/notes_screen.dart';
 import '../../ui/screens/settings/settings_screen.dart';
 import '../../ui/screens/splash/splash_screen.dart';
@@ -93,6 +94,15 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: 'library',
             builder: (context, state) => const LibraryScreen(),
             routes: [
+              // Category books view
+              GoRoute(
+                path: 'category/:category',
+                name: 'category-books',
+                builder: (context, state) {
+                  final category = state.pathParameters['category']!;
+                  return CategoryBooksScreen(category: category);
+                },
+              ),
               // Book detail
               GoRoute(
                 path: 'book/:bookId',

@@ -111,7 +111,25 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final authUser = ref.watch(authProvider);
+    final authState = ref.watch(authProvider);
+    final authUser = authState.user;
+
+    // Show loading screen while syncing
+    if (authState.isLoading || authState.isSyncing) {
+      return Scaffold(
+        appBar: AppBar(title: const Text(AppStrings.practice)),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(AppStrings.loadingYourLibrary),
+            ],
+          ),
+        ),
+      );
+    }
 
     // Show login prompt if not authenticated
     if (authUser == null) {

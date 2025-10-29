@@ -519,78 +519,77 @@ class BookCard extends StatelessWidget {
         
         const SizedBox(height: 8),
         
-        // Book info
-        Expanded(
-          flex: 2,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title with better sizing
-              Text(
-                _truncatedTitle,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13, // Optimized for grid
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        // Book info - compact layout without Spacer
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Title with better sizing
+            Text(
+              _truncatedTitle,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: 13, // Optimized for grid
               ),
-              const SizedBox(height: 4),
-              
-              // Author with better sizing
-              Text(
-                book.author,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  fontSize: 11, // Smaller for better fit
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            
+            // Author with better sizing
+            Text(
+              book.author,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                fontSize: 11, // Smaller for better fit
               ),
-              
-              const Spacer(),
-              
-              // Progress and subject with flexible layout
-              Column(
-                children: [
-                  // Subject chip (full width)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _getSubjectColor().withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            
+            const SizedBox(height: 8), // Minimal spacing before category/button
+            
+            // Progress and subject with flexible layout
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Subject chip (full width)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _getSubjectColor().withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    book.subject,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: _getSubjectColor(),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 10, // Smaller for better fit
                     ),
-                    child: Text(
-                      book.subject,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: _getSubjectColor(),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 10, // Smaller for better fit
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                
+                // Progress percentage or Add to Library button
+                if (showAddToLibrary)
+                  _buildLibraryButton(theme)
+                else
+                  Text(
+                    '${book.progress?.totalPagesRead ?? 0}/${book.totalPages}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  
-                  // Progress percentage or Add to Library button
-                  if (showAddToLibrary)
-                    _buildLibraryButton(theme)
-                  else
-                    Text(
-                      '${book.progress?.totalPagesRead ?? 0}/${book.totalPages}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 11,
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
       ],
     );

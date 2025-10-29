@@ -126,10 +126,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final authUser = ref.watch(authProvider);
+    final authState = ref.watch(authProvider);
+    final authUser = authState.user;
     final user = ref.watch(currentUserProvider);
     final libraryState = ref.watch(unifiedLibraryProvider);
     final books = libraryState.myBooks;
+    
+    // Show loading screen while syncing
+    if (authState.isLoading || authState.isSyncing) {
+      return Scaffold(
+        appBar: AppBar(title: const Text(AppStrings.dashboard)),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(AppStrings.loadingYourLibrary),
+            ],
+          ),
+        ),
+      );
+    }
     
     // Show login prompt if not authenticated
     if (authUser == null) {

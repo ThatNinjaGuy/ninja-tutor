@@ -26,8 +26,12 @@ class ApiService {
 
   /// Initialize Dio with base configuration
   void _initializeDio() {
+    // Always read fresh from AppConstants to ensure correct URL
+    final baseUrl = AppConstants.baseUrl;
+    debugPrint('🌐 Initializing API service with base URL: $baseUrl');
+    
     _dio = Dio(BaseOptions(
-      baseUrl: '${AppConstants.baseUrl}/${AppConstants.apiVersion}',
+      baseUrl: '${baseUrl}/${AppConstants.apiVersion}',
       connectTimeout: AppConstants.apiTimeout,
       receiveTimeout: AppConstants.apiTimeout,
       sendTimeout: AppConstants.apiTimeout,
@@ -144,14 +148,19 @@ class ApiService {
     String? grade,
     int page = 1,
     int limit = 20,
+    int? perCategory,
   }) async {
     try {
-      final response = await _dio.get('/books', queryParameters: {
-        if (subject != null) 'subject': subject,
-        if (grade != null) 'grade': grade,
+      final queryParams = <String, dynamic>{
         'offset': (page - 1) * limit,
         'limit': limit,
-      });
+      };
+      
+      if (subject != null) queryParams['subject'] = subject;
+      if (grade != null) queryParams['grade'] = grade;
+      if (perCategory != null) queryParams['per_category'] = perCategory;
+      
+      final response = await _dio.get('/books', queryParameters: queryParams);
 
       final books = <BookModel>[];
       for (final bookJson in response.data) {
@@ -220,11 +229,12 @@ class ApiService {
     }
   }
 
-  /// Search books
-  Future<List<BookModel>> searchBooks(String query) async {
+  /// Search books with optional search criteria
+  Future<List<BookModel>> searchBooks(String query, {String searchIn = 'title'}) async {
     try {
       final response = await _dio.get('/books/search', queryParameters: {
         'q': query,
+        'search_in': searchIn, // Options: title, author, subject, description, all
       });
 
       final books = <BookModel>[];

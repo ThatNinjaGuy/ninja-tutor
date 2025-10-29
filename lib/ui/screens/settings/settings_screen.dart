@@ -32,7 +32,8 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final user = ref.watch(authProvider);
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
     final isDarkMode = ref.watch(themeModeProvider);
     
     // Simple user preferences fallback

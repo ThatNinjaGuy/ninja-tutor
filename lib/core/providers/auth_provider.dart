@@ -90,13 +90,38 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
   }
 }
 
-/// Simple authentication provider
-final authProvider = StateNotifierProvider<AuthNotifier, SimpleUser?>((ref) {
+/// Auth provider state that includes loading status
+class AuthenticationState {
+  final SimpleUser? user;
+  final bool isLoading;
+  final bool isSyncing;
+
+  const AuthenticationState({
+    this.user,
+    this.isLoading = true,
+    this.isSyncing = false,
+  });
+
+  AuthenticationState copyWith({
+    SimpleUser? user,
+    bool? isLoading,
+    bool? isSyncing,
+  }) {
+    return AuthenticationState(
+      user: user ?? this.user,
+      isLoading: isLoading ?? this.isLoading,
+      isSyncing: isSyncing ?? this.isSyncing,
+    );
+  }
+}
+
+/// Simple authentication provider with loading state
+final authProvider = StateNotifierProvider<AuthNotifier, AuthenticationState>((ref) {
   return AuthNotifier(ref);
 });
 
-class AuthNotifier extends StateNotifier<SimpleUser?> {
-  AuthNotifier(this._ref) : super(null) {
+class AuthNotifier extends StateNotifier<AuthenticationState> {
+  AuthNotifier(this._ref) : super(const AuthenticationState()) {
     _setupAuthStateListener();
     _setupAuthErrorCallback();
   }
@@ -122,11 +147,18 @@ class AuthNotifier extends StateNotifier<SimpleUser?> {
     );
   }
 
+  SimpleUser? get user => state.user;
+  bool get isLoading => state.isLoading;
+  bool get isSyncing => state.isSyncing;
+
   void _setupAuthStateListener() {
     // Listen to Firebase auth state changes
     _firebaseAuth.authStateChanges().listen((User? firebaseUser) async {
       if (firebaseUser != null) {
         try {
+          // Set loading state while syncing
+          state = state.copyWith(isLoading: true, isSyncing: true);
+          
           // User is signed in, get ID token
           final token = await firebaseUser.getIdToken();
           if (token != null) {
@@ -139,22 +171,30 @@ class AuthNotifier extends StateNotifier<SimpleUser?> {
               final userProfile = await apiService.syncUser();
               
               // Update state with backend user data
-              state = SimpleUser(
+              state = state.copyWith(
+                user: SimpleUser(
                 id: userProfile['id'] as String,
                 name: userProfile['name'] as String,
                 email: userProfile['email'] as String,
                 token: token,
+                ),
+                isLoading: false,
+                isSyncing: false,
               );
               
               debugPrint('User synced with backend: ${userProfile['email']}');
             } catch (e) {
               debugPrint('Error syncing user with backend: $e');
               // Fall back to Firebase user data
-              state = SimpleUser(
+              state = state.copyWith(
+                user: SimpleUser(
                 id: firebaseUser.uid,
                 name: firebaseUser.displayName ?? 'User',
                 email: firebaseUser.email ?? '',
                 token: token,
+                ),
+                isLoading: false,
+                isSyncing: false,
               );
             }
             
@@ -166,10 +206,11 @@ class AuthNotifier extends StateNotifier<SimpleUser?> {
           }
         } catch (e) {
           debugPrint('Error in auth state listener: $e');
+          state = state.copyWith(isLoading: false, isSyncing: false);
         }
       } else {
         // User is signed out
-        state = null;
+        state = const AuthenticationState(user: null, isLoading: false, isSyncing: false);
         ApiService().clearAuthToken();
         await _secureStorage.clearAll();
         debugPrint('User signed out');
@@ -188,6 +229,9 @@ class AuthNotifier extends StateNotifier<SimpleUser?> {
       // Token will be automatically handled by authStateChanges listener
       // Hide login dialog
       _ref.read(authStateProvider.notifier).hideLoginDialog();
+      
+      // Set loading state while auth state updates
+      state = state.copyWith(isLoading: true, isSyncing: true);
     } on FirebaseAuthException catch (e) {
       debugPrint('Firebase login error: ${e.code} - ${e.message}');
       
@@ -293,7 +337,7 @@ class AuthNotifier extends StateNotifier<SimpleUser?> {
       ApiService().clearAuthToken();
       
       // Update state
-      state = null;
+      state = const AuthenticationState(user: null, isLoading: false, isSyncing: false);
       
       // Hide login dialog if showing
       _ref.read(authStateProvider.notifier).hideLoginDialog();

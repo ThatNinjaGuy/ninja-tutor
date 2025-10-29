@@ -36,16 +36,16 @@ final currentUserProvider = StateNotifierProvider<UserNotifier, AsyncValue<UserM
   final notifier = UserNotifier(hiveService, apiService);
   
   // Listen to auth changes and update user data
-  ref.listen<SimpleUser?>(authProvider, (previous, next) {
-    if (previous?.id != next?.id) {
+  ref.listen<AuthenticationState>(authProvider, (previous, next) {
+    if (previous?.user?.id != next.user?.id) {
       // Auth user changed (logged in, logged out, or different user)
-      notifier.handleAuthChange(next);
+      notifier.handleAuthChange(next.user);
     }
   });
   
   // Initial load based on current auth state
-  final authUser = ref.read(authProvider);
-  notifier.handleAuthChange(authUser);
+  final authState = ref.read(authProvider);
+  notifier.handleAuthChange(authState.user);
   
   return notifier;
 });

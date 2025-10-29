@@ -17,7 +17,8 @@ class ProfileMenuButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final authUser = ref.watch(authProvider);
+    final authState = ref.watch(authProvider);
+    final authUser = authState.user;
 
     return PopupMenuButton<String>(
       icon: Icon(
