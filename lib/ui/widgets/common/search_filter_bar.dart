@@ -51,24 +51,7 @@ class SearchFilterBar extends StatelessWidget {
       children: [
         // Search bar - takes 50% width
         Expanded(
-          child: TextField(
-            decoration: InputDecoration(
-              hintText: searchHint,
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: searchQuery.isNotEmpty
-                  ? IconButton(
-                      onPressed: () => onSearchChanged?.call(''),
-                      icon: const Icon(Icons.clear),
-                    )
-                  : null,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-              isDense: true,
-            ),
-            onChanged: onSearchChanged,
-          ),
+          child: _buildSearchField(),
         ),
         const SizedBox(width: 16),
         // Filters - takes 50% width
@@ -93,24 +76,7 @@ class SearchFilterBar extends StatelessWidget {
     return Column(
       children: [
         // Search bar (always full width)
-        TextField(
-          decoration: InputDecoration(
-            hintText: searchHint,
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: searchQuery.isNotEmpty
-                ? IconButton(
-                    onPressed: () => onSearchChanged?.call(''),
-                    icon: const Icon(Icons.clear),
-                  )
-                : null,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 8,
-            ),
-            isDense: true,
-          ),
-          onChanged: onSearchChanged,
-        ),
+        _buildSearchField(),
         
         // Filters (if any)
         if (showFilters && filterWidgets.isNotEmpty) ...[
@@ -118,6 +84,43 @@ class SearchFilterBar extends StatelessWidget {
           ...filterWidgets,
         ],
       ],
+    );
+  }
+
+  Widget _buildSearchField() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: searchQuery.isNotEmpty
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ]
+            : [],
+      ),
+      child: TextField(
+        decoration: InputDecoration(
+          hintText: searchHint,
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: searchQuery.isNotEmpty
+              ? IconButton(
+                  onPressed: () => onSearchChanged?.call(''),
+                  icon: const Icon(Icons.clear),
+                )
+              : null,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 8,
+          ),
+          isDense: true,
+        ),
+        onChanged: onSearchChanged,
+      ),
     );
   }
 }

@@ -26,6 +26,8 @@ class _AchievementPopupState extends State<AchievementPopup>
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
   late ConfettiController _confettiController;
+  late AnimationController _badgeSpinController;
+  late AnimationController _pulseController;
 
   @override
   void initState() {
@@ -56,6 +58,16 @@ class _AchievementPopupState extends State<AchievementPopup>
       duration: const Duration(seconds: 3),
     );
 
+    _badgeSpinController = AnimationController(
+      duration: const Duration(seconds: 8),
+      vsync: this,
+    )..repeat();
+
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
+
     // Trigger animations
     HapticsHelper.achievement();
     _controller.forward();
@@ -73,6 +85,8 @@ class _AchievementPopupState extends State<AchievementPopup>
   void dispose() {
     _controller.dispose();
     _confettiController.dispose();
+    _badgeSpinController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -190,27 +204,48 @@ class _AchievementPopupState extends State<AchievementPopup>
                         Container(
                           width: 80,
                           height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: [
-                                badgeColor,
-                                badgeColor.withOpacity(0.7),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: badgeColor.withOpacity(0.5),
-                                blurRadius: 15,
+                          child: AnimatedBuilder(
+                            animation: _badgeSpinController,
+                            builder: (context, child) {
+                              return Transform.rotate(
+                                angle: _badgeSpinController.value * math.pi * 2,
+                                child: child,
+                              );
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: [
+                                    badgeColor,
+                                    badgeColor.withOpacity(0.7),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: badgeColor.withOpacity(0.5),
+                                    blurRadius: 15,
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: Icon(
-                            _getIconData(),
-                            size: 40,
-                            color: Colors.white,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Icon(
+                                    _getIconData(),
+                                    size: 40,
+                                    color: Colors.white,
+                                  ),
+                                  Positioned(
+                                    right: 8,
+                                    top: 10,
+                                    child: _Sparkle(color: Colors.white.withOpacity(0.9)),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
 
@@ -251,33 +286,47 @@ class _AchievementPopupState extends State<AchievementPopup>
                         const SizedBox(height: 16),
 
                         // XP reward
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
+                        ScaleTransition(
+                          scale: Tween<double>(begin: 0.95, end: 1.05).animate(
+                            CurvedAnimation(
+                              parent: _pulseController,
+                              curve: Curves.easeInOut,
+                            ),
                           ),
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.xpGradient,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.stars,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '+${widget.achievement.xpReward} XP',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: AppTheme.xpGradient,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.xpColor.withOpacity(0.35),
+                                  blurRadius: 12,
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.stars,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '+${widget.achievement.xpReward} XP',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
 
@@ -299,6 +348,35 @@ class _AchievementPopupState extends State<AchievementPopup>
           ),
         ),
       ],
+    );
+  }
+}
+
+class _Sparkle extends StatelessWidget {
+  const _Sparkle({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 12,
+      height: 12,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [
+            color,
+            color.withOpacity(0.0),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.4),
+            blurRadius: 8,
+          ),
+        ],
+      ),
     );
   }
 }

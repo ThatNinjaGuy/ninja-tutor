@@ -11,6 +11,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/debouncer.dart';
 import '../../../core/utils/haptics_helper.dart';
+import '../../../core/utils/animation_helper.dart';
 import '../../../models/content/book_model.dart';
 import '../../widgets/common/book_card.dart';
 import '../../widgets/common/responsive_grid_helpers.dart';
@@ -193,6 +194,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 
   AppBar _buildAppBar() {
+    final theme = Theme.of(context);
     return AppBar(
       title: const Text(AppStrings.library),
       elevation: 0,
@@ -206,6 +208,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       ],
       bottom: TabBar(
         controller: _tabController,
+        indicator: BoxDecoration(
+          color: theme.colorScheme.primary.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: theme.colorScheme.primary.withOpacity(0.5),
+          ),
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        labelColor: theme.colorScheme.primary,
+        unselectedLabelColor: theme.colorScheme.onSurface.withOpacity(0.6),
+        labelStyle: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        unselectedLabelStyle: theme.textTheme.titleMedium,
         tabs: const [
           Tab(text: AppStrings.myBooks),
           Tab(text: AppStrings.exploreBooks),
@@ -339,21 +353,41 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   
   Widget _buildViewModeButton(ViewMode mode, IconData icon, ThemeData theme) {
     final isSelected = _viewMode == mode;
-    return Material(
-      color: isSelected ? theme.colorScheme.primary : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: () {
-          setState(() => _viewMode = mode);
-          HapticsHelper.light();
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(
-            icon,
-            size: 20,
-            color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurfaceVariant,
+    return AnimatedContainer(
+      duration: AnimationHelper.fast,
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: isSelected
+            ? theme.colorScheme.primary
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: theme.colorScheme.primary.withOpacity(0.35),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : [],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            setState(() => _viewMode = mode);
+            HapticsHelper.light();
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Icon(
+              icon,
+              size: 20,
+              color: isSelected
+                  ? theme.colorScheme.onPrimary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       ),
@@ -412,14 +446,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           itemBuilder: (context, index) {
             final book = filteredBooks[index];
             
-            return BookCard(
-              book: book,
-              layout: BookCardLayout.grid,
-              showAddToLibrary: true,
-              isInLibrary: true, // Always true in My Books tab
-              onTap: () => _openBook(book),
-              onLongPress: () => _showBookOptions(book),
-              onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+            return _AnimatedBookItem(
+              index: index,
+              child: BookCard(
+                book: book,
+                layout: BookCardLayout.grid,
+                showAddToLibrary: true,
+                isInLibrary: true,
+                onTap: () => _openBook(book),
+                onLongPress: () => _showBookOptions(book),
+                onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+              ),
             );
           },
         ),
@@ -498,14 +535,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                       width: ResponsiveGridHelpers.getMaxCardWidth(context),
                       child: Padding(
                         padding: const EdgeInsets.only(right: 16),
-                        child: BookCard(
-                          book: book,
-                          layout: BookCardLayout.grid,
-                          showAddToLibrary: true,
-                          isInLibrary: true, // Always true in My Books tab
-                          onTap: () => _openBook(book),
-                          onLongPress: () => _showBookOptions(book),
-                          onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+                        child: _AnimatedBookItem(
+                          index: index,
+                          axis: Axis.horizontal,
+                          child: BookCard(
+                            book: book,
+                            layout: BookCardLayout.grid,
+                            showAddToLibrary: true,
+                            isInLibrary: true,
+                            onTap: () => _openBook(book),
+                            onLongPress: () => _showBookOptions(book),
+                            onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+                          ),
                         ),
                       ),
                     );
@@ -545,15 +586,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             final book = libraryState.searchResults[index];
             final isInLibrary = libraryState.isBookInLibrary(book.id);
             
-            return BookCard(
-              book: book,
-              layout: BookCardLayout.grid,
-              showAddToLibrary: true,
-              isInLibrary: isInLibrary,
-              onTap: () => _openBook(book),
-              onLongPress: () => _showBookOptions(book),
-              onAddToLibrary: () => _addBookToLibrary(book.id),
-              onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+            return _AnimatedBookItem(
+              index: index,
+              child: BookCard(
+                book: book,
+                layout: BookCardLayout.grid,
+                showAddToLibrary: true,
+                isInLibrary: isInLibrary,
+                onTap: () => _openBook(book),
+                onLongPress: () => _showBookOptions(book),
+                onAddToLibrary: () => _addBookToLibrary(book.id),
+                onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+              ),
             );
           },
         ),
@@ -636,15 +680,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                       width: ResponsiveGridHelpers.getMaxCardWidth(context),
                       child: Padding(
                         padding: const EdgeInsets.only(right: 16),
-                        child: BookCard(
-                          book: book,
-                          layout: BookCardLayout.grid,
-                          showAddToLibrary: true,
-                          isInLibrary: isInLibrary,
-                          onTap: () => _openBook(book),
-                          onLongPress: () => _showBookOptions(book),
-                          onAddToLibrary: () => _addBookToLibrary(book.id),
-                          onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+                        child: _AnimatedBookItem(
+                          index: index,
+                          axis: Axis.horizontal,
+                          child: BookCard(
+                            book: book,
+                            layout: BookCardLayout.grid,
+                            showAddToLibrary: true,
+                            isInLibrary: isInLibrary,
+                            onTap: () => _openBook(book),
+                            onLongPress: () => _showBookOptions(book),
+                            onAddToLibrary: () => _addBookToLibrary(book.id),
+                            onRemoveFromLibrary: () => _removeBookFromLibrary(book.id),
+                          ),
                         ),
                       ),
                     );
@@ -809,4 +857,51 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     }
   }
 
+}
+
+class _AnimatedBookItem extends StatefulWidget {
+  const _AnimatedBookItem({
+    required this.index,
+    required this.child,
+    this.axis = Axis.vertical,
+  });
+
+  final int index;
+  final Widget child;
+  final Axis axis;
+
+  @override
+  State<_AnimatedBookItem> createState() => _AnimatedBookItemState();
+}
+
+class _AnimatedBookItemState extends State<_AnimatedBookItem> {
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(Duration(milliseconds: 70 * widget.index), () {
+      if (mounted) {
+        setState(() => _visible = true);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final initialOffset = widget.axis == Axis.vertical
+        ? const Offset(0, 0.1)
+        : const Offset(0.1, 0);
+
+    return AnimatedSlide(
+      duration: AnimationHelper.normal,
+      curve: Curves.easeOutCubic,
+      offset: _visible ? Offset.zero : initialOffset,
+      child: AnimatedOpacity(
+        duration: AnimationHelper.normal,
+        opacity: _visible ? 1 : 0,
+        child: widget.child,
+      ),
+    );
+  }
 }

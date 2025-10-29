@@ -24,6 +24,7 @@ class _StreakFlameState extends State<StreakFlame>
   late AnimationController _controller;
   late Animation<double> _flameAnimation;
   late Animation<double> _glowAnimation;
+  late AnimationController _sparkController;
 
   @override
   void initState() {
@@ -48,11 +49,17 @@ class _StreakFlameState extends State<StreakFlame>
       parent: _controller,
       curve: Curves.easeInOut,
     ));
+
+    _sparkController = AnimationController(
+      duration: const Duration(milliseconds: 2600),
+      vsync: this,
+    )..repeat();
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _sparkController.dispose();
     super.dispose();
   }
 
@@ -87,6 +94,22 @@ class _StreakFlameState extends State<StreakFlame>
                 ),
               ),
             
+            if (widget.streak > 0)
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _sparkController,
+                  builder: (context, child) {
+                    final progress = _sparkController.value;
+                    return Stack(
+                      children: [
+                        _buildSpark(progress, widget.size * 0.6, 0),
+                        _buildSpark((progress + 0.5) % 1, widget.size * 0.55, math.pi / 1.5),
+                      ],
+                    );
+                  },
+                ),
+              ),
+
             // Flame icon
             Transform.scale(
               scale: _flameAnimation.value,
@@ -141,6 +164,44 @@ class _StreakFlameState extends State<StreakFlame>
           ],
         );
       },
+    );
+  }
+
+  Widget _buildSpark(double progress, double radius, double angle) {
+    final color = _getFlameColor();
+    final normalized = Curves.easeOut.transform(1 - progress);
+    final offsetX = math.cos(angle + progress * math.pi * 2) * radius * 0.2;
+    final offsetY = math.sin(angle + progress * math.pi * 2) * radius * 0.18;
+
+    final sparkSize = widget.size * 0.16;
+
+    return Positioned(
+      left: (widget.size / 2) + offsetX - sparkSize / 2,
+      top: (widget.size / 2) + offsetY - sparkSize / 2,
+      child: Opacity(
+        opacity: normalized,
+        child: Container(
+          width: sparkSize,
+          height: sparkSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: [
+                Colors.white.withOpacity(0.9),
+                color.withOpacity(0.6),
+              ],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.3),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

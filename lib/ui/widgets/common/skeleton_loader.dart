@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/animation_helper.dart';
+
 /// Skeleton loader widget with shimmer effect
 class SkeletonLoader extends StatefulWidget {
   const SkeletonLoader({
@@ -26,12 +29,14 @@ class _SkeletonLoaderState extends State<SkeletonLoader>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 1400),
       vsync: this,
     )..repeat();
 
-    _animation = Tween<double>(begin: -2, end: 2).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
+    _animation = AnimationHelper.createShimmerAnimation(
+      controller: _controller,
+      begin: -1.2,
+      end: 2.2,
     );
   }
 
@@ -43,27 +48,30 @@ class _SkeletonLoaderState extends State<SkeletonLoader>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final baseColor = theme.colorScheme.surface;
-    final highlightColor = theme.colorScheme.onSurface.withOpacity(0.1);
+    final (baseColor, highlightColor) = context.shimmerColors;
+
+    final borderRadius = BorderRadius.circular(widget.borderRadius);
 
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
+        final shimmerPosition = _animation.value;
+        final stops = <double>[
+          (shimmerPosition - 0.3).clamp(0.0, 1.0),
+          shimmerPosition.clamp(0.0, 1.0),
+          (shimmerPosition + 0.35).clamp(0.0, 1.0),
+        ];
+
         return Container(
           width: widget.width,
           height: widget.height,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(widget.borderRadius),
+            borderRadius: borderRadius,
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
               colors: [baseColor, highlightColor, baseColor],
-              stops: [
-                _animation.value - 0.3,
-                _animation.value,
-                _animation.value + 0.3,
-              ].map((e) => e.clamp(0.0, 1.0)).toList(),
+              stops: stops,
             ),
           ),
         );
@@ -85,6 +93,7 @@ class BookCardSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     if (isGrid) {
       return Card(
+        margin: EdgeInsets.zero,
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Column(
@@ -93,31 +102,27 @@ class BookCardSkeleton extends StatelessWidget {
               // Book cover skeleton
               Expanded(
                 flex: 3,
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
                   child: const SkeletonLoader(
                     width: double.infinity,
                     height: double.infinity,
-                    borderRadius: 8,
+                    borderRadius: 12,
                   ),
                 ),
               ),
               const SizedBox(height: 8),
               
               // Title skeleton
-              const SkeletonLoader(width: double.infinity, height: 14),
+              const SkeletonLoader(width: double.infinity, height: 14, borderRadius: 6),
               const SizedBox(height: 4),
               
               // Author skeleton
-              const SkeletonLoader(width: 100, height: 12),
+              const SkeletonLoader(width: 100, height: 12, borderRadius: 6),
               const Spacer(),
               
               // Subject chip skeleton
-              const SkeletonLoader(width: double.infinity, height: 20, borderRadius: 8),
+              const SkeletonLoader(width: double.infinity, height: 20, borderRadius: 10),
             ],
           ),
         ),
@@ -130,22 +135,22 @@ class BookCardSkeleton extends StatelessWidget {
         child: Row(
           children: [
             // Book cover skeleton
-            const SkeletonLoader(width: 50, height: 70, borderRadius: 6),
+            const SkeletonLoader(width: 60, height: 84, borderRadius: 10),
             const SizedBox(width: 12),
             
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SkeletonLoader(width: double.infinity, height: 16),
+                  const SkeletonLoader(width: double.infinity, height: 16, borderRadius: 6),
                   const SizedBox(height: 8),
-                  const SkeletonLoader(width: 120, height: 14),
+                  const SkeletonLoader(width: 120, height: 14, borderRadius: 6),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       const SkeletonLoader(width: 80, height: 20, borderRadius: 12),
                       const SizedBox(width: 8),
-                      const SkeletonLoader(width: 40, height: 12),
+                      const SkeletonLoader(width: 40, height: 12, borderRadius: 6),
                     ],
                   ),
                 ],

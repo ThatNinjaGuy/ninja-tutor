@@ -13,6 +13,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/gamification_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/haptics_helper.dart';
+import '../../../core/utils/animation_helper.dart';
 import '../../../models/content/book_model.dart';
 import '../../../models/user/user_model.dart';
 import '../../widgets/common/progress_card.dart';
@@ -20,6 +21,7 @@ import '../../widgets/common/ai_tip_card.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/profile_menu_button.dart';
 import '../../widgets/common/skeleton_loader.dart';
+import '../../widgets/common/loading_state.dart';
 import '../../widgets/common/modern_card.dart';
 import '../../widgets/gamification/streak_flame.dart';
 import '../../widgets/gamification/xp_progress_bar.dart';
@@ -37,6 +39,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     with ReadingInterfaceMixin {
   // Current book being read
   BookModel? _currentReadingBook;
+  
+  // Track if we've already synced gamification to prevent infinite loop
+  bool _hasSyncedGamification = false;
 
   @override
   void initState() {
@@ -136,15 +141,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     if (authState.isLoading || authState.isSyncing) {
       return Scaffold(
         appBar: AppBar(title: const Text(AppStrings.dashboard)),
-        body: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text(AppStrings.loadingYourLibrary),
-            ],
-          ),
+        body: const LoadingState(
+          title: AppStrings.loadingYourLibrary,
+          subtitle: 'Fetching your books, notes, and study streaks...',
+          progressLabel: 'Syncing progress',
+          progress: null,
+          tip: 'Tip: Add a quick highlight to keep your streak alive once you hop in!',
         ),
       );
     }
@@ -235,7 +237,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
   Widget _buildAppBar(BuildContext context, WidgetRef ref, UserModel? user) {
     final theme = Theme.of(context);
-    
+    final greeting = _getGreeting();
+    final emoji = _getGreetingEmoji();
+
     return Padding(
       padding: const EdgeInsets.all(AppConstants.defaultPadding),
       child: Row(
@@ -246,16 +250,39 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  _getGreeting(),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onBackground.withOpacity(0.7),
+                AnimatedSwitcher(
+                  duration: AnimationHelper.fast,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  ),
+                  child: Row(
+                    key: ValueKey('$emoji$greeting'),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        emoji,
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        greeting,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onBackground.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  user?.name ?? AppStrings.student,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+                const SizedBox(height: 4),
+                AnimatedSwitcher(
+                  duration: AnimationHelper.normal,
+                  child: Text(
+                    user?.name ?? AppStrings.student,
+                    key: ValueKey(user?.name ?? 'guest'),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -304,24 +331,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     // Calculate stats from books
     final stats = _calculateDashboardStats(books);
     
-    // Update gamification state with current stats
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Sync XP from total study time (5 hours = 100 XP)
-      final studyTimeMinutes = stats['total_study_time_minutes'] ?? 0;
-      ref.read(gamificationProvider.notifier).syncXPFromStudyTime(studyTimeMinutes);
+    // Update gamification state with current stats (only once per widget lifecycle)
+    if (mounted && !_hasSyncedGamification) {
+      _hasSyncedGamification = true;
       
-      // Check for achievement unlocks
-      ref.read(gamificationProvider.notifier).checkAchievements(
-        booksRead: stats['books_read'] ?? 0,
-        pagesRead: books.fold<int>(0, (sum, book) => sum + (book.progress?.totalPagesRead ?? 0)),
-        studyTimeMinutes: studyTimeMinutes,
-      );
-      
-      // Update streak
-      if (stats['study_streak'] != gamification.currentStreak) {
-        ref.read(gamificationProvider.notifier).updateStreak(true);
-      }
-    });
+      // Delay modification until after build is complete
+      Future.microtask(() {
+        if (!mounted) return;
+        
+        // Sync XP from total study time (5 hours = 100 XP)
+        final studyTimeMinutes = stats['total_study_time_minutes'] ?? 0;
+        final gamificationNotifier = ref.read(gamificationProvider.notifier);
+        
+        // Sync XP from study time
+        gamificationNotifier.syncXPFromStudyTime(studyTimeMinutes);
+        
+        // Update streak if different
+        if (stats['study_streak'] != gamification.currentStreak) {
+          gamificationNotifier.updateStreak(true);
+        }
+        
+        // Check for achievement unlocks
+        gamificationNotifier.checkAchievements(
+          booksRead: stats['books_read'] ?? 0,
+          pagesRead: books.fold<int>(0, (sum, book) => sum + (book.progress?.totalPagesRead ?? 0)),
+          studyTimeMinutes: studyTimeMinutes,
+        );
+      });
+    }
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,158 +415,53 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         
         // Progress cards row with modern design
         SizedBox(
-          height: 160,
+          height: 180,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              // Books Read
-              SizedBox(
-                width: 140,
-                child: GlassCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF10B981), Color(0xFF059669)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.menu_book, color: Colors.white, size: 28),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '${stats['books_read'] ?? 0}',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.readingColor,
-                        ),
-                      ),
-                      Text(
-                        'Books Read',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.7),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ).animate().fadeIn(delay: 100.ms).slideX(begin: -0.2),
+              _AnimatedStatCard(
+                label: 'Books Read',
+                icon: Icons.menu_book_rounded,
+                color: AppTheme.readingColor,
+                value: (stats['books_read'] ?? 0).toDouble(),
+                formatter: (value) => value.toStringAsFixed(0),
+                trendText: gamification.currentLevel > 1
+                    ? 'Only ${((gamification.currentLevel + 1) * 5) - (stats['books_read'] ?? 0)} books to next level'
+                    : 'Add 1 more book to build momentum',
+                detailTitle: 'Recent highlight',
+                detailBody: 'Keep exploring new titles to unlock personalized recommendations.',
               ),
-              const SizedBox(width: 16),
-              
-              // Study Streak with flame
-              SizedBox(
-                width: 140,
-                child: GlassCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      StreakFlame(
-                        streak: gamification.currentStreak,
-                        size: 40,
-                        showNumber: false,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '${gamification.currentStreak}',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.streakColor,
-                        ),
-                      ),
-                      Text(
-                        'Day Streak',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.7),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ).animate().fadeIn(delay: 200.ms).slideX(begin: -0.2),
+              _AnimatedStatCard(
+                label: 'Day Streak',
+                icon: Icons.local_fire_department_outlined,
+                color: AppTheme.streakColor,
+                value: gamification.currentStreak.toDouble(),
+                formatter: (value) => value.toStringAsFixed(0),
+                trendText: gamification.currentStreak >= 3
+                    ? '🔥 Amazing consistency!'
+                    : 'Read today to keep your streak alive',
+                detailTitle: 'Pro tip',
+                detailBody: 'Schedule a 10-minute reading block to secure your streak early.',
               ),
-              const SizedBox(width: 16),
-              
-              // Quiz Score
-              SizedBox(
-                width: 140,
-                child: GlassCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.quiz, color: Colors.white, size: 28),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '${(stats['average_quiz_score'] ?? 0).toInt()}%',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.aiTipColor,
-                        ),
-                      ),
-                      Text(
-                        'Quiz Score',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.7),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.2),
+              _AnimatedStatCard(
+                label: 'Avg Quiz Score',
+                icon: Icons.quiz_outlined,
+                color: AppTheme.aiTipColor,
+                value: (stats['average_quiz_score'] ?? 0).toDouble(),
+                formatter: (value) => '${value.toStringAsFixed(0)}%',
+                trendText: 'Review incorrect questions to boost retention.',
+                detailTitle: 'Next step',
+                detailBody: 'Retake last quiz to aim for +5% improvement.',
               ),
-              const SizedBox(width: 16),
-              
-              // Study Time
-              SizedBox(
-                width: 140,
-                child: GlassCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF06B6D4), Color(0xFF0891B2)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.access_time, color: Colors.white, size: 28),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '${((stats['total_study_time_minutes'] ?? 0) / 60).toStringAsFixed(1)}h',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.noteColor,
-                        ),
-                      ),
-                      Text(
-                        'Study Time',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.7),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ).animate().fadeIn(delay: 400.ms).slideX(begin: -0.2),
+              _AnimatedStatCard(
+                label: 'Study Time',
+                icon: Icons.access_time_rounded,
+                color: AppTheme.noteColor,
+                value: ((stats['total_study_time_minutes'] ?? 0) / 60).toDouble(),
+                formatter: (value) => '${value.toStringAsFixed(1)}h',
+                trendText: 'Consistency earns bonus XP!',
+                detailTitle: 'Focus tip',
+                detailBody: 'Try a focused 25 min Pomodoro session to extend your streak.',
               ),
             ],
           ),
@@ -728,6 +660,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           title: 'Read Chapter 5',
           subtitle: 'Biology Textbook • 25 minutes ago',
           color: AppTheme.readingColor,
+          showConnector: true,
         ),
         const SizedBox(height: 12),
         
@@ -737,6 +670,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           title: 'Completed Chemistry Quiz',
           subtitle: 'Score: 85% • 2 hours ago',
           color: AppTheme.practiceColor,
+          showConnector: true,
         ),
         const SizedBox(height: 12),
         
@@ -836,6 +770,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     if (hour < 12) return AppStrings.goodMorning;
     if (hour < 17) return AppStrings.goodAfternoon;
     return AppStrings.goodEvening;
+  }
+
+  String _getGreetingEmoji() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return '🌅';
+    if (hour < 17) return '🌞';
+    return '🌙';
   }
 
   Widget _buildLoginPrompt(BuildContext context) {
@@ -1028,51 +969,76 @@ class _ActivityItem extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.color,
+    this.showConnector = false,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final Color color;
+  final bool showConnector;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
-    return Row(
+
+    return Stack(
       children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            icon,
-            color: color,
-            size: 20,
-          ),
-        ),
-        const SizedBox(width: 12),
-        
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+        if (showConnector)
+          Positioned(
+            left: 15,
+            top: 36,
+            bottom: -12,
+            child: Container(
+              width: 2,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    color.withOpacity(0.2),
+                    color.withOpacity(0.0),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
               ),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onBackground.withOpacity(0.7),
-                ),
-              ),
-            ],
+            ),
           ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                icon,
+                color: color,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onBackground.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -1321,6 +1287,157 @@ class _DashboardBookCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AnimatedStatCard extends StatefulWidget {
+  const _AnimatedStatCard({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.value,
+    required this.formatter,
+    required this.trendText,
+    required this.detailTitle,
+    required this.detailBody,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final double value;
+  final String Function(double) formatter;
+  final String trendText;
+  final String detailTitle;
+  final String detailBody;
+
+  @override
+  State<_AnimatedStatCard> createState() => _AnimatedStatCardState();
+}
+
+class _AnimatedStatCardState extends State<_AnimatedStatCard> {
+  bool _showDetails = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AnimatedContainer(
+      duration: AnimationHelper.normal,
+      margin: const EdgeInsets.only(right: 18),
+      width: 170,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        color: theme.colorScheme.surface,
+        border: Border.all(color: widget.color.withOpacity(0.16)),
+        boxShadow: AppTheme.createGlow(
+          widget.color,
+          intensity: _showDetails ? 0.28 : 0.18,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: () => setState(() => _showDetails = !_showDetails),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: AnimatedCrossFade(
+              duration: AnimationHelper.normal,
+              crossFadeState: _showDetails
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              firstChild: _buildFront(theme),
+              secondChild: _buildBack(theme),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFront(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: widget.color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(widget.icon, color: widget.color),
+        ),
+        const Spacer(),
+        Text(
+          widget.label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.65),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0, end: widget.value),
+          duration: const Duration(milliseconds: 720),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, child) {
+            return Text(
+              widget.formatter(value),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: widget.color,
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 4),
+        Text(
+          widget.trendText,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.55),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBack(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          widget.detailTitle,
+          style: theme.textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: widget.color,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          widget.detailBody,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+            height: 1.4,
+          ),
+        ),
+        const Spacer(),
+        Row(
+          children: [
+            Icon(Icons.touch_app, size: 16, color: widget.color.withOpacity(0.8)),
+            const SizedBox(width: 8),
+            Text(
+              'Tap to go back',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

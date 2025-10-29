@@ -24,8 +24,10 @@ class XPProgressBar extends StatefulWidget {
 }
 
 class _XPProgressBarState extends State<XPProgressBar>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+    with TickerProviderStateMixin {
+  late AnimationController _progressController;
+  late AnimationController _glowController;
+  late AnimationController _shimmerController;
   late Animation<double> _progressAnimation;
   late Animation<double> _glowAnimation;
   double _displayedProgress = 0.0;
@@ -33,7 +35,7 @@ class _XPProgressBarState extends State<XPProgressBar>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _progressController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
@@ -44,20 +46,30 @@ class _XPProgressBarState extends State<XPProgressBar>
       begin: 0.0,
       end: progress,
     ).animate(CurvedAnimation(
-      parent: _controller,
+      parent: _progressController,
       curve: Curves.easeOutCubic,
     ));
 
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+
     _glowAnimation = Tween<double>(
-      begin: 0.5,
-      end: 1.0,
+      begin: 0.35,
+      end: 0.9,
     ).animate(CurvedAnimation(
-      parent: _controller,
+      parent: _glowController,
       curve: Curves.easeInOut,
     ));
 
-    _controller.forward();
-    _controller.addListener(() {
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
+
+    _progressController.forward();
+    _progressController.addListener(() {
       setState(() {
         _displayedProgress = _progressAnimation.value;
       });
@@ -74,17 +86,19 @@ class _XPProgressBarState extends State<XPProgressBar>
         begin: _displayedProgress,
         end: progress,
       ).animate(CurvedAnimation(
-        parent: _controller,
+        parent: _progressController,
         curve: Curves.easeOutCubic,
       ));
 
-      _controller.forward(from: 0);
+      _progressController.forward(from: 0);
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _progressController.dispose();
+    _glowController.dispose();
+    _shimmerController.dispose();
     super.dispose();
   }
 
@@ -118,7 +132,11 @@ class _XPProgressBarState extends State<XPProgressBar>
         if (widget.showLabel) const SizedBox(height: 8),
         
         AnimatedBuilder(
-          animation: _controller,
+          animation: Listenable.merge([
+            _progressController,
+            _glowController,
+            _shimmerController,
+          ]),
           builder: (context, child) {
             return Stack(
               children: [
@@ -150,6 +168,44 @@ class _XPProgressBarState extends State<XPProgressBar>
                   ),
                 ),
                 
+                if (_displayedProgress > 0)
+                  Positioned.fill(
+                    child: Align(
+                      alignment: Alignment(
+                        (math.max(_progressAnimation.value, 0.0) * 2) - 1,
+                        0,
+                      ),
+                      child: AnimatedBuilder(
+                        animation: _glowController,
+                        builder: (context, child) {
+                          return Transform.scale(
+                            scale: 0.9 + (_glowAnimation.value * 0.15),
+                            child: Container(
+                              width: widget.height * 1.6,
+                              height: widget.height * 1.6,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: AppTheme.xpPulseGradient,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.xpColor.withOpacity(_glowAnimation.value * 0.4),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.auto_awesome,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+
                 // Shimmer effect
                 if (_displayedProgress > 0)
                   Positioned(
@@ -172,7 +228,7 @@ class _XPProgressBarState extends State<XPProgressBar>
 
   Widget _buildShimmer() {
     return AnimatedBuilder(
-      animation: _controller,
+      animation: _shimmerController,
       builder: (context, child) {
         return FractionallySizedBox(
           widthFactor: _displayedProgress,
@@ -186,9 +242,9 @@ class _XPProgressBarState extends State<XPProgressBar>
                   Colors.transparent,
                 ],
                 stops: [
-                  (_controller.value - 0.3).clamp(0.0, 1.0),
-                  _controller.value,
-                  (_controller.value + 0.3).clamp(0.0, 1.0),
+                  (_shimmerController.value - 0.3).clamp(0.0, 1.0),
+                  _shimmerController.value,
+                  (_shimmerController.value + 0.3).clamp(0.0, 1.0),
                 ],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,

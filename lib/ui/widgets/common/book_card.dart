@@ -51,34 +51,82 @@ class BookCard extends StatelessWidget {
     return '${book.title.substring(0, 22)}...';
   }
 
+  bool get _isNew => DateTime.now().difference(book.addedAt).inDays < 7;
+  bool get _hasProgress => book.progressPercentage > 0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final borderRadius = AppConstants.borderRadius;
+    final accentColor = _getSubjectColor();
 
     return Hero(
       tag: 'book_${book.id}',
-      child: Card(
-        elevation: AppConstants.cardElevation,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-        ),
-        child: InkWell(
-          onTap: () {
-            // Add haptic feedback
-            HapticFeedback.lightImpact();
-            onTap?.call();
-          },
-          onLongPress: () {
-            // Add haptic feedback
-            HapticFeedback.mediumImpact();
-            onLongPress?.call();
-          },
-          borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-          child: Padding(
-            padding: EdgeInsets.all(_getPadding()),
-            child: _buildLayoutContent(context, theme),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(borderRadius + 6),
+              gradient: _hasProgress
+                  ? AppTheme.primaryGradient
+                  : LinearGradient(
+                      colors: [
+                        accentColor.withOpacity(0.16),
+                        accentColor.withOpacity(0.05),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+              boxShadow: [
+                BoxShadow(
+                  color: accentColor.withOpacity(0.12),
+                  blurRadius: 18,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(1.6),
+              child: Card(
+                elevation: 0,
+                margin: EdgeInsets.zero,
+                color: theme.colorScheme.surface,
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(borderRadius + 4),
+                ),
+                child: InkWell(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    onTap?.call();
+                  },
+                  onLongPress: () {
+                    HapticFeedback.mediumImpact();
+                    onLongPress?.call();
+                  },
+                  borderRadius: BorderRadius.circular(borderRadius + 4),
+                  child: Padding(
+                    padding: EdgeInsets.all(_getPadding()),
+                    child: _buildLayoutContent(context, theme),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
+          if (_isNew)
+            Positioned(
+              top: -12,
+              left: 12,
+              child: _buildBadge('New', Colors.greenAccent),
+            ),
+          if (book.isCompleted)
+            Positioned(
+              top: -12,
+              right: 12,
+              child: _buildBadge('Done', AppTheme.readingColor),
+            ),
+        ],
       ),
     ).animate().fadeIn(duration: 300.ms).scale(
       begin: const Offset(0.95, 0.95),
@@ -296,7 +344,14 @@ class BookCard extends StatelessWidget {
     
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: LinearGradient(
+          colors: [
+            Colors.white,
+            _getSubjectColor().withOpacity(0.08),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Center(
@@ -361,6 +416,7 @@ class BookCard extends StatelessWidget {
   Widget _buildProgressSection(ThemeData theme) {
     final progress = book.progress;
     if (progress == null) return const SizedBox.shrink();
+    final percent = book.progressPercentage;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,34 +443,46 @@ class BookCard extends StatelessWidget {
         const SizedBox(height: 4),
         
         ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: Stack(
-            children: [
-              Container(
-                height: 4,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.outline.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              FractionallySizedBox(
-                widthFactor: book.progressPercentage,
-                child: Container(
-                  height: 4,
+          borderRadius: BorderRadius.circular(999),
+          child: SizedBox(
+            height: 6,
+            child: Stack(
+              children: [
+                Container(
                   decoration: BoxDecoration(
-                    gradient: AppTheme.successGradient,
-                    borderRadius: BorderRadius.circular(4),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.readingColor.withOpacity(0.3),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
+                    color: theme.colorScheme.outline.withOpacity(0.15),
                   ),
                 ),
-              ),
-            ],
+                FractionallySizedBox(
+                  widthFactor: percent,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.successGradient,
+                    ),
+                  ),
+                ),
+                if (percent > 0)
+                  Positioned.fill(
+                    child: Align(
+                      alignment: Alignment((percent * 2) - 1, 0),
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: AppTheme.celebratoryHaloGradient,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.readingColor.withOpacity(0.4),
+                              blurRadius: 6,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ],
@@ -473,6 +541,45 @@ class BookCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            color,
+            color.withOpacity(0.7),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.auto_awesome, size: 12, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

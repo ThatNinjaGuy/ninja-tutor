@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/animation_helper.dart';
 
 /// Splash screen shown on app startup
 class SplashScreen extends ConsumerStatefulWidget {
@@ -19,6 +21,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   late AnimationController _scaleController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  late Animation<double> _taglineFade;
+  late Animation<Offset> _taglineSlide;
+  late AnimationController _glowController;
+  late Animation<double> _glowPulse;
+  late AnimationController _dotsController;
 
   @override
   void initState() {
@@ -54,6 +61,34 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       curve: Curves.elasticOut,
     ));
 
+    _taglineFade = CurvedAnimation(
+      parent: _fadeController,
+      curve: const Interval(0.25, 1.0, curve: Curves.easeOut),
+    );
+
+    _taglineSlide = AnimationHelper.createSlideAnimation(
+      controller: _fadeController,
+      begin: const Offset(0, 0.2),
+      end: Offset.zero,
+      curve: Curves.easeOutCubic,
+    );
+
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+
+    _glowPulse = AnimationHelper.createPulseAnimation(
+      controller: _glowController,
+      minScale: 0.95,
+      maxScale: 1.05,
+    );
+
+    _dotsController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+
     // Start animations
     _fadeController.forward();
     _scaleController.forward();
@@ -80,6 +115,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   void dispose() {
     _fadeController.dispose();
     _scaleController.dispose();
+    _glowController.dispose();
+    _dotsController.dispose();
     super.dispose();
   }
 
@@ -90,80 +127,209 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     return Scaffold(
       backgroundColor: colorScheme.background,
-      body: AnimatedBuilder(
-        animation: Listenable.merge([_fadeAnimation, _scaleAnimation]),
-        builder: (context, child) {
-          return FadeTransition(
-            opacity: _fadeAnimation,
-            child: ScaleTransition(
-              scale: _scaleAnimation,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // App logo/icon
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: colorScheme.primary.withOpacity(0.3),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.school,
-                        size: 64,
-                        color: colorScheme.onPrimary,
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 32),
-                    
-                    // App name
-                    Text(
-                      AppConstants.appName,
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onBackground,
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 8),
-                    
-                    // Tagline
-                    Text(
-                      'AI Enhanced Learning',
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: colorScheme.onBackground.withOpacity(0.7),
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 48),
-                    
-                    // Loading indicator
-                    SizedBox(
-                      width: 32,
-                      height: 32,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          colorScheme.primary,
+      body: Stack(
+        children: [
+          _SplashBackground(animation: _fadeController),
+          AnimatedBuilder(
+            animation: Listenable.merge([
+              _fadeAnimation,
+              _scaleAnimation,
+            ]),
+            builder: (context, child) {
+              return FadeTransition(
+                opacity: _fadeAnimation,
+                child: ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AnimatedBuilder(
+                          animation: _glowPulse,
+                          builder: (context, child) {
+                            return Transform.scale(
+                              scale: _glowPulse.value,
+                              child: Container(
+                                width: 128,
+                                height: 128,
+                                decoration: BoxDecoration(
+                                  gradient: AppTheme.primaryGradient,
+                                  borderRadius: BorderRadius.circular(32),
+                                  boxShadow: AppTheme.createGlow(
+                                    colorScheme.primary,
+                                    intensity: 0.45,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.school,
+                                  size: 68,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      ),
+                        const SizedBox(height: 36),
+                        Text(
+                          AppConstants.appName,
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onBackground,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SlideTransition(
+                          position: _taglineSlide,
+                          child: FadeTransition(
+                            opacity: _taglineFade,
+                            child: Text(
+                              'AI-enhanced learning journeys',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: colorScheme.onBackground.withOpacity(0.72),
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 48),
+                        _ProgressDots(
+                          controller: _dotsController,
+                          activeColor: colorScheme.primary,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SplashBackground extends StatelessWidget {
+  const _SplashBackground({required this.animation});
+
+  final Animation<double> animation;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final progress = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        ).value;
+
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      colorScheme.primary.withOpacity(0.1),
+                      colorScheme.secondary.withOpacity(0.08),
+                      AppTheme.aiTipColor.withOpacity(0.06),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                 ),
               ),
             ),
-          );
-        },
+            Positioned(
+              top: -140 + 40 * (1 - progress),
+              left: -90,
+              child: _GlowingOrb(
+                size: 280,
+                colors: [
+                  colorScheme.primary.withOpacity(0.28),
+                  colorScheme.secondary.withOpacity(0.18),
+                ],
+              ),
+            ),
+            Positioned(
+              bottom: -150 + 32 * progress,
+              right: -80,
+              child: _GlowingOrb(
+                size: 320,
+                colors: [
+                  AppTheme.aiTipColor.withOpacity(0.24),
+                  colorScheme.primary.withOpacity(0.16),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _GlowingOrb extends StatelessWidget {
+  const _GlowingOrb({
+    required this.size,
+    required this.colors,
+  });
+
+  final double size;
+  final List<Color> colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: colors,
+        ),
       ),
+    );
+  }
+}
+
+class _ProgressDots extends StatelessWidget {
+  const _ProgressDots({
+    required this.controller,
+    required this.activeColor,
+  });
+
+  final AnimationController controller;
+  final Color activeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, child) {
+        final activeIndex = ((controller.value * 3)).floor() % 3;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(3, (index) {
+            final isActive = index == activeIndex;
+            return AnimatedContainer(
+              duration: AnimationHelper.fast,
+              margin: const EdgeInsets.symmetric(horizontal: 6),
+              width: isActive ? 16 : 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: isActive
+                    ? activeColor
+                    : activeColor.withOpacity(0.25),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }
