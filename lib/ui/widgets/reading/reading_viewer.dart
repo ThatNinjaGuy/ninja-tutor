@@ -44,13 +44,19 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   bool _isLoading = true;
   String? _error;
   html.IFrameElement? _iframeElement;
-  bool _pdfSent = false; // Track if PDF has been sent to viewer to prevent duplicate loads
+  bool _pdfSent = false; // Deprecated behavior: allow re-sends until viewer confirms
   String? _currentViewType; // Track current view type to avoid re-registration
   
   // EPUB support
   bool _isEpubFormat = false;
   String? _epubBlobUrl;
   bool _epubSent = false;
+  
+  // Robust delivery + confirmation
+  bool _documentLoaded = false; // true after 'pdfReady'/'bookReady'
+  Timer? _urlRetryTimer; // retry sender timer (pdf/epub)
+  int _urlRetryCount = 0;
+  static const int _maxUrlRetries = 6; // ~3s-6s depending on schedule
   
   // Text selection overlay
   String _selectedText = '';
@@ -84,6 +90,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     _isLoading = true; // Reset loading state
     _error = null; // Clear any previous errors
     _currentViewType = null; // Reset view type for fresh iframe
+    _documentLoaded = false; // Wait for ready ack from viewer
+    _cancelUrlRetryTimer();
+    _urlRetryCount = 0;
     // If a page override is present in the URL, adopt it early
     final override = _getInitialPageOverrideFromUrl();
     if (override != null && override > 0) {
@@ -125,6 +134,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       _isLoading = true;
       _error = null;
       _currentViewType = null; // Force new view type for new book
+      _documentLoaded = false;
+      _cancelUrlRetryTimer();
+      _urlRetryCount = 0;
       
       // Re-detect format and load appropriate viewer
       _isEpubFormat = _detectEpubFormat(widget.book);
@@ -164,6 +176,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     _pdfSent = false;
     _epubSent = false;
     _isLoading = true;
+    _documentLoaded = false;
+    _cancelUrlRetryTimer();
     
     super.dispose();
   }
@@ -528,16 +542,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
                   });
                 }
                 
-                // CRITICAL: Send PDF URL via postMessage when iframe is ready
-                // Wait a bit for viewer to initialize, then send the PDF URL
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  _sendPdfUrlToIframe();
-                });
-                
-                // Also try to send if blob URL becomes available
-                Future.delayed(const Duration(milliseconds: 1000), () {
-                  _sendPdfUrlToIframe();
-                });
+                // Start robust delivery: keep sending until viewer reports ready or retries exhausted
+                _startUrlRetryLoop(isEpub: false);
               }
             })
             ..onError.listen((event) {
@@ -672,25 +678,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
                   });
                 }
                 
-                // Send EPUB URL via postMessage when iframe is ready
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  debugPrint('📕 Attempting to send EPUB URL (500ms delay)');
-                  _sendEpubUrlToIframe();
-                });
-                
-                // Also try to send if blob URL becomes available
-                Future.delayed(const Duration(milliseconds: 1000), () {
-                  debugPrint('📕 Attempting to send EPUB URL (1000ms delay)');
-                  _sendEpubUrlToIframe();
-                });
-                
-                // Additional retry after 2 seconds
-                Future.delayed(const Duration(milliseconds: 2000), () {
-                  if (!_epubSent && mounted) {
-                    debugPrint('📕 Final retry to send EPUB URL (2000ms delay)');
-                    _sendEpubUrlToIframe();
-                  }
-                });
+                // Start robust delivery for EPUB as well
+                _startUrlRetryLoop(isEpub: true);
               }
             })
             ..onError.listen((event) {
@@ -1028,6 +1017,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     setState(() {
       _currentPage = currentPage;
     });
+    // Viewer confirmed document loaded; stop retries
+    _documentLoaded = true;
+    _cancelUrlRetryTimer();
     // Start tracking time for the initial page
     _currentPageStartTime = DateTime.now();
     print('📖 PDF ready - starting time tracking for page $currentPage');
@@ -1199,12 +1191,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   
   /// Send PDF URL to iframe via postMessage
   void _sendPdfUrlToIframe() {
-    // Prevent sending PDF multiple times (which causes double rendering)
-    if (_pdfSent) {
-      debugPrint('⚠️ PDF already sent, skipping duplicate send');
-      return;
-    }
-    
     debugPrint('🔍 _sendPdfUrlToIframe called');
     
     if (_iframeElement == null || _iframeElement!.contentWindow == null) {
@@ -1233,8 +1219,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         'url': pdfUrl,
         'page': _currentPage, // request initial page
       }, '*');
-      _pdfSent = true; // Mark as sent to prevent duplicate sends
-      debugPrint('✅ PDF URL sent successfully - streaming enabled');
+      debugPrint('✅ PDF URL sent (streaming). Awaiting ready acknowledgment...');
     } catch (e) {
       debugPrint('❌ Failed to send PDF URL: $e');
     }
@@ -1242,12 +1227,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   
   /// Send EPUB URL to iframe via postMessage
   void _sendEpubUrlToIframe() {
-    // Prevent sending EPUB multiple times (which causes double rendering)
-    if (_epubSent) {
-      debugPrint('⚠️ EPUB already sent, skipping duplicate send');
-      return;
-    }
-    
     debugPrint('🔍 _sendEpubUrlToIframe called');
     debugPrint('🔍 _iframeElement: $_iframeElement');
     debugPrint('🔍 _iframeElement?.contentWindow: ${_iframeElement?.contentWindow}');
@@ -1274,8 +1253,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         'type': 'loadEPUB',
         'url': epubUrl,
       }, '*');
-      _epubSent = true; // Mark as sent to prevent duplicate sends
-      debugPrint('✅ EPUB URL sent successfully via postMessage');
+      debugPrint('✅ EPUB URL sent. Awaiting ready acknowledgment...');
     } catch (e, stackTrace) {
       debugPrint('❌ Failed to send EPUB URL: $e');
       debugPrint('❌ Stack trace: $stackTrace');
@@ -1288,6 +1266,42 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         });
       }
     }
+  }
+
+  // Retry loop to ensure the URL reaches the viewer and the document loads
+  void _startUrlRetryLoop({required bool isEpub}) {
+    // Reset counters whenever we start
+    _cancelUrlRetryTimer();
+    _urlRetryCount = 0;
+    void tick() {
+      if (!mounted) {
+        _cancelUrlRetryTimer();
+        return;
+      }
+      if (_documentLoaded) {
+        _cancelUrlRetryTimer();
+        return;
+      }
+      _urlRetryCount += 1;
+      if (isEpub) {
+        _sendEpubUrlToIframe();
+      } else {
+        _sendPdfUrlToIframe();
+      }
+      if (_urlRetryCount >= _maxUrlRetries) {
+        debugPrint('⚠️ Max URL send retries reached without ready acknowledgment');
+        _cancelUrlRetryTimer();
+        return;
+      }
+    }
+    // Kick immediately, then schedule periodic retries
+    tick();
+    _urlRetryTimer = Timer.periodic(const Duration(milliseconds: 700), (_) => tick());
+  }
+
+  void _cancelUrlRetryTimer() {
+    _urlRetryTimer?.cancel();
+    _urlRetryTimer = null;
   }
   
   /// Helper method to safely get response status from web Response object
