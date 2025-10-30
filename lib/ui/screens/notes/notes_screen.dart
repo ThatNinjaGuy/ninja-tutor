@@ -321,7 +321,12 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
       BuildContext context, AsyncValue<List<NoteModel>> notes) {
     return notes.when(
       data: (noteList) {
-        if (noteList.isEmpty) {
+        // Exclude bookmarks from the Notes tab
+        final onlyNotes = noteList
+            .where((n) => n.type != NoteType.bookmark)
+            .toList();
+
+        if (onlyNotes.isEmpty) {
           return const EmptyStateWidget(
             icon: Icons.sticky_note_2_outlined,
             title: AppStrings.noNotesYet,
@@ -329,7 +334,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
           );
         }
 
-        final filteredNotes = _filterNotes(noteList);
+        final filteredNotes = _filterNotes(onlyNotes);
 
         if (filteredNotes.isEmpty) {
           return const EmptyStateWidget(
@@ -339,7 +344,148 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
           );
         }
 
-        return _buildNotesList(filteredNotes, label: 'notes');
+        // Group by book and render richer cards per group
+        final notesByBook = <String, List<NoteModel>>{};
+        for (final note in filteredNotes) {
+          notesByBook.putIfAbsent(note.bookId, () => []).add(note);
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(AppConstants.defaultPadding),
+          itemCount: notesByBook.length,
+          itemBuilder: (context, index) {
+            final bookId = notesByBook.keys.elementAt(index);
+            final bookNotes = notesByBook[bookId]!;
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ExpansionTile(
+                leading: Icon(
+                  Icons.menu_book,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                title: Text(
+                  _getBookTitle(bookId),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text('${bookNotes.length} notes'),
+                children: bookNotes.map((note) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Card(
+                      child: InkWell(
+                        onTap: () => _showNoteDetails(note),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    note.type == NoteType.highlight
+                                        ? Icons.highlight
+                                        : Icons.sticky_note_2_outlined,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      note.displayTitle,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Page ${note.pageNumber}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface
+                                              .withOpacity(0.6),
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              if (note.selectedText != null &&
+                                  note.selectedText!.trim().isNotEmpty) ...[
+                                Text(
+                                  'Selected text',
+                                  style:
+                                      Theme.of(context).textTheme.labelMedium,
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withOpacity(0.06),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  padding: const EdgeInsets.all(12),
+                                  child: Text(
+                                    note.selectedText!,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontStyle: FontStyle.italic),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              if (note.content.trim().isNotEmpty) ...[
+                                Text(
+                                  'Note',
+                                  style:
+                                      Theme.of(context).textTheme.labelMedium,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(note.content),
+                              ],
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: () => _showNoteDetails(note),
+                                    icon: const Icon(Icons.visibility_outlined),
+                                    label: const Text('View'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  TextButton.icon(
+                                    onPressed: () => _editNote(note),
+                                    icon: const Icon(Icons.edit_outlined),
+                                    label: const Text('Edit'),
+                                  ),
+                                  const Spacer(),
+                                  IconButton(
+                                    tooltip: 'Open in book',
+                                    onPressed: () => _openInReader(note),
+                                    icon: const Icon(Icons.menu_book_outlined),
+                                  ),
+                                ],
+                              )
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Center(
@@ -375,8 +521,54 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
           );
         }
 
-        final filteredBookmarks = _filterNotes(bookmarks);
-        return _buildNotesList(filteredBookmarks, label: 'bookmarks');
+        // Group bookmarks by book and render compact tiles per group
+        final bookmarksByBook = <String, List<NoteModel>>{};
+        for (final note in bookmarks) {
+          bookmarksByBook.putIfAbsent(note.bookId, () => []).add(note);
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(AppConstants.defaultPadding),
+          itemCount: bookmarksByBook.length,
+          itemBuilder: (context, index) {
+            final bookId = bookmarksByBook.keys.elementAt(index);
+            final bookMarks = bookmarksByBook[bookId]!;
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ExpansionTile(
+                leading: Icon(
+                  Icons.menu_book,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                title: Text(
+                  _getBookTitle(bookId),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text('${bookMarks.length} bookmarks'),
+                children: bookMarks.map((note) {
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    leading: CircleAvatar(
+                      backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+                      child: Icon(
+                        Icons.bookmark,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    title: Text('Page ${note.pageNumber}'),
+                    trailing: IconButton(
+                      tooltip: 'Open in book',
+                      onPressed: () => _openInReader(note),
+                      icon: const Icon(Icons.menu_book_outlined),
+                    ),
+                    onTap: () => _openInReader(note),
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Center(
@@ -431,7 +623,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
                 ),
                 child: NoteCard(
                   note: note,
-                  onTap: () => _openNote(note),
+                  onTap: () => label == 'bookmarks' ? _openInReader(note) : _showNoteDetails(note),
                   onEdit: () => _editNote(note),
                   onDelete: () => _deleteNote(note),
                 ),
@@ -547,7 +739,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
     );
   }
 
-  void _openNote(NoteModel note) async {
+  void _openInReader(NoteModel note) async {
     // Navigate to reading screen with the book and page
     final libraryState = ref.read(unifiedLibraryProvider);
 
@@ -570,8 +762,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
       // Set the book as current book
       ref.read(currentBookProvider.notifier).state = updatedBook;
 
-      // Navigate to reading screen
-      context.go('/reading/book/${note.bookId}');
+      // Navigate to full-screen reader
+      context.go('${AppRoutes.reader}/book/${note.bookId}');
 
       // Switch to reading tab
       ref.read(navigationProvider.notifier).state = 1;
@@ -587,9 +779,165 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
     }
   }
 
-  void _editNote(NoteModel note) {
-    // TODO: Edit note
-    // Placeholder: Will show edit dialog when implemented
+  void _showNoteDetails(NoteModel note) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.95,
+          builder: (context, controller) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: ListView(
+                controller: controller,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          note.displayTitle,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Text('Page ${note.pageNumber}')
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (note.selectedText != null &&
+                      note.selectedText!.trim().isNotEmpty) ...[
+                    Text(
+                      'Selected text',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        note.selectedText!,
+                        style: const TextStyle(fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  Text(
+                    'Note',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(note.content),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await _editNote(note);
+                        },
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Edit'),
+                      ),
+                      const SizedBox(width: 12),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _openInReader(note);
+                        },
+                        icon: const Icon(Icons.menu_book_outlined),
+                        label: const Text('Open in book'),
+                      ),
+                    ],
+                  )
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _editNote(NoteModel note) async {
+    final titleController = TextEditingController(text: note.title ?? '');
+    final contentController = TextEditingController(text: note.content);
+    final apiService = ref.read(apiServiceProvider);
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Note'),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Title (optional)'
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: contentController,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Note',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      try {
+        await apiService.updateNote(
+          noteId: note.id,
+          content: contentController.text,
+          title: titleController.text.isEmpty ? null : titleController.text,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Note updated')),
+          );
+          ref.refresh(combinedNotesProvider);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to update note: $e')),
+          );
+        }
+      }
+    }
   }
 
   void _deleteNote(NoteModel note) {

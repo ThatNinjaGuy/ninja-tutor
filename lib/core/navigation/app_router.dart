@@ -14,12 +14,23 @@ import '../../ui/screens/splash/splash_screen.dart';
 import '../../ui/screens/auth/login_screen.dart';
 import '../../ui/screens/auth/register_screen.dart';
 import '../../ui/widgets/navigation/main_navigation.dart';
+import '../../ui/screens/reading/reader_full_screen.dart';
 
 /// Router configuration provider
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.splash,
     routes: [
+      // Full-screen reader (outside shell)
+      GoRoute(
+        path: '${AppRoutes.reader}/book/:bookId',
+        name: 'viewer-book',
+        builder: (context, state) {
+          final bookId = state.pathParameters['bookId']!;
+          return ReaderFullScreen(bookId: bookId);
+        },
+      ),
+
       // Splash screen
       GoRoute(
         path: AppRoutes.splash,

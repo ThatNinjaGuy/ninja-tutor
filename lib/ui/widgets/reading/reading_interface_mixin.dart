@@ -164,55 +164,27 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     );
   }
 
-  /// Build responsive layout that adapts to screen size
+  /// Build layout: always show helper panel at the bottom
   Widget _buildResponsiveLayout(BookModel book) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWideScreen = constraints.maxWidth > AppConstants.wideScreenBreakpoint;
-        
-        
-        if (isWideScreen) {
-          // Wide screen: helper panel on the right side
-          return Row(
-            children: [
-              // PDF viewer takes most space
-              Expanded(
-                child: ReadingViewer(
-                  book: book,
-                  onTextSelected: _handleTextSelection,
-                  onDefinitionRequest: _handleDefinitionRequest,
-                  onPageChanged: (page) => setCurrentPage(page),
-                  onSelectedTextChanged: _handlePdfTextSelection,
-                  onNoteClicked: _handleNoteClick,
-                  notes: ref.watch(notesProvider).allNotes.where((note) => note.bookId == book.id).toList(),
-                ),
-              ),
-              // Vertical helper panel on the right
-              _buildVerticalHelperPanel(book),
-            ],
-          );
-        } else {
-          // Narrow screen: helper panel at the bottom
-          return Column(
-            children: [
-              // PDF viewer takes most of the space
-              Expanded(
-                child: ReadingViewer(
-                  book: book,
-                  onTextSelected: _handleTextSelection,
-                  onDefinitionRequest: _handleDefinitionRequest,
-                  onPageChanged: (page) => setCurrentPage(page),
-                  onSelectedTextChanged: _handlePdfTextSelection,
-                  onNoteClicked: _handleNoteClick,
-                  notes: ref.watch(notesProvider).allNotes.where((note) => note.bookId == book.id).toList(),
-                ),
-              ),
-              // Horizontal helper panel at the bottom
-              _buildHorizontalHelperPanel(book),
-            ],
-          );
-        }
-      },
+    return Column(
+      children: [
+        Expanded(
+          child: ReadingViewer(
+            book: book,
+            onTextSelected: _handleTextSelection,
+            onDefinitionRequest: _handleDefinitionRequest,
+            onPageChanged: (page) => setCurrentPage(page),
+            onSelectedTextChanged: _handlePdfTextSelection,
+            onNoteClicked: _handleNoteClick,
+            notes: ref
+                .watch(notesProvider)
+                .allNotes
+                .where((note) => note.bookId == book.id)
+                .toList(),
+          ),
+        ),
+        _buildHorizontalHelperPanel(book),
+      ],
     );
   }
 

@@ -850,11 +850,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 
   void _openBook(BookModel book) {
-    setState(() {
-      _currentReadingBook = book;
-    });
-    setReadingMode(true);
     ref.read(currentBookProvider.notifier).state = book;
+    context.go('${AppRoutes.reader}/book/${book.id}');
   }
 
   void _showBookOptions(BookModel book) {

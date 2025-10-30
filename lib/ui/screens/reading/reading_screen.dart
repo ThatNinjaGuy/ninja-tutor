@@ -286,7 +286,7 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
                 child: GestureDetector(
                   onTap: () {
                     ref.read(currentBookProvider.notifier).state = book;
-                    setReadingMode(true);
+                    context.go('${AppRoutes.reader}/book/${book.id}');
                   },
                   child: Container(
                     width: 160,
@@ -498,7 +498,7 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
               borderRadius: BorderRadius.circular(18),
               onTap: () {
                 ref.read(currentBookProvider.notifier).state = book;
-                setReadingMode(true);
+                context.go('${AppRoutes.reader}/book/${book.id}');
               },
               child: Padding(
                 padding: const EdgeInsets.all(16),

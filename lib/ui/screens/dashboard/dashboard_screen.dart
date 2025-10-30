@@ -355,20 +355,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     // Calculate stats from books
     final stats = _calculateDashboardStats(books);
 
-    // Keep XP in sync with current study time whenever dashboard becomes visible
-    if (mounted) {
-      // Delay modification until after build is complete to avoid setState during build
+    // Update gamification state with current stats (only once per widget lifecycle)
+    if (mounted && !_hasSyncedGamification) {
+      _hasSyncedGamification = true;
+
+      // Delay modification until after build is complete
       Future.microtask(() {
         if (!mounted) return;
 
+        // Sync XP from total study time (5 hours = 100 XP)
         final studyTimeMinutes = stats['total_study_time_minutes'] ?? 0;
         final gamificationNotifier = ref.read(gamificationProvider.notifier);
 
-        // Only resync if derived XP differs from current state to avoid redundant rebuilds
-        final expectedXP = gamificationNotifier.calculateXPFromStudyTime(studyTimeMinutes);
-        if (expectedXP != gamification.totalXP) {
-          gamificationNotifier.syncXPFromStudyTime(studyTimeMinutes);
-        }
+        // Sync XP from study time
+        gamificationNotifier.syncXPFromStudyTime(studyTimeMinutes);
 
         // Update streak if different
         if (stats['study_streak'] != gamification.currentStreak) {
@@ -509,7 +509,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
     // Define minimum card width for small screens
     const minCardWidth = 120.0;
-    const maxCardsPerRow = 7; // View All + 6 books
+    const maxCardsPerRow = 6; // number of book cards
     const cardSpacing = 8.0;
 
     // Calculate optimal number of cards and card width
@@ -559,7 +559,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ),
             TextButton(
               onPressed: () => context.push(AppRoutes.reading),
-              child: const Text('View All'),
+              child: const Text('View all'),
             ),
           ],
         ),
@@ -721,11 +721,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
 
   void _openBook(BookModel book) {
-    setState(() {
-      _currentReadingBook = book;
-    });
-    setReadingMode(true);
     ref.read(currentBookProvider.notifier).state = book;
+    context.go('${AppRoutes.reader}/book/${book.id}');
   }
 
   /// Calculate optimal card layout for responsive design

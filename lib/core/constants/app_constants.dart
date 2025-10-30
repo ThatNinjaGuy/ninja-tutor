@@ -99,6 +99,8 @@ class AppRoutes {
   static const String practiceSession = '/practice/:sessionId';
   static const String noteDetail = '/note/:noteId';
   static const String categoryBooks = '/library/category/:category';
+  // Full-screen reader route
+  static const String reader = '/viewer';
 }
 
 /// Hive box names for local storage
