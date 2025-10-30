@@ -90,7 +90,9 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       }
       _currentBookId = book.id;
       // Reset current page when switching books
-      _currentPage = book.progress?.currentPage ?? 1;
+      // Prefer URL query override if present, else use saved progress
+      final urlOverride = _getInitialPageOverrideFromUrl();
+      _currentPage = urlOverride ?? (book.progress?.currentPage ?? 1);
       // Use microtask to ensure it runs only once per build cycle
       Future.microtask(() {
         if (mounted && _currentBookId == book.id) {
@@ -162,6 +164,21 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
         ),
       ),
     );
+  }
+
+  int? _getInitialPageOverrideFromUrl() {
+    try {
+      final raw = html.window.location.search; // e.g. ?page=12
+      final search = raw ?? '';
+      if (search.isEmpty) return null;
+      final query = search.startsWith('?') ? search.substring(1) : search;
+      final params = Uri.splitQueryString(query);
+      final pageStr = params['page'];
+      final page = pageStr != null ? int.tryParse(pageStr) : null;
+      return (page != null && page > 0) ? page : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Build layout: always show helper panel at the bottom

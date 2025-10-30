@@ -762,8 +762,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
       // Set the book as current book
       ref.read(currentBookProvider.notifier).state = updatedBook;
 
-      // Navigate to full-screen reader
-      context.go('${AppRoutes.reader}/book/${note.bookId}');
+      // Navigate to full-screen reader with page param
+      context.go('${AppRoutes.reader}/book/${note.bookId}?page=${note.pageNumber}');
 
       // Switch to reading tab
       ref.read(navigationProvider.notifier).state = 1;

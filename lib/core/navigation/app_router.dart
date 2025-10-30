@@ -27,7 +27,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'viewer-book',
         builder: (context, state) {
           final bookId = state.pathParameters['bookId']!;
-          return ReaderFullScreen(bookId: bookId);
+          final pageStr = state.uri.queryParameters['page'];
+          final initialPage = pageStr != null ? int.tryParse(pageStr) : null;
+          return ReaderFullScreen(bookId: bookId, initialPage: initialPage);
         },
       ),
 

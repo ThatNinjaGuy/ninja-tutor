@@ -9,9 +9,10 @@ import '../../widgets/reading/reading_interface_mixin.dart';
 
 /// Full-screen reader that shows only the PDF/reading UI
 class ReaderFullScreen extends ConsumerStatefulWidget {
-  const ReaderFullScreen({super.key, required this.bookId});
+  const ReaderFullScreen({super.key, required this.bookId, this.initialPage});
 
   final String bookId;
+  final int? initialPage; // optional page override
 
   @override
   ConsumerState<ReaderFullScreen> createState() => _ReaderFullScreenState();
@@ -33,6 +34,7 @@ class _ReaderFullScreenState extends ConsumerState<ReaderFullScreen>
   @override
   Widget build(BuildContext context) {
     final libraryState = ref.watch(unifiedLibraryProvider);
+    final currentBook = ref.watch(currentBookProvider);
 
     // Try to find the book once library is available
     if (_book == null && libraryState.myBooks.isNotEmpty) {
@@ -40,9 +42,29 @@ class _ReaderFullScreenState extends ConsumerState<ReaderFullScreen>
         final found =
             libraryState.myBooks.firstWhere((b) => b.id == widget.bookId);
         _book = found;
-        // Set current book and enter reading mode
+        // Respect an already-set current book (e.g., from Notes/Bookmarks specifying a page)
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          ref.read(currentBookProvider.notifier).state = found;
+          final existing = ref.read(currentBookProvider);
+          final desiredPage = widget.initialPage;
+          BookModel withPage(BookModel b) {
+            if (desiredPage == null) return b;
+            final now = DateTime.now();
+            return b.copyWith(
+              progress: b.progress?.copyWith(currentPage: desiredPage) ??
+                  ReadingProgress(
+                    bookId: b.id,
+                    currentPage: desiredPage,
+                    lastReadAt: now,
+                    startedAt: now,
+                  ),
+            );
+          }
+
+          if (existing == null || existing.id != found.id) {
+            ref.read(currentBookProvider.notifier).state = withPage(found);
+          } else if (desiredPage != null && existing.progress?.currentPage != desiredPage) {
+            ref.read(currentBookProvider.notifier).state = withPage(existing);
+          }
           setReadingMode(true);
         });
       } catch (_) {
@@ -50,8 +72,9 @@ class _ReaderFullScreenState extends ConsumerState<ReaderFullScreen>
       }
     }
 
-    if (_book != null && isReadingMode) {
-      return buildReadingInterface(_book!);
+    if ((_book != null || currentBook != null) && isReadingMode) {
+      // Prefer the already-provided currentBook (may carry overridden page)
+      return buildReadingInterface(currentBook?.id == widget.bookId ? currentBook! : _book!);
     }
 
     // Loading or book not found UI

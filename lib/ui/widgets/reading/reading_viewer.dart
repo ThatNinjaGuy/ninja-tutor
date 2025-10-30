@@ -84,6 +84,11 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     _isLoading = true; // Reset loading state
     _error = null; // Clear any previous errors
     _currentViewType = null; // Reset view type for fresh iframe
+    // If a page override is present in the URL, adopt it early
+    final override = _getInitialPageOverrideFromUrl();
+    if (override != null && override > 0) {
+      _currentPage = override;
+    }
     
     // Detect format and load appropriate viewer
     _isEpubFormat = _detectEpubFormat(widget.book);
@@ -510,9 +515,14 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
                 // Setup message listener for PDF.js communication
                 _setupPdfMessageListener();
                 
-                // Jump to last read page if available
-                if (widget.book.progress?.currentPage != null && 
-                    widget.book.progress!.currentPage > 0) {
+                // Decide initial page: prefer URL override, else last read page
+                final urlOverride = _getInitialPageOverrideFromUrl();
+                if (urlOverride != null && urlOverride > 0) {
+                  setState(() {
+                    _currentPage = urlOverride;
+                  });
+                } else if (widget.book.progress?.currentPage != null && 
+                           widget.book.progress!.currentPage > 0) {
                   setState(() {
                     _currentPage = widget.book.progress!.currentPage;
                   });
@@ -649,9 +659,14 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
                 // Setup message listener for EPUB.js communication
                 _setupPdfMessageListener();
                 
-                // Jump to last read page if available
-                if (widget.book.progress?.currentPage != null && 
-                    widget.book.progress!.currentPage > 0) {
+                // Decide initial page: prefer URL override, else last read page
+                final urlOverride = _getInitialPageOverrideFromUrl();
+                if (urlOverride != null && urlOverride > 0) {
+                  setState(() {
+                    _currentPage = urlOverride;
+                  });
+                } else if (widget.book.progress?.currentPage != null && 
+                           widget.book.progress!.currentPage > 0) {
                   setState(() {
                     _currentPage = widget.book.progress!.currentPage;
                   });
@@ -1203,6 +1218,11 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       debugPrint('⚠️ Cannot send PDF URL: URL not available');
       return;
     }
+    // Ensure we honor URL override at send time too
+    final urlOverride = _getInitialPageOverrideFromUrl();
+    if (urlOverride != null && urlOverride > 0 && urlOverride != _currentPage) {
+      _currentPage = urlOverride;
+    }
     
     debugPrint('📨 Sending PDF URL to iframe for streaming: $pdfUrl');
     debugPrint('📨 PDF.js will use HTTP Range requests for incremental loading');
@@ -1211,6 +1231,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       _iframeElement!.contentWindow!.postMessage({
         'type': 'loadPDF',
         'url': pdfUrl,
+        'page': _currentPage, // request initial page
       }, '*');
       _pdfSent = true; // Mark as sent to prevent duplicate sends
       debugPrint('✅ PDF URL sent successfully - streaming enabled');
@@ -1308,6 +1329,22 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     } catch (e) {
       // Last resort: default to false for error state
       return false;
+    }
+  }
+
+  /// Read the desired initial page from the URL query string if present
+  int? _getInitialPageOverrideFromUrl() {
+    try {
+      final raw = html.window.location.search; // e.g. ?page=12
+      final search = raw ?? '';
+      if (search.isEmpty) return null;
+      final query = search.startsWith('?') ? search.substring(1) : search;
+      final params = Uri.splitQueryString(query);
+      final pageStr = params['page'];
+      final page = pageStr != null ? int.tryParse(pageStr) : null;
+      return (page != null && page > 0) ? page : null;
+    } catch (_) {
+      return null;
     }
   }
 }
