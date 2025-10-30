@@ -14,6 +14,7 @@ import '../../../core/providers/gamification_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/haptics_helper.dart';
 import '../../../core/utils/animation_helper.dart';
+import '../../../core/utils/responsive_layout.dart';
 import '../../../models/content/book_model.dart';
 import '../../../models/user/user_model.dart';
 import '../../widgets/common/progress_card.dart';
@@ -26,6 +27,7 @@ import '../../widgets/common/modern_card.dart';
 import '../../widgets/gamification/streak_flame.dart';
 import '../../widgets/gamification/xp_progress_bar.dart';
 import '../../widgets/reading/reading_interface_mixin.dart';
+import '../../widgets/common/book_card.dart';
 
 /// Dashboard screen showing user overview and recommendations
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -35,96 +37,102 @@ class DashboardScreen extends ConsumerStatefulWidget {
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends ConsumerState<DashboardScreen> 
+class _DashboardScreenState extends ConsumerState<DashboardScreen>
     with ReadingInterfaceMixin {
   // Current book being read
   BookModel? _currentReadingBook;
-  
+
   // Track if we've already synced gamification to prevent infinite loop
   bool _hasSyncedGamification = false;
 
   @override
   void initState() {
     super.initState();
-    
+
     // Load only My Books for dashboard (shows recent books)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
     });
   }
-  
+
   /// Calculate dashboard stats from myBooks data
   Map<String, dynamic> _calculateDashboardStats(List<BookModel> books) {
     int booksRead = 0;
     int totalReadingTimeMinutes = 0;
     List<DateTime> lastReadDates = [];
-    
+
     debugPrint('📊 Calculating dashboard stats for ${books.length} books:');
-    
+
     for (final book in books) {
       final progress = book.progress;
       if (progress != null) {
-        debugPrint('   📖 "${book.title}": ${progress.totalPagesRead} pages (60+ sec) / ${book.totalPages} total');
-      
+        debugPrint(
+            '   📖 "${book.title}": ${progress.totalPagesRead} pages (60+ sec) / ${book.totalPages} total');
+
         // Count books with more than 1 page read (60+ seconds per page)
         if (progress.totalPagesRead >= 1) {
           booksRead++;
         }
-        
+
         // Sum total reading time
         totalReadingTimeMinutes += progress.timeSpent;
-        
+
         // Collect last read dates for streak calculation
         lastReadDates.add(progress.lastReadAt);
       } else {
         debugPrint('   📖 "${book.title}": No progress data');
       }
     }
-    
+
     // Calculate study streak
     final studyStreak = _calculateStudyStreak(lastReadDates);
-    
-    debugPrint('📊 Final stats: booksRead=$booksRead, totalTime=${totalReadingTimeMinutes}min, streak=$studyStreak days');
-    
+
+    debugPrint(
+        '📊 Final stats: booksRead=$booksRead, totalTime=${totalReadingTimeMinutes}min, streak=$studyStreak days');
+
     return {
       'books_read': booksRead,
       'study_streak': studyStreak,
       'total_study_time_minutes': totalReadingTimeMinutes,
-      'average_quiz_score': 0.0, // TODO: Calculate from quiz results when available
+      'average_quiz_score':
+          0.0, // TODO: Calculate from quiz results when available
     };
   }
-  
+
   /// Calculate consecutive study streak in days
   int _calculateStudyStreak(List<DateTime> lastReadDates) {
     if (lastReadDates.isEmpty) return 0;
-    
+
     // Sort dates in descending order (most recent first)
     final sortedDates = lastReadDates.toSet().toList()
       ..sort((a, b) => b.compareTo(a));
-    
+
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
     final yesterdayDate = todayDate.subtract(const Duration(days: 1));
-    
+
     // Convert to dates without time
-    final readDates = sortedDates.map((dt) => 
-      DateTime(dt.year, dt.month, dt.day)
-    ).toSet().toList()..sort((a, b) => b.compareTo(a));
-    
+    final readDates = sortedDates
+        .map((dt) => DateTime(dt.year, dt.month, dt.day))
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+
     // Check if user read today or yesterday (streak is still active)
     if (!readDates.contains(todayDate) && !readDates.contains(yesterdayDate)) {
       return 0;
     }
-    
+
     // Count consecutive days
     int streak = 0;
-    DateTime currentDate = readDates.contains(todayDate) ? todayDate : yesterdayDate;
-    
+    DateTime currentDate =
+        readDates.contains(todayDate) ? todayDate : yesterdayDate;
+
     while (readDates.contains(currentDate)) {
       streak++;
       currentDate = currentDate.subtract(const Duration(days: 1));
     }
-    
+
     return streak;
   }
 
@@ -136,7 +144,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final user = ref.watch(currentUserProvider);
     final libraryState = ref.watch(unifiedLibraryProvider);
     final books = libraryState.myBooks;
-    
+    final horizontalPadding = context.pageHorizontalPadding;
+    final verticalPadding = context.responsiveValue(
+      small: AppConstants.spacingXL,
+      medium: AppConstants.spacingXL,
+      large: AppConstants.spacingXL + 4,
+      extraLarge: AppConstants.spacingXXL,
+    );
+    final sectionSpacing = context.responsiveValue(
+      small: 20.0,
+      medium: 24.0,
+      large: 28.0,
+      extraLarge: 32.0,
+    );
+    final maxContentWidth = context.responsiveMaxContentWidth;
+
     // Show loading screen while syncing
     if (authState.isLoading || authState.isSyncing) {
       return Scaffold(
@@ -146,11 +168,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           subtitle: 'Fetching your books, notes, and study streaks...',
           progressLabel: 'Syncing progress',
           progress: null,
-          tip: 'Tip: Add a quick highlight to keep your streak alive once you hop in!',
+          tip:
+              'Tip: Add a quick highlight to keep your streak alive once you hop in!',
         ),
       );
     }
-    
+
     // Show login prompt if not authenticated
     if (authUser == null) {
       return _buildLoginPrompt(context);
@@ -160,76 +183,65 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     if (isReadingMode && _currentReadingBook != null) {
       return buildReadingInterface(_currentReadingBook!);
     }
-    
+
     return Scaffold(
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            // App bar
-            SliverAppBar(
-              floating: true,
-              snap: true,
-              backgroundColor: theme.colorScheme.surface,
-              elevation: 0,
-              expandedHeight: 100,
-              flexibleSpace: FlexibleSpaceBar(
-                background: _buildAppBar(context, ref, user.value),
-              ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxContentWidth),
+            child: CustomScrollView(
+              slivers: [
+                SliverAppBar(
+                  floating: true,
+                  snap: true,
+                  backgroundColor: theme.colorScheme.surface,
+                  elevation: 0,
+                  expandedHeight: context.responsiveValue(
+                    small: 96.0,
+                    medium: 104.0,
+                    large: 116.0,
+                    extraLarge: 128.0,
+                  ),
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: Padding(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: horizontalPadding),
+                      child: _buildAppBar(context, ref, user.value),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    verticalPadding,
+                    horizontalPadding,
+                    0,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _buildProgressSection(context, ref, user.value),
+                  ),
+                ),
+                SliverToBoxAdapter(child: SizedBox(height: sectionSpacing)),
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  sliver: SliverToBoxAdapter(
+                    child: libraryState.isLoadingUserLibrary
+                        ? _buildLoadingState(context)
+                        : _buildContinueReading(context, ref, books),
+                  ),
+                ),
+                SliverToBoxAdapter(child: SizedBox(height: sectionSpacing)),
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  sliver: SliverToBoxAdapter(
+                    child: _buildAiRecommendations(context, ref),
+                  ),
+                ),
+                // Removed Quick Actions and Recent Activity sections
+                SliverToBoxAdapter(child: SizedBox(height: verticalPadding)),
+              ],
             ),
-            
-            // Main content - Progress overview
-            SliverPadding(
-              padding: const EdgeInsets.all(AppConstants.defaultPadding),
-              sliver: SliverToBoxAdapter(
-                child: _buildProgressSection(context, ref, user.value),
-              ),
-            ),
-            
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-            
-            // Continue reading
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
-              sliver: SliverToBoxAdapter(
-                child: libraryState.isLoadingUserLibrary 
-                  ? _buildLoadingState(context)
-                  : _buildContinueReading(context, ref, books),
-              ),
-            ),
-            
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-            
-            // AI recommendations
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
-              sliver: SliverToBoxAdapter(
-                child: _buildAiRecommendations(context, ref),
-              ),
-            ),
-            
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-            
-            // Quick actions
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
-              sliver: SliverToBoxAdapter(
-                child: _buildQuickActions(context, ref),
-              ),
-            ),
-            
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-            
-            // Recent activity
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
-              sliver: SliverToBoxAdapter(
-                child: _buildRecentActivity(context, ref),
-              ),
-            ),
-            
-            // Bottom padding
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-          ],
+          ),
         ),
       ),
     );
@@ -239,9 +251,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final theme = Theme.of(context);
     final greeting = _getGreeting();
     final emoji = _getGreetingEmoji();
+    final horizontal = context.responsiveValue(
+      small: AppConstants.spacingLG,
+      medium: AppConstants.spacingXL,
+      large: AppConstants.spacingXL,
+      extraLarge: AppConstants.spacingXL + 4,
+    );
+    final vertical = context.responsiveValue(
+      small: AppConstants.spacingMD,
+      medium: AppConstants.spacingMD,
+      large: AppConstants.spacingLG,
+      extraLarge: AppConstants.spacingLG,
+    );
 
     return Padding(
-      padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      padding: EdgeInsets.symmetric(horizontal: horizontal, vertical: vertical),
       child: Row(
         children: [
           // User greeting
@@ -268,7 +292,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                       Text(
                         greeting,
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onBackground.withOpacity(0.7),
+                          color:
+                              theme.colorScheme.onBackground.withOpacity(0.7),
                         ),
                       ),
                     ],
@@ -288,10 +313,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               ],
             ),
           ),
-          
+
           // Profile menu (Sign in/Sign out)
-          const ProfileMenuButton(currentRoute: AppRoutes.dashboard),
-          
           // Settings
           IconButton(
             onPressed: () => context.push(AppRoutes.settings),
@@ -305,12 +328,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
-  Widget _buildProgressSection(BuildContext context, WidgetRef ref, UserModel? user) {
+  Widget _buildProgressSection(
+      BuildContext context, WidgetRef ref, UserModel? user) {
     final theme = Theme.of(context);
     final libraryState = ref.watch(unifiedLibraryProvider);
     final books = libraryState.myBooks;
     final gamification = ref.watch(gamificationProvider);
-    
+
     // Show loading state while fetching books
     if (libraryState.isLoadingUserLibrary && books.isEmpty) {
       return Column(
@@ -327,39 +351,40 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         ],
       );
     }
-    
+
     // Calculate stats from books
     final stats = _calculateDashboardStats(books);
-    
-    // Update gamification state with current stats (only once per widget lifecycle)
-    if (mounted && !_hasSyncedGamification) {
-      _hasSyncedGamification = true;
-      
-      // Delay modification until after build is complete
+
+    // Keep XP in sync with current study time whenever dashboard becomes visible
+    if (mounted) {
+      // Delay modification until after build is complete to avoid setState during build
       Future.microtask(() {
         if (!mounted) return;
-        
-        // Sync XP from total study time (5 hours = 100 XP)
+
         final studyTimeMinutes = stats['total_study_time_minutes'] ?? 0;
         final gamificationNotifier = ref.read(gamificationProvider.notifier);
-        
-        // Sync XP from study time
-        gamificationNotifier.syncXPFromStudyTime(studyTimeMinutes);
-        
+
+        // Only resync if derived XP differs from current state to avoid redundant rebuilds
+        final expectedXP = gamificationNotifier.calculateXPFromStudyTime(studyTimeMinutes);
+        if (expectedXP != gamification.totalXP) {
+          gamificationNotifier.syncXPFromStudyTime(studyTimeMinutes);
+        }
+
         // Update streak if different
         if (stats['study_streak'] != gamification.currentStreak) {
           gamificationNotifier.updateStreak(true);
         }
-        
+
         // Check for achievement unlocks
         gamificationNotifier.checkAchievements(
           booksRead: stats['books_read'] ?? 0,
-          pagesRead: books.fold<int>(0, (sum, book) => sum + (book.progress?.totalPagesRead ?? 0)),
+          pagesRead: books.fold<int>(
+              0, (sum, book) => sum + (book.progress?.totalPagesRead ?? 0)),
           studyTimeMinutes: studyTimeMinutes,
         );
       });
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -376,7 +401,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 glowIntensity: 0.6,
               ),
               const SizedBox(width: 20),
-              
+
               // Level info
               Expanded(
                 child: Column(
@@ -402,9 +427,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ],
           ),
         ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.2, end: 0),
-        
+
         const SizedBox(height: 16),
-        
+
         Text(
           AppStrings.yourProgress,
           style: theme.textTheme.titleLarge?.copyWith(
@@ -412,7 +437,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           ),
         ),
         const SizedBox(height: 16),
-        
+
         // Progress cards row with modern design
         SizedBox(
           height: 180,
@@ -429,7 +454,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     ? 'Only ${((gamification.currentLevel + 1) * 5) - (stats['books_read'] ?? 0)} books to next level'
                     : 'Add 1 more book to build momentum',
                 detailTitle: 'Recent highlight',
-                detailBody: 'Keep exploring new titles to unlock personalized recommendations.',
+                detailBody:
+                    'Keep exploring new titles to unlock personalized recommendations.',
               ),
               _AnimatedStatCard(
                 label: 'Day Streak',
@@ -441,7 +467,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     ? '🔥 Amazing consistency!'
                     : 'Read today to keep your streak alive',
                 detailTitle: 'Pro tip',
-                detailBody: 'Schedule a 10-minute reading block to secure your streak early.',
+                detailBody:
+                    'Schedule a 10-minute reading block to secure your streak early.',
               ),
               _AnimatedStatCard(
                 label: 'Avg Quiz Score',
@@ -457,11 +484,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 label: 'Study Time',
                 icon: Icons.access_time_rounded,
                 color: AppTheme.noteColor,
-                value: ((stats['total_study_time_minutes'] ?? 0) / 60).toDouble(),
+                value:
+                    ((stats['total_study_time_minutes'] ?? 0) / 60).toDouble(),
                 formatter: (value) => '${value.toStringAsFixed(1)}h',
                 trendText: 'Consistency earns bonus XP!',
                 detailTitle: 'Focus tip',
-                detailBody: 'Try a focused 25 min Pomodoro session to extend your streak.',
+                detailBody:
+                    'Try a focused 25 min Pomodoro session to extend your streak.',
               ),
             ],
           ),
@@ -470,17 +499,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
-  Widget _buildContinueReading(BuildContext context, WidgetRef ref, List<BookModel> books) {
+  Widget _buildContinueReading(
+      BuildContext context, WidgetRef ref, List<BookModel> books) {
     final theme = Theme.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
-    final horizontalPadding = AppConstants.defaultPadding * 2; // Total padding on both sides
+    final horizontalPadding =
+        AppConstants.defaultPadding * 2; // Total padding on both sides
     final availableWidth = screenWidth - horizontalPadding;
-    
+
     // Define minimum card width for small screens
     const minCardWidth = 120.0;
     const maxCardsPerRow = 7; // View All + 6 books
     const cardSpacing = 8.0;
-    
+
     // Calculate optimal number of cards and card width
     final cardLayout = _calculateOptimalCardLayout(
       availableWidth: availableWidth,
@@ -488,10 +519,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       maxCards: maxCardsPerRow,
       cardSpacing: cardSpacing,
     );
-    
+
     final cardWidth = cardLayout.cardWidth;
     final cardsToShow = cardLayout.cardsToShow;
-    
+
     if (books.isEmpty) {
       return _buildEmptyState(
         context,
@@ -501,7 +532,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         () => context.push(AppRoutes.library),
       );
     }
-    
+
     // Get books for continue reading - prioritize recently read, then recently added
     final continueBooks = books.map((book) {
       // Use lastReadAt if available, otherwise use addedAt
@@ -509,21 +540,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       return MapEntry(book, sortDate);
     }).toList()
       ..sort((a, b) => b.value.compareTo(a.value)); // Sort by most recent first
-    
+
     // Take books based on calculated layout
-    final displayBooks = continueBooks.take(cardsToShow - 1).map((entry) => entry.key).toList();
-    
+    final displayBooks =
+        continueBooks.take(cardsToShow).map((entry) => entry.key).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          AppStrings.continueReading,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              AppStrings.continueReading,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            TextButton(
+              onPressed: () => context.push(AppRoutes.reading),
+              child: const Text('View All'),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
-        
         SizedBox(
           height: cardWidth * 1.2, // Optimized height for better proportions
           child: _buildCardsList(
@@ -539,7 +579,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
   Widget _buildAiRecommendations(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -550,18 +590,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           ),
         ),
         const SizedBox(height: 16),
-        
+
         // AI tip cards
         const AiTipCard(
           title: 'Study Tip',
-          content: 'Try the spaced repetition technique: review material at increasing intervals to improve long-term retention.',
+          content:
+              'Try the spaced repetition technique: review material at increasing intervals to improve long-term retention.',
           icon: Icons.psychology,
         ),
         const SizedBox(height: 12),
-        
+
         const AiTipCard(
           title: 'Practice Suggestion',
-          content: 'Based on your reading pattern, consider taking a quiz on Chapter 3 of your Biology textbook.',
+          content:
+              'Based on your reading pattern, consider taking a quiz on Chapter 3 of your Biology textbook.',
           icon: Icons.lightbulb_outline,
           actionText: 'Start Quiz',
         ),
@@ -569,125 +611,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
-  Widget _buildQuickActions(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          AppStrings.quickActions,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        
-        Row(
-          children: [
-            Expanded(
-              child: _QuickActionCard(
-                key: const ValueKey('quick_action_add_book'),
-                title: 'Add Book',
-                icon: Icons.add_circle_outline,
-                color: AppTheme.readingColor,
-                onTap: () => context.push(AppRoutes.library),
-              ),
-            ),
-            const SizedBox(width: 16),
-            
-            Expanded(
-              child: _QuickActionCard(
-                key: const ValueKey('quick_action_practice_quiz'),
-                title: 'Practice Quiz',
-                icon: Icons.quiz_outlined,
-                color: AppTheme.practiceColor,
-                onTap: () => context.push(AppRoutes.practice),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        
-        Row(
-          children: [
-            Expanded(
-              child: _QuickActionCard(
-                key: const ValueKey('quick_action_view_notes'),
-                title: 'View Notes',
-                icon: Icons.sticky_note_2_outlined,
-                color: AppTheme.noteColor,
-                onTap: () => context.push(AppRoutes.notes),
-              ),
-            ),
-            const SizedBox(width: 16),
-            
-            Expanded(
-              child: _QuickActionCard(
-                key: const ValueKey('quick_action_study_timer'),
-                title: 'Study Timer',
-                icon: Icons.timer_outlined,
-                color: AppTheme.aiTipColor,
-                onTap: () {
-                  // TODO: Implement study timer
-                },
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecentActivity(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          AppStrings.recentActivity,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        
-        // Activity items
-        _ActivityItem(
-          key: const ValueKey('activity_read_chapter'),
-          icon: Icons.menu_book,
-          title: 'Read Chapter 5',
-          subtitle: 'Biology Textbook • 25 minutes ago',
-          color: AppTheme.readingColor,
-          showConnector: true,
-        ),
-        const SizedBox(height: 12),
-        
-        _ActivityItem(
-          key: const ValueKey('activity_chemistry_quiz'),
-          icon: Icons.quiz,
-          title: 'Completed Chemistry Quiz',
-          subtitle: 'Score: 85% • 2 hours ago',
-          color: AppTheme.practiceColor,
-          showConnector: true,
-        ),
-        const SizedBox(height: 12),
-        
-        _ActivityItem(
-          key: const ValueKey('activity_highlights'),
-          icon: Icons.highlight,
-          title: 'Added 3 highlights',
-          subtitle: 'Physics Notes • Yesterday',
-          color: AppTheme.noteColor,
-        ),
-      ],
-    );
-  }
-
   Widget _buildLoadingState(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -698,7 +624,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           ),
         ),
         const SizedBox(height: 16),
-        
         SizedBox(
           height: 200,
           child: ListView.builder(
@@ -727,7 +652,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     VoidCallback onAction,
   ) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(32),
       child: Column(
@@ -738,7 +663,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             color: theme.colorScheme.onBackground.withOpacity(0.4),
           ),
           const SizedBox(height: 16),
-          
           Text(
             title,
             style: theme.textTheme.titleLarge?.copyWith(
@@ -746,7 +670,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ),
           ),
           const SizedBox(height: 8),
-          
           Text(
             subtitle,
             style: theme.textTheme.bodyMedium?.copyWith(
@@ -755,7 +678,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          
           ElevatedButton(
             onPressed: onAction,
             child: const Text('Get Started'),
@@ -789,7 +711,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         actionText: AppStrings.signIn,
         onAction: () {
           // Save current route to return to after login
-          ref.read(authStateProvider.notifier).setReturnRoute(AppRoutes.dashboard);
+          ref
+              .read(authStateProvider.notifier)
+              .setReturnRoute(AppRoutes.dashboard);
           context.go('/login');
         },
       ),
@@ -815,7 +739,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     for (int cards = maxCards; cards >= 3; cards--) {
       final totalSpacing = cardSpacing * (cards - 1);
       final cardWidth = (availableWidth - totalSpacing) / cards;
-      
+
       if (cardWidth >= minCardWidth) {
         return CardLayoutInfo(
           cardWidth: cardWidth,
@@ -824,7 +748,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         );
       }
     }
-    
+
     // If we can't fit minimum cards, use carousel with minimum width
     return CardLayoutInfo(
       cardWidth: minCardWidth,
@@ -842,7 +766,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }) {
     if (showCarousel) {
       return PageView.builder(
-        itemCount: displayBooks.length + 1, // +1 for View All card
+        itemCount: displayBooks.length,
         itemBuilder: (context, index) {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -853,10 +777,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     } else {
       return ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: displayBooks.length + 1, // +1 for View All card
+        itemCount: displayBooks.length,
         itemBuilder: (context, index) {
           return Padding(
-            padding: EdgeInsets.only(right: index < displayBooks.length ? cardSpacing : 0),
+            padding: EdgeInsets.only(
+                right: index < displayBooks.length - 1 ? cardSpacing : 0),
             child: _buildCardAtIndex(index, displayBooks, cardWidth),
           );
         },
@@ -865,20 +790,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
 
   /// Build individual card at given index
-  Widget _buildCardAtIndex(int index, List<BookModel> displayBooks, double cardWidth) {
-    if (index == 0) {
-      return _ViewAllCard(
-        width: cardWidth,
-        onTap: () => context.push(AppRoutes.reading),
-      );
-    }
-    
-    final book = displayBooks[index - 1];
-    return _DashboardBookCard(
-      key: ValueKey('dashboard_book_${book.id}'),
-      book: book,
+  Widget _buildCardAtIndex(
+      int index, List<BookModel> displayBooks, double cardWidth) {
+    final book = displayBooks[index];
+    return SizedBox(
       width: cardWidth,
-      onTap: () => _openBook(book),
+      child: BookCard(
+        book: book,
+        layout: BookCardLayout.grid,
+        showAddToLibrary: false,
+        onTap: () => _openBook(book),
+      ),
     );
   }
 }
@@ -914,7 +836,7 @@ class _QuickActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Card(
       child: InkWell(
         onTap: () {
@@ -940,7 +862,6 @@ class _QuickActionCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              
               Text(
                 title,
                 style: theme.textTheme.labelLarge?.copyWith(
@@ -953,11 +874,11 @@ class _QuickActionCard extends StatelessWidget {
         ),
       ),
     ).animate().fadeIn(duration: 300.ms).scale(
-      begin: const Offset(0.95, 0.95),
-      end: const Offset(1.0, 1.0),
-      duration: 300.ms,
-      curve: Curves.easeOutCubic,
-    );
+          begin: const Offset(0.95, 0.95),
+          end: const Offset(1.0, 1.0),
+          duration: 300.ms,
+          curve: Curves.easeOutCubic,
+        );
   }
 }
 
@@ -1058,7 +979,7 @@ class _ViewAllCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return SizedBox(
       width: width,
       child: Card(
@@ -1152,7 +1073,7 @@ class _DashboardBookCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return SizedBox(
       width: width,
       child: Card(
@@ -1170,7 +1091,8 @@ class _DashboardBookCard extends StatelessWidget {
               children: [
                 // Book cover - flexible size based on card dimensions
                 Container(
-                  height: width * 0.7, // 70% of card width for better proportions
+                  height:
+                      width * 0.7, // 70% of card width for better proportions
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: _getSubjectColor().withOpacity(0.1),
@@ -1194,16 +1116,17 @@ class _DashboardBookCard extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            errorWidget: (context, url, error) => _buildDefaultCover(theme),
+                            errorWidget: (context, url, error) =>
+                                _buildDefaultCover(theme),
                             fadeInDuration: const Duration(milliseconds: 300),
                             fadeOutDuration: const Duration(milliseconds: 100),
                           ),
                         )
                       : _buildDefaultCover(theme),
                 ),
-                
+
                 const SizedBox(height: 6),
-                
+
                 // Title and progress section - tightly fitted
                 Expanded(
                   child: Column(
@@ -1221,10 +1144,9 @@ class _DashboardBookCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      
+
                       // Gamified progress bar (energy bar style)
-                      if (book.progress != null)
-                        _buildProgressBar(theme),
+                      if (book.progress != null) _buildProgressBar(theme),
                     ],
                   ),
                 ),
@@ -1248,7 +1170,7 @@ class _DashboardBookCard extends StatelessWidget {
 
   Widget _buildProgressBar(ThemeData theme) {
     final progress = book.progressPercentage;
-    
+
     return Container(
       width: double.infinity,
       height: 6,
@@ -1427,7 +1349,8 @@ class _AnimatedStatCardState extends State<_AnimatedStatCard> {
         const Spacer(),
         Row(
           children: [
-            Icon(Icons.touch_app, size: 16, color: widget.color.withOpacity(0.8)),
+            Icon(Icons.touch_app,
+                size: 16, color: widget.color.withOpacity(0.8)),
             const SizedBox(width: 8),
             Text(
               'Tap to go back',

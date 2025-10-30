@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/animation_helper.dart';
+import '../../../core/utils/responsive_layout.dart';
 
 /// Unified loading state widget with support for contextual messaging
 /// and optional progress indicators.
@@ -65,6 +67,25 @@ class LoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final horizontalGap = context.responsiveValue(
+      small: AppConstants.spacingLG,
+      medium: AppConstants.spacingLG + 4,
+      large: AppConstants.spacingXL,
+      extraLarge: AppConstants.spacingXL + 4,
+    );
+    final verticalGap = context.responsiveValue(
+      small: AppConstants.spacingMD,
+      medium: AppConstants.spacingLG,
+      large: AppConstants.spacingLG,
+      extraLarge: AppConstants.spacingXL,
+    );
+    final microGap = verticalGap * 0.35;
+    final maxWidth = context.responsiveValue(
+      small: 520.0,
+      medium: 600.0,
+      large: 720.0,
+      extraLarge: 840.0,
+    );
 
     Widget content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -75,48 +96,63 @@ class LoadingState extends StatelessWidget {
           progress: progress,
           icon: icon,
         ),
-        const SizedBox(width: 20),
+        SizedBox(width: horizontalGap),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
+                style: ResponsiveTypography.adjust(
+                  context,
+                  theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ) ??
+                      theme.textTheme.titleLarge ??
+                      const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 20),
                 ),
               ),
               if (subtitle != null) ...[
-                const SizedBox(height: 6),
+                SizedBox(height: microGap),
                 Text(
                   subtitle!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.72),
+                  style: ResponsiveTypography.adjust(
+                    context,
+                    theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.72),
+                          height: 1.4,
+                        ) ??
+                        TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.72),
+                          height: 1.4,
+                        ),
                   ),
                 ),
               ],
               if (progressLabel != null || progress != null) ...[
-                const SizedBox(height: 16),
+                SizedBox(height: verticalGap * 0.8),
                 _ProgressLabel(
                   progress: progress,
                   label: progressLabel,
                 ),
               ],
               if (messages != null && messages!.isNotEmpty) ...[
-                const SizedBox(height: 16),
+                SizedBox(height: verticalGap * 0.8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: messages!
                       .map(
                         (message) => Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
+                          padding: EdgeInsets.only(bottom: microGap),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Container(
                                 width: 6,
                                 height: 6,
-                                margin: const EdgeInsets.only(top: 6, right: 10),
+                                margin: EdgeInsets.only(
+                                    top: microGap, right: microGap + 6),
                                 decoration: BoxDecoration(
                                   color: theme.colorScheme.primary,
                                   shape: BoxShape.circle,
@@ -125,8 +161,18 @@ class LoadingState extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   message,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                                  style: ResponsiveTypography.adjust(
+                                    context,
+                                    theme.textTheme.bodySmall?.copyWith(
+                                          color: theme.colorScheme.onSurface
+                                              .withOpacity(0.7),
+                                          height: 1.35,
+                                        ) ??
+                                        TextStyle(
+                                          color: theme.colorScheme.onSurface
+                                              .withOpacity(0.7),
+                                          height: 1.35,
+                                        ),
                                   ),
                                 ),
                               ),
@@ -138,16 +184,16 @@ class LoadingState extends StatelessWidget {
                 ),
               ],
               if (tip != null) ...[
-                const SizedBox(height: 18),
+                SizedBox(height: verticalGap),
                 _TipChip(text: tip!),
               ],
               if (actions != null || onCancel != null) ...[
-                const SizedBox(height: 20),
+                SizedBox(height: verticalGap),
                 Row(
                   children: [
                     if (actions != null) actions!,
                     if (actions != null && onCancel != null)
-                      const SizedBox(width: 12),
+                      SizedBox(width: horizontalGap * 0.5),
                     if (onCancel != null)
                       TextButton(
                         onPressed: onCancel,
@@ -162,7 +208,15 @@ class LoadingState extends StatelessWidget {
       ],
     );
 
-    final effectivePadding = padding ?? const EdgeInsets.all(24);
+    final effectivePadding = padding ??
+        EdgeInsets.all(
+          context.responsiveValue(
+            small: AppConstants.spacingXL,
+            medium: AppConstants.spacingXL,
+            large: AppConstants.spacingXL + 4,
+            extraLarge: AppConstants.spacingXXL,
+          ),
+        );
 
     if (useCard) {
       content = Container(
@@ -179,7 +233,7 @@ class LoadingState extends StatelessWidget {
 
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
+        constraints: BoxConstraints(maxWidth: maxWidth),
         child: content,
       ),
     );
@@ -203,7 +257,8 @@ class _Indicator extends StatefulWidget {
   State<_Indicator> createState() => _IndicatorState();
 }
 
-class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMixin {
+class _IndicatorState extends State<_Indicator>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _pulse;
 
@@ -231,14 +286,38 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final determinateSize = context.responsiveValue(
+      small: 36.0,
+      medium: 40.0,
+      large: 46.0,
+      extraLarge: 52.0,
+    );
+    final spinnerSize = context.responsiveValue(
+      small: 32.0,
+      medium: 36.0,
+      large: 40.0,
+      extraLarge: 44.0,
+    );
+    final iconSize = context.responsiveValue(
+      small: 28.0,
+      medium: 32.0,
+      large: 36.0,
+      extraLarge: 40.0,
+    );
+    final padding = context.responsiveValue(
+      small: AppConstants.spacingSM,
+      medium: AppConstants.spacingMD,
+      large: AppConstants.spacingMD,
+      extraLarge: AppConstants.spacingLG,
+    );
 
     Widget indicator;
     if (widget.indicator != null) {
       indicator = widget.indicator!;
     } else if (widget.progress != null) {
       indicator = SizedBox(
-        height: 40,
-        width: 40,
+        height: determinateSize,
+        width: determinateSize,
         child: CircularProgressIndicator(
           value: widget.progress!.clamp(0.0, 1.0),
           strokeWidth: 4,
@@ -248,8 +327,8 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
       );
     } else if (widget.showSpinner) {
       indicator = SizedBox(
-        height: 36,
-        width: 36,
+        height: spinnerSize,
+        width: spinnerSize,
         child: CircularProgressIndicator.adaptive(
           valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
         ),
@@ -257,7 +336,7 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
     } else {
       indicator = Icon(
         widget.icon ?? Icons.auto_awesome,
-        size: 32,
+        size: iconSize,
         color: theme.colorScheme.primary,
       );
     }
@@ -276,7 +355,7 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
               ),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(6),
+              padding: EdgeInsets.all(padding),
               child: child,
             ),
           ),
@@ -299,6 +378,18 @@ class _ProgressLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final gap = context.responsiveValue(
+      small: AppConstants.spacingSM,
+      medium: AppConstants.spacingSM + 2,
+      large: AppConstants.spacingMD,
+      extraLarge: AppConstants.spacingMD,
+    );
+    final barHeight = context.responsiveValue(
+      small: 6.0,
+      medium: 6.0,
+      large: 8.0,
+      extraLarge: 10.0,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,28 +397,42 @@ class _ProgressLabel extends StatelessWidget {
         if (label != null)
           Text(
             label!,
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withOpacity(0.75),
+            style: ResponsiveTypography.adjust(
+              context,
+              theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface.withOpacity(0.75),
+                  ) ??
+                  TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface.withOpacity(0.75),
+                  ),
             ),
           ),
-        const SizedBox(height: 8),
+        SizedBox(height: gap),
         ClipRRect(
           borderRadius: BorderRadius.circular(999),
           child: LinearProgressIndicator(
             value: progress?.clamp(0.0, 1.0),
-            minHeight: 6,
+            minHeight: barHeight,
             valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
             backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
           ),
         ),
         if (progress != null) ...[
-          const SizedBox(height: 6),
+          SizedBox(height: gap * 0.8),
           Text(
             '${(progress!.clamp(0.0, 1.0) * 100).round()}% complete',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.65),
-              fontWeight: FontWeight.w600,
+            style: ResponsiveTypography.adjust(
+              context,
+              theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.65),
+                    fontWeight: FontWeight.w600,
+                  ) ??
+                  TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.65),
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
           ),
         ],
@@ -344,9 +449,33 @@ class _TipChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final horizontal = context.responsiveValue(
+      small: AppConstants.spacingMD,
+      medium: AppConstants.spacingLG,
+      large: AppConstants.spacingLG,
+      extraLarge: AppConstants.spacingXL,
+    );
+    final vertical = context.responsiveValue(
+      small: AppConstants.spacingSM,
+      medium: AppConstants.spacingSM + 2,
+      large: AppConstants.spacingMD,
+      extraLarge: AppConstants.spacingMD,
+    );
+    final iconSize = context.responsiveValue(
+      small: 18.0,
+      medium: 20.0,
+      large: 22.0,
+      extraLarge: 24.0,
+    );
+    final spacing = context.responsiveValue(
+      small: AppConstants.spacingSM,
+      medium: AppConstants.spacingSM + 2,
+      large: AppConstants.spacingMD,
+      extraLarge: AppConstants.spacingMD,
+    );
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: horizontal, vertical: vertical),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: AppTheme.celebratoryHaloGradient,
@@ -357,14 +486,22 @@ class _TipChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.tips_and_updates, size: 18, color: theme.colorScheme.primary),
-          const SizedBox(width: 8),
+          Icon(Icons.tips_and_updates,
+              size: iconSize, color: theme.colorScheme.primary),
+          SizedBox(width: spacing),
           Flexible(
             child: Text(
               text,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.75),
-                fontWeight: FontWeight.w600,
+              style: ResponsiveTypography.adjust(
+                context,
+                theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.75),
+                      fontWeight: FontWeight.w600,
+                    ) ??
+                    TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.75),
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
             ),
           ),
@@ -373,4 +510,3 @@ class _TipChip extends StatelessWidget {
     );
   }
 }
-

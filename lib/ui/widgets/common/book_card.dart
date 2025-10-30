@@ -5,14 +5,17 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/responsive_layout.dart';
 import '../../../models/content/book_model.dart';
 
 /// Layout modes for the BookCard component
 enum BookCardLayout {
   /// Full detailed layout for lists and large displays
   full,
-  /// Compact horizontal layout for lists  
+
+  /// Compact horizontal layout for lists
   compact,
+
   /// Grid layout optimized for responsive grids
   grid,
 }
@@ -57,7 +60,26 @@ class BookCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final borderRadius = AppConstants.borderRadius;
+    final baseRadius = context.responsiveValue(
+      small: AppConstants.borderRadius,
+      medium: AppConstants.borderRadius + 2,
+      large: AppConstants.borderRadius + 4,
+      extraLarge: AppConstants.borderRadius + 6,
+    );
+    final outerRadiusAddition = context.responsiveValue(
+      small: 6.0,
+      medium: 8.0,
+      large: 10.0,
+      extraLarge: 12.0,
+    );
+    final outerRadius = baseRadius + outerRadiusAddition;
+    final innerRadius = baseRadius +
+        context.responsiveValue(
+          small: 4.0,
+          medium: 6.0,
+          large: 8.0,
+          extraLarge: 10.0,
+        );
     final accentColor = _getSubjectColor();
 
     return Hero(
@@ -67,7 +89,7 @@ class BookCard extends StatelessWidget {
         children: [
           Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(borderRadius + 6),
+              borderRadius: BorderRadius.circular(outerRadius),
               gradient: _hasProgress
                   ? AppTheme.primaryGradient
                   : LinearGradient(
@@ -81,8 +103,20 @@ class BookCard extends StatelessWidget {
               boxShadow: [
                 BoxShadow(
                   color: accentColor.withOpacity(0.12),
-                  blurRadius: 18,
-                  offset: const Offset(0, 10),
+                  blurRadius: context.responsiveValue(
+                    small: 12,
+                    medium: 16,
+                    large: 22,
+                    extraLarge: 28,
+                  ),
+                  offset: Offset(
+                      0,
+                      context.responsiveValue(
+                        small: 6,
+                        medium: 8,
+                        large: 10,
+                        extraLarge: 12,
+                      )),
                 ),
               ],
             ),
@@ -94,7 +128,7 @@ class BookCard extends StatelessWidget {
                 color: theme.colorScheme.surface,
                 clipBehavior: Clip.antiAlias,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(borderRadius + 4),
+                  borderRadius: BorderRadius.circular(innerRadius),
                 ),
                 child: InkWell(
                   onTap: () {
@@ -105,9 +139,9 @@ class BookCard extends StatelessWidget {
                     HapticFeedback.mediumImpact();
                     onLongPress?.call();
                   },
-                  borderRadius: BorderRadius.circular(borderRadius + 4),
+                  borderRadius: BorderRadius.circular(innerRadius),
                   child: Padding(
-                    padding: EdgeInsets.all(_getPadding()),
+                    padding: EdgeInsets.all(_getPadding(context)),
                     child: _buildLayoutContent(context, theme),
                   ),
                 ),
@@ -116,35 +150,50 @@ class BookCard extends StatelessWidget {
           ),
           if (_isNew)
             Positioned(
-              top: -12,
+              top: 8,
               left: 12,
               child: _buildBadge('New', Colors.greenAccent),
             ),
           if (book.isCompleted)
             Positioned(
-              top: -12,
+              top: 8,
               right: 12,
               child: _buildBadge('Done', AppTheme.readingColor),
             ),
         ],
       ),
     ).animate().fadeIn(duration: 300.ms).scale(
-      begin: const Offset(0.95, 0.95),
-      end: const Offset(1.0, 1.0),
-      duration: 300.ms,
-      curve: Curves.easeOutCubic,
-    );
+          begin: const Offset(0.95, 0.95),
+          end: const Offset(1.0, 1.0),
+          duration: 300.ms,
+          curve: Curves.easeOutCubic,
+        );
   }
 
-  /// Get padding based on layout mode
-  double _getPadding() {
+  /// Get padding based on layout mode and device size
+  double _getPadding(BuildContext context) {
     switch (layout) {
       case BookCardLayout.compact:
-        return 12.0;
+        return context.responsiveValue(
+          small: 12.0,
+          medium: 14.0,
+          large: 16.0,
+          extraLarge: 18.0,
+        );
       case BookCardLayout.grid:
-        return 12.0;
+        return context.responsiveValue(
+          small: 12.0,
+          medium: 14.0,
+          large: 16.0,
+          extraLarge: 18.0,
+        );
       case BookCardLayout.full:
-        return 16.0;
+        return context.responsiveValue(
+          small: 14.0,
+          medium: 16.0,
+          large: 20.0,
+          extraLarge: 24.0,
+        );
     }
   }
 
@@ -161,6 +210,13 @@ class BookCard extends StatelessWidget {
   }
 
   Widget _buildFullLayout(BuildContext context, ThemeData theme) {
+    final gap = context.responsiveValue(
+      small: 12.0,
+      medium: 14.0,
+      large: 16.0,
+      extraLarge: 18.0,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -169,9 +225,24 @@ class BookCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Book cover
-            _buildBookCover(theme, 50, 70),
-            const SizedBox(width: 12),
-            
+            _buildBookCover(
+              context,
+              theme,
+              width: context.responsiveValue(
+                small: 48,
+                medium: 58,
+                large: 66,
+                extraLarge: 74,
+              ),
+              height: context.responsiveValue(
+                small: 70,
+                medium: 84,
+                large: 96,
+                extraLarge: 108,
+              ),
+            ),
+            SizedBox(width: gap),
+
             // Book info
             Expanded(
               child: Column(
@@ -179,32 +250,39 @@ class BookCard extends StatelessWidget {
                 children: [
                   Text(
                     _truncatedTitle,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                    style: _adjustStyle(
+                      context,
+                      theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  
+                  SizedBox(height: gap * 0.3),
                   Text(
                     book.author,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    style: _adjustStyle(
+                      context,
+                      theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      ),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  
+                  SizedBox(height: gap * 0.3),
                   Row(
                     children: [
-                      _buildSubjectChip(theme),
-                      const SizedBox(width: 8),
+                      _buildSubjectChip(context, theme),
+                      SizedBox(width: gap * 0.5),
                       Text(
                         book.grade,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        style: _adjustStyle(
+                          context,
+                          theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          ),
                         ),
                       ),
                     ],
@@ -212,20 +290,20 @@ class BookCard extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Status indicators
             _buildStatusIndicators(theme),
           ],
         ),
-        
+
         if (showProgress) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: gap),
           _buildProgressSection(theme),
         ],
-        
+
         // Action buttons (if any)
         if (book.lastReadAt != null) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: gap * 0.6),
           _buildLastReadInfo(theme),
         ],
       ],
@@ -233,12 +311,34 @@ class BookCard extends StatelessWidget {
   }
 
   Widget _buildCompactLayout(BuildContext context, ThemeData theme) {
+    final horizontalGap = context.responsiveValue(
+      small: 10.0,
+      medium: 12.0,
+      large: 14.0,
+      extraLarge: 16.0,
+    );
+
     return Row(
       children: [
         // Book cover
-        _buildBookCover(theme, 40, 56),
-        const SizedBox(width: 12),
-        
+        _buildBookCover(
+          context,
+          theme,
+          width: context.responsiveValue(
+            small: 40,
+            medium: 46,
+            large: 54,
+            extraLarge: 60,
+          ),
+          height: context.responsiveValue(
+            small: 56,
+            medium: 64,
+            large: 74,
+            extraLarge: 82,
+          ),
+        ),
+        SizedBox(width: horizontalGap),
+
         // Book info
         Expanded(
           child: Column(
@@ -247,38 +347,46 @@ class BookCard extends StatelessWidget {
             children: [
               Text(
                 _truncatedTitle,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+                style: _adjustStyle(
+                  context,
+                  theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               Text(
                 book.author,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                style: _adjustStyle(
+                  context,
+                  theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  ),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (showProgress)
-                _buildMiniProgress(theme),
+              if (showProgress) _buildMiniProgress(theme),
             ],
           ),
         ),
-        
+
         // Status and progress
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildSubjectChip(theme, small: true),
+            _buildSubjectChip(context, theme, small: true),
             if (showProgress)
               Text(
                 '${book.progress?.totalPagesRead ?? 0}/${book.totalPages}',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.w600,
+                style: _adjustStyle(
+                  context,
+                  theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
           ],
@@ -287,7 +395,12 @@ class BookCard extends StatelessWidget {
     );
   }
 
-  Widget _buildBookCover(ThemeData theme, double width, double height) {
+  Widget _buildBookCover(
+    BuildContext context,
+    ThemeData theme, {
+    required double width,
+    required double height,
+  }) {
     return Container(
       width: width,
       height: height,
@@ -313,35 +426,32 @@ class BookCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                errorWidget: (context, url, error) => _buildDefaultCover(theme),
+                errorWidget: (context, url, error) =>
+                    _buildDefaultCover(context, theme),
                 fadeInDuration: const Duration(milliseconds: 300),
                 fadeOutDuration: const Duration(milliseconds: 100),
               ),
             )
-          : _buildDefaultCover(theme),
+          : _buildDefaultCover(context, theme),
     );
   }
 
-  Widget _buildDefaultCover(ThemeData theme, [double? size]) {
-    // Determine font size based on layout
-    double fontSize;
-    EdgeInsets padding;
-    
-    switch (layout) {
-      case BookCardLayout.compact:
-        fontSize = 10;
-        padding = const EdgeInsets.all(4);
-        break;
-      case BookCardLayout.grid:
-        fontSize = 14;
-        padding = const EdgeInsets.all(8);
-        break;
-      case BookCardLayout.full:
-        fontSize = 12;
-        padding = const EdgeInsets.all(6);
-        break;
-    }
-    
+  Widget _buildDefaultCover(BuildContext context, ThemeData theme) {
+    final fontSize = context.responsiveValue(
+      small: layout == BookCardLayout.grid ? 12.0 : 10.0,
+      medium: layout == BookCardLayout.grid ? 14.0 : 12.0,
+      large: layout == BookCardLayout.grid ? 16.0 : 13.0,
+      extraLarge: layout == BookCardLayout.grid ? 18.0 : 14.0,
+    );
+    final padding = EdgeInsets.all(
+      context.responsiveValue(
+        small: layout == BookCardLayout.grid ? 6.0 : 4.0,
+        medium: layout == BookCardLayout.grid ? 8.0 : 6.0,
+        large: layout == BookCardLayout.grid ? 10.0 : 8.0,
+        extraLarge: layout == BookCardLayout.grid ? 12.0 : 10.0,
+      ),
+    );
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -374,24 +484,53 @@ class BookCard extends StatelessWidget {
     );
   }
 
-  Widget _buildSubjectChip(ThemeData theme, {bool small = false}) {
+  Widget _buildSubjectChip(BuildContext context, ThemeData theme,
+      {bool small = false}) {
+    final horizontal = context.responsiveValue(
+      small: small ? 6.0 : 8.0,
+      medium: small ? 8.0 : 10.0,
+      large: small ? 9.0 : 12.0,
+      extraLarge: small ? 10.0 : 14.0,
+    );
+    final vertical = context.responsiveValue(
+      small: small ? 2.0 : 4.0,
+      medium: small ? 3.0 : 5.0,
+      large: small ? 4.0 : 6.0,
+      extraLarge: small ? 4.0 : 7.0,
+    );
+    final radius = context.responsiveValue(
+      small: small ? 8.0 : 12.0,
+      medium: small ? 9.0 : 14.0,
+      large: small ? 10.0 : 16.0,
+      extraLarge: small ? 11.0 : 18.0,
+    );
+
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: small ? 6 : 8,
-        vertical: small ? 2 : 4,
+        horizontal: horizontal,
+        vertical: vertical,
       ),
       decoration: BoxDecoration(
         color: _getSubjectColor().withOpacity(0.1),
-        borderRadius: BorderRadius.circular(small ? 8 : 12),
+        borderRadius: BorderRadius.circular(radius),
       ),
       child: Text(
         book.subject,
-        style: (small ? theme.textTheme.labelSmall : theme.textTheme.labelMedium)?.copyWith(
-          color: _getSubjectColor(),
-          fontWeight: FontWeight.w600,
+        style: _adjustStyle(
+          context,
+          (small ? theme.textTheme.labelSmall : theme.textTheme.labelMedium)
+              ?.copyWith(
+            color: _getSubjectColor(),
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
+  }
+
+  TextStyle? _adjustStyle(BuildContext context, TextStyle? style) {
+    if (style == null) return null;
+    return ResponsiveTypography.adjust(context, style);
   }
 
   Widget _buildStatusIndicators(ThemeData theme) {
@@ -441,7 +580,6 @@ class BookCard extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        
         ClipRRect(
           borderRadius: BorderRadius.circular(999),
           child: SizedBox(
@@ -515,7 +653,7 @@ class BookCard extends StatelessWidget {
     final lastRead = book.lastReadAt!;
     final now = DateTime.now();
     final difference = now.difference(lastRead);
-    
+
     String timeAgo;
     if (difference.inDays > 0) {
       timeAgo = '${difference.inDays}d ago';
@@ -533,7 +671,6 @@ class BookCard extends StatelessWidget {
           color: theme.colorScheme.onSurface.withOpacity(0.5),
         ),
         const SizedBox(width: 4),
-        
         Text(
           'Last read $timeAgo',
           style: theme.textTheme.bodySmall?.copyWith(
@@ -588,9 +725,9 @@ class BookCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Book cover (larger for grid)
+        // Book cover (smaller vertical footprint for grid)
         Expanded(
-          flex: 3,
+          flex: 2,
           child: Container(
             width: double.infinity,
             decoration: BoxDecoration(
@@ -615,17 +752,18 @@ class BookCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      errorWidget: (context, url, error) => _buildDefaultCover(theme, 32),
+                      errorWidget: (context, url, error) =>
+                          _buildDefaultCover(context, theme),
                       fadeInDuration: const Duration(milliseconds: 300),
                       fadeOutDuration: const Duration(milliseconds: 100),
                     ),
                   )
-                : _buildDefaultCover(theme, 32),
+                : _buildDefaultCover(context, theme),
           ),
         ),
-        
-        const SizedBox(height: 8),
-        
+
+        const SizedBox(height: 6),
+
         // Book info - compact layout without Spacer
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -641,8 +779,8 @@ class BookCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
-            
+            const SizedBox(height: 2),
+
             // Author with better sizing
             Text(
               book.author,
@@ -653,9 +791,9 @@ class BookCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            
-            const SizedBox(height: 8), // Minimal spacing before category/button
-            
+
+            const SizedBox(height: 6), // Minimal spacing before category/button
+
             // Progress and subject with flexible layout
             Column(
               mainAxisSize: MainAxisSize.min,
@@ -663,7 +801,8 @@ class BookCard extends StatelessWidget {
                 // Subject chip (full width)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: _getSubjectColor().withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
@@ -681,7 +820,7 @@ class BookCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                
+
                 // Progress percentage or Add to Library button
                 if (showAddToLibrary)
                   _buildLibraryButton(theme)
@@ -718,12 +857,11 @@ class BookCard extends StatelessWidget {
           }
         },
         style: ElevatedButton.styleFrom(
-          backgroundColor: isInLibrary 
+          backgroundColor: isInLibrary
               ? theme.colorScheme.error.withOpacity(0.1)
               : theme.colorScheme.primary.withOpacity(0.1),
-          foregroundColor: isInLibrary 
-              ? theme.colorScheme.error
-              : theme.colorScheme.primary,
+          foregroundColor:
+              isInLibrary ? theme.colorScheme.error : theme.colorScheme.primary,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           shape: RoundedRectangleBorder(
@@ -751,13 +889,12 @@ class BookCard extends StatelessWidget {
           ],
         ),
       ),
-    ).animate(target: isInLibrary ? 1 : 0)
-      .scale(
-        begin: const Offset(1.0, 1.0),
-        end: const Offset(1.05, 1.05),
-        duration: 200.ms,
-        curve: Curves.easeOut,
-      );
+    ).animate(target: isInLibrary ? 1 : 0).scale(
+          begin: const Offset(1.0, 1.0),
+          end: const Offset(1.05, 1.05),
+          duration: 200.ms,
+          curve: Curves.easeOut,
+        );
   }
 
   Color _getSubjectColor() {

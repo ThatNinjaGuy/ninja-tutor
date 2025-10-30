@@ -13,6 +13,7 @@ import '../../widgets/notes/note_card.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/search_filter_bar.dart';
 import '../../widgets/common/profile_menu_button.dart';
+import '../../../core/utils/responsive_layout.dart';
 
 /// Combined notes and bookmarks provider that aggregates data from all books
 /// Only fetches when user is authenticated
@@ -20,18 +21,20 @@ final combinedNotesProvider = FutureProvider<List<NoteModel>>((ref) async {
   // Wait for auth to be ready
   final authState = ref.watch(authProvider);
   final authUser = authState.user;
-  
+
   // Return empty list if not authenticated or still loading
   if (authState.isLoading || authState.isSyncing || authUser == null) {
-    debugPrint('⚠️ Auth not ready or no authenticated user, skipping notes/bookmarks fetch');
+    debugPrint(
+        '⚠️ Auth not ready or no authenticated user, skipping notes/bookmarks fetch');
     return [];
   }
-  
-  debugPrint('📚 Auth ready, fetching all notes and bookmarks for user: ${authUser.id}');
-  
+
+  debugPrint(
+      '📚 Auth ready, fetching all notes and bookmarks for user: ${authUser.id}');
+
   final apiService = ref.watch(apiServiceProvider);
   final allItems = <NoteModel>[];
-  
+
   try {
     // Fetch all notes for user in one call
     debugPrint('🔄 Calling GET /notes/all...');
@@ -41,13 +44,13 @@ final combinedNotesProvider = FutureProvider<List<NoteModel>>((ref) async {
   } catch (e) {
     debugPrint('⚠️ Failed to load notes: $e');
   }
-  
+
   try {
     // Fetch all bookmarks for user in one call
     debugPrint('🔄 Calling GET /bookmarks/all...');
     final bookmarksData = await apiService.getAllUserBookmarks();
     debugPrint('✅ Fetched ${bookmarksData.length} bookmarks');
-    
+
     // Convert bookmarks to NoteModel format for display
     for (final bookmarkData in bookmarksData) {
       final bookmarkNote = NoteModel(
@@ -55,7 +58,8 @@ final combinedNotesProvider = FutureProvider<List<NoteModel>>((ref) async {
         bookId: bookmarkData['book_id'] as String,
         pageNumber: bookmarkData['page_number'] as int,
         type: NoteType.bookmark,
-        content: bookmarkData['note'] as String? ?? 'Bookmark on page ${bookmarkData['page_number']}',
+        content: bookmarkData['note'] as String? ??
+            'Bookmark on page ${bookmarkData['page_number']}',
         title: null,
         tags: const [],
         createdAt: DateTime.parse(bookmarkData['created_at'] as String),
@@ -79,8 +83,9 @@ final combinedNotesProvider = FutureProvider<List<NoteModel>>((ref) async {
   } catch (e) {
     debugPrint('⚠️ Failed to load bookmarks: $e');
   }
-  
-  debugPrint('📊 Total items fetched: ${allItems.length} (${allItems.where((n) => n.type != NoteType.bookmark).length} notes, ${allItems.where((n) => n.type == NoteType.bookmark).length} bookmarks)');
+
+  debugPrint(
+      '📊 Total items fetched: ${allItems.length} (${allItems.where((n) => n.type != NoteType.bookmark).length} notes, ${allItems.where((n) => n.type == NoteType.bookmark).length} bookmarks)');
   return allItems;
 });
 
@@ -104,7 +109,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    
+
     // Load My Books for notes screen (needed to display book titles)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
@@ -122,6 +127,20 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
     final authState = ref.watch(authProvider);
     final authUser = authState.user;
     final notesAsync = ref.watch(combinedNotesProvider);
+    final horizontalPadding = context.pageHorizontalPadding;
+    final verticalPadding = context.responsiveValue(
+      small: AppConstants.spacingXL,
+      medium: AppConstants.spacingXL,
+      large: AppConstants.spacingXL + 4,
+      extraLarge: AppConstants.spacingXXL,
+    );
+    final maxContentWidth = context.responsiveMaxContentWidth;
+    final sectionSpacing = context.responsiveValue(
+      small: AppConstants.spacingLG,
+      medium: AppConstants.spacingLG,
+      large: AppConstants.spacingXL,
+      extraLarge: AppConstants.spacingXL,
+    );
 
     // Show loading screen while syncing
     if (authState.isLoading || authState.isSyncing) {
@@ -183,22 +202,33 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
           ],
         ),
       ),
-      body: Column(
-        children: [
-          // Search and filters
-          _buildSearchAndFilters(context),
-          
-          // Content
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildAllNotes(context, notesAsync),
-                _buildBookmarks(context, notesAsync),
-              ],
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxContentWidth),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: verticalPadding,
+              ),
+              child: Column(
+                children: [
+                  _buildSearchAndFilters(context),
+                  SizedBox(height: sectionSpacing * 0.6),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildAllNotes(context, notesAsync),
+                        _buildBookmarks(context, notesAsync),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _createNote,
@@ -208,6 +238,13 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
   }
 
   Widget _buildSearchAndFilters(BuildContext context) {
+    final spacing = context.responsiveValue(
+      small: AppConstants.spacingSM,
+      medium: AppConstants.spacingMD,
+      large: AppConstants.spacingLG,
+      extraLarge: AppConstants.spacingLG,
+    );
+
     return SearchFilterBar(
       searchHint: 'Search notes...',
       searchQuery: _searchQuery,
@@ -223,7 +260,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
                 decoration: const InputDecoration(
                   labelText: 'Type',
                   prefixIcon: Icon(Icons.filter_list),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   isDense: true,
                 ),
                 items: [
@@ -234,7 +272,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
                   ...NoteType.values.map((type) {
                     return DropdownMenuItem(
                       value: type,
-                      child: Text(_getNoteTypeName(type), style: const TextStyle(fontSize: 14)),
+                      child: Text(_getNoteTypeName(type),
+                          style: const TextStyle(fontSize: 14)),
                     );
                   }),
                 ],
@@ -243,7 +282,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
                 },
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: spacing),
             FilterChip(
               label: const Text('Favorites', style: TextStyle(fontSize: 12)),
               selected: _showFavoritesOnly,
@@ -278,7 +317,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
     }
   }
 
-  Widget _buildAllNotes(BuildContext context, AsyncValue<List<NoteModel>> notes) {
+  Widget _buildAllNotes(
+      BuildContext context, AsyncValue<List<NoteModel>> notes) {
     return notes.when(
       data: (noteList) {
         if (noteList.isEmpty) {
@@ -320,11 +360,13 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
     );
   }
 
-  Widget _buildBookmarks(BuildContext context, AsyncValue<List<NoteModel>> notes) {
+  Widget _buildBookmarks(
+      BuildContext context, AsyncValue<List<NoteModel>> notes) {
     return notes.when(
       data: (noteList) {
-        final bookmarks = noteList.where((note) => note.type == NoteType.bookmark).toList();
-        
+        final bookmarks =
+            noteList.where((note) => note.type == NoteType.bookmark).toList();
+
         if (bookmarks.isEmpty) {
           return const EmptyStateWidget(
             icon: Icons.bookmark_outline,
@@ -356,7 +398,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
       itemBuilder: (context, index) {
         final bookId = notesByBook.keys.elementAt(index);
         final bookNotes = notesByBook[bookId]!;
-        
+
         // Use the provided label (e.g., 'notes' or 'bookmarks')
         final itemCount = bookNotes.length;
         // Convert plural to singular for single items
@@ -368,7 +410,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
             itemLabel = 'bookmark';
           }
         }
-        
+
         return Card(
           margin: const EdgeInsets.only(bottom: 16),
           child: ExpansionTile(
@@ -406,10 +448,12 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
 
     // Apply search filter
     if (_searchQuery.isNotEmpty) {
-      filtered = filtered.where((note) =>
-          note.content.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          note.tags.any((tag) => tag.toLowerCase().contains(_searchQuery.toLowerCase()))
-      ).toList();
+      filtered = filtered
+          .where((note) =>
+              note.content.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              note.tags.any((tag) =>
+                  tag.toLowerCase().contains(_searchQuery.toLowerCase())))
+          .toList();
     }
 
     // Apply type filter
@@ -419,7 +463,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
 
     // Apply tag filter
     if (_selectedTag != null) {
-      filtered = filtered.where((note) => note.tags.contains(_selectedTag)).toList();
+      filtered =
+          filtered.where((note) => note.tags.contains(_selectedTag)).toList();
     }
 
     // Apply favorites filter
@@ -435,7 +480,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
 
   String _getBookTitle(String bookId) {
     final libraryState = ref.read(unifiedLibraryProvider);
-    
+
     // Try to find book in user's library first
     try {
       final book = libraryState.myBooks.firstWhere((b) => b.id == bookId);
@@ -505,29 +550,29 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
   void _openNote(NoteModel note) async {
     // Navigate to reading screen with the book and page
     final libraryState = ref.read(unifiedLibraryProvider);
-    
+
     try {
       // Find the book in user's library
       final book = libraryState.myBooks.firstWhere((b) => b.id == note.bookId);
-      
+
       // Update the book's current page to match the note/bookmark page
       final now = DateTime.now();
       final updatedBook = book.copyWith(
-        progress: book.progress?.copyWith(currentPage: note.pageNumber) ?? 
-                 ReadingProgress(
-                   bookId: note.bookId,
-                   currentPage: note.pageNumber,
-                   lastReadAt: now,
-                   startedAt: now,
-                 ),
+        progress: book.progress?.copyWith(currentPage: note.pageNumber) ??
+            ReadingProgress(
+              bookId: note.bookId,
+              currentPage: note.pageNumber,
+              lastReadAt: now,
+              startedAt: now,
+            ),
       );
-      
+
       // Set the book as current book
       ref.read(currentBookProvider.notifier).state = updatedBook;
-      
+
       // Navigate to reading screen
       context.go('/reading/book/${note.bookId}');
-      
+
       // Switch to reading tab
       ref.read(navigationProvider.notifier).state = 1;
     } catch (e) {
@@ -553,7 +598,8 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: Text(isBookmark ? 'Delete Bookmark' : 'Delete Note'),
-        content: Text('Are you sure you want to delete this ${isBookmark ? 'bookmark' : 'note'}?'),
+        content: Text(
+            'Are you sure you want to delete this ${isBookmark ? 'bookmark' : 'note'}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -564,18 +610,19 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
               Navigator.pop(context);
               try {
                 final apiService = ref.read(apiServiceProvider);
-                
+
                 // Delete based on type
                 if (isBookmark) {
                   await apiService.deleteBookmark(note.id);
                 } else {
                   await apiService.deleteNote(note.id);
                 }
-                
+
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('${isBookmark ? 'Bookmark' : 'Note'} deleted successfully'),
+                      content: Text(
+                          '${isBookmark ? 'Bookmark' : 'Note'} deleted successfully'),
                     ),
                   );
                   // Refresh the notes list
@@ -584,7 +631,9 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete ${isBookmark ? 'bookmark' : 'note'}: $e')),
+                    SnackBar(
+                        content: Text(
+                            'Failed to delete ${isBookmark ? 'bookmark' : 'note'}: $e')),
                   );
                 }
               }

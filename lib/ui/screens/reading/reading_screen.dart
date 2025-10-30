@@ -13,6 +13,7 @@ import '../../widgets/reading/reading_interface_mixin.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/search_filter_bar.dart';
 import '../../widgets/common/profile_menu_button.dart';
+import '../../../core/utils/responsive_layout.dart';
 
 /// Interactive reading screen with contextual AI features
 class ReadingScreen extends ConsumerStatefulWidget {
@@ -66,16 +67,16 @@ class _AnimatedReadingCardState extends State<_AnimatedReadingCard> {
   }
 }
 
-class _ReadingScreenState extends ConsumerState<ReadingScreen> 
+class _ReadingScreenState extends ConsumerState<ReadingScreen>
     with ReadingInterfaceMixin {
-  
   String _searchQuery = '';
   String? _selectedCategory;
+  String _searchCriteria = 'title';
 
   @override
   void initState() {
     super.initState();
-    
+
     // Load only My Books for reading screen (user can only read their own books)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
@@ -120,7 +121,7 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
 
     // Otherwise, show book selection screen
     final libraryState = ref.watch(unifiedLibraryProvider);
-    
+
     // Show loading state while fetching books
     if (libraryState.isLoadingUserLibrary && libraryState.myBooks.isEmpty) {
       return Scaffold(
@@ -140,12 +141,13 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
         ),
       );
     }
-    
+
     // Handle book loading from URL parameter only when needed
     if (widget.bookId != null && libraryState.myBooks.isNotEmpty) {
       try {
-        final book = libraryState.myBooks.firstWhere((b) => b.id == widget.bookId);
-        
+        final book =
+            libraryState.myBooks.firstWhere((b) => b.id == widget.bookId);
+
         // Set the book once
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -161,11 +163,26 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
     return _buildSelectBookScreen(context, libraryState);
   }
 
-  Widget _buildSelectBookScreen(BuildContext context, LibraryState libraryState) {
+  Widget _buildSelectBookScreen(
+      BuildContext context, LibraryState libraryState) {
     final recentBooks = libraryState.myBooks
         .where((book) => book.lastReadAt != null)
         .toList()
       ..sort((a, b) => b.lastReadAt!.compareTo(a.lastReadAt!));
+    final horizontalPadding = context.pageHorizontalPadding;
+    final verticalPadding = context.responsiveValue(
+      small: AppConstants.spacingXL,
+      medium: AppConstants.spacingXL,
+      large: AppConstants.spacingXL + 4,
+      extraLarge: AppConstants.spacingXXL,
+    );
+    final sectionSpacing = context.responsiveValue(
+      small: 18.0,
+      medium: 22.0,
+      large: 26.0,
+      extraLarge: 30.0,
+    );
+    final maxContentWidth = context.responsiveMaxContentWidth;
 
     return Scaffold(
       appBar: AppBar(
@@ -177,34 +194,63 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
         ],
       ),
       body: libraryState.myBooks.isEmpty
-          ? EmptyStateWidget(
-              icon: Icons.library_books_outlined,
-              title: AppStrings.noBooks,
-              subtitle: AppStrings.addBooksFromLibrary,
-              actionText: AppStrings.goToLibrary,
-              onAction: () => ref.read(navigationProvider.notifier).state = 3,
+          ? SafeArea(
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding,
+                  vertical: verticalPadding,
+                ),
+                child: EmptyStateWidget(
+                  icon: Icons.library_books_outlined,
+                  title: AppStrings.noBooks,
+                  subtitle: AppStrings.addBooksFromLibrary,
+                  actionText: AppStrings.goToLibrary,
+                  onAction: () =>
+                      ref.read(navigationProvider.notifier).state = 3,
+                ),
+              ),
             )
-          : Column(
-              children: [
-                _buildSearchAndFilters(),
-                if (recentBooks.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _buildRecentCarousel(context, recentBooks.take(6).toList()),
-                  const SizedBox(height: 16),
-                ],
-                Expanded(child: _buildBookList(_getFilteredBooks(libraryState.myBooks))),
-              ],
+          : SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxContentWidth),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: horizontalPadding,
+                      vertical: verticalPadding,
+                    ),
+                    child: Column(
+                      children: [
+                        _buildSearchAndFilters(),
+                        if (recentBooks.isNotEmpty) ...[
+                          SizedBox(height: sectionSpacing * 0.6),
+                          _buildRecentCarousel(
+                              context, recentBooks.take(6).toList()),
+                          SizedBox(height: sectionSpacing * 0.6),
+                        ],
+                        Expanded(
+                          child: _buildBookList(
+                            _getFilteredBooks(libraryState.myBooks),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
     );
   }
 
-  Widget _buildRecentCarousel(BuildContext context, List<BookModel> recentBooks) {
+  Widget _buildRecentCarousel(
+      BuildContext context, List<BookModel> recentBooks) {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppConstants.defaultPadding),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -227,7 +273,8 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
         SizedBox(
           height: 120,
           child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppConstants.defaultPadding),
             scrollDirection: Axis.horizontal,
             itemCount: recentBooks.length,
             separatorBuilder: (_, __) => const SizedBox(width: 12),
@@ -247,8 +294,14 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
                       borderRadius: BorderRadius.circular(16),
                       gradient: LinearGradient(
                         colors: [
-                          Theme.of(context).colorScheme.primary.withOpacity(0.12),
-                          Theme.of(context).colorScheme.secondary.withOpacity(0.08),
+                          Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.12),
+                          Theme.of(context)
+                              .colorScheme
+                              .secondary
+                              .withOpacity(0.08),
                         ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -261,7 +314,8 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.menu_book, size: 18, color: theme.colorScheme.primary),
+                              Icon(Icons.menu_book,
+                                  size: 18, color: theme.colorScheme.primary),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
@@ -279,7 +333,8 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
                           Text(
                             'Page ${book.progress?.currentPage ?? 1}/${book.totalPages}',
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurface.withOpacity(0.7),
+                              color:
+                                  theme.colorScheme.onSurface.withOpacity(0.7),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -288,8 +343,10 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
                             child: LinearProgressIndicator(
                               value: percent,
                               minHeight: 6,
-                              valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
-                              backgroundColor: theme.colorScheme.primary.withOpacity(0.15),
+                              valueColor: AlwaysStoppedAnimation(
+                                  theme.colorScheme.primary),
+                              backgroundColor:
+                                  theme.colorScheme.primary.withOpacity(0.15),
                             ),
                           ),
                         ],
@@ -331,6 +388,51 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
             setState(() => _selectedCategory = value);
           },
         ),
+        DropdownButtonFormField<String>(
+          value: _searchCriteria,
+          decoration: const InputDecoration(
+            labelText: 'Search In',
+            prefixIcon: Icon(Icons.search),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            isDense: true,
+          ),
+          items: const [
+            DropdownMenuItem(value: 'title', child: Text('Book Name')),
+            DropdownMenuItem(value: 'author', child: Text('Author')),
+            DropdownMenuItem(value: 'subject', child: Text('Category')),
+            DropdownMenuItem(value: 'all', child: Text('All Fields')),
+          ],
+          onChanged: (value) {
+            setState(() => _searchCriteria = value ?? 'title');
+          },
+        ),
+      ],
+      compactActions: [
+        Tooltip(
+          message: 'Filter by category',
+          child: PopupMenuButton<String>(
+            tooltip: 'Filter by category',
+            icon: const Icon(Icons.category_outlined),
+            onSelected: (v) => setState(() => _selectedCategory = v),
+            itemBuilder: (context) => BookCategories.getAll()
+                .map((c) => PopupMenuItem<String>(value: c, child: Text(c)))
+                .toList(),
+          ),
+        ),
+        Tooltip(
+          message: 'Search scope',
+          child: PopupMenuButton<String>(
+            tooltip: 'Search scope',
+            icon: const Icon(Icons.manage_search),
+            onSelected: (v) => setState(() => _searchCriteria = v),
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'title', child: Text('Book Name')),
+              PopupMenuItem(value: 'author', child: Text('Author')),
+              PopupMenuItem(value: 'subject', child: Text('Category')),
+              PopupMenuItem(value: 'all', child: Text('All Fields')),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -340,25 +442,36 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
 
     // Filter by search query
     if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
       filtered = filtered.where((book) {
-        final searchLower = _searchQuery.toLowerCase();
-        return book.title.toLowerCase().contains(searchLower) ||
-               book.author.toLowerCase().contains(searchLower);
+        switch (_searchCriteria) {
+          case 'author':
+            return book.author.toLowerCase().contains(q);
+          case 'subject':
+            return book.subject.toLowerCase().contains(q);
+          case 'all':
+            return book.title.toLowerCase().contains(q) ||
+                book.author.toLowerCase().contains(q) ||
+                book.subject.toLowerCase().contains(q);
+          case 'title':
+          default:
+            return book.title.toLowerCase().contains(q);
+        }
       }).toList();
     }
 
     // Filter by category (which corresponds to the book's subject field in the model)
     if (_selectedCategory != null && _selectedCategory != 'All') {
-      filtered = filtered.where((book) => book.subject == _selectedCategory).toList();
+      filtered =
+          filtered.where((book) => book.subject == _selectedCategory).toList();
     }
 
     return filtered;
   }
 
-
   Widget _buildBookList(List<BookModel> books) {
     final theme = Theme.of(context);
-    
+
     if (books.isEmpty) {
       return const EmptyStateWidget(
         icon: Icons.search_off,
@@ -366,13 +479,13 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
         subtitle: 'Try adjusting your search or filters',
       );
     }
-    
+
     return ListView.builder(
       padding: const EdgeInsets.all(AppConstants.defaultPadding),
       itemCount: books.length,
       itemBuilder: (context, index) {
         final book = books[index];
-        
+
         return _AnimatedReadingCard(
           index: index,
           child: Card(
@@ -406,7 +519,8 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
                           end: Alignment.bottomRight,
                         ),
                       ),
-                      child: const Icon(Icons.auto_stories, color: Colors.white),
+                      child:
+                          const Icon(Icons.auto_stories, color: Colors.white),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -423,7 +537,8 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
                           Text(
                             '${book.author} • ${book.subject}',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurface.withOpacity(0.7),
+                              color:
+                                  theme.colorScheme.onSurface.withOpacity(0.7),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -453,7 +568,8 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        if (book.progress != null && book.progress!.timeSpent > 0)
+                        if (book.progress != null &&
+                            book.progress!.timeSpent > 0)
                           Text(
                             '${book.progress!.timeSpent} min',
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -486,7 +602,9 @@ class _ReadingScreenState extends ConsumerState<ReadingScreen>
         actionText: AppStrings.signIn,
         onAction: () {
           // Save current route to return to after login
-          ref.read(authStateProvider.notifier).setReturnRoute(AppRoutes.reading);
+          ref
+              .read(authStateProvider.notifier)
+              .setReturnRoute(AppRoutes.reading);
           context.go('/login');
         },
       ),

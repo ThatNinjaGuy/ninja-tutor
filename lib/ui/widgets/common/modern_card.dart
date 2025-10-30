@@ -1,7 +1,11 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/haptics_helper.dart';
+import '../../../core/utils/responsive_layout.dart';
 
 /// Glass morphism card with frosted blur effect
 class GlassCard extends StatelessWidget {
@@ -28,11 +32,38 @@ class GlassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final baseColor = color ?? theme.colorScheme.surface;
+    final radius = context.responsiveValue(
+      small: 16.0,
+      medium: 18.0,
+      large: 20.0,
+      extraLarge: 22.0,
+    );
+    final resolvedPadding = padding == const EdgeInsets.all(16)
+        ? EdgeInsets.all(
+            context.responsiveValue(
+              small: AppConstants.spacingMD,
+              medium: AppConstants.spacingLG,
+              large: AppConstants.spacingXL,
+              extraLarge: AppConstants.spacingXXL,
+            ),
+          )
+        : padding;
+    final resolvedBlur = blurAmount == 10.0
+        ? context.responsiveValue(
+            small: 10.0,
+            medium: 12.0,
+            large: 14.0,
+            extraLarge: 16.0,
+          )
+        : blurAmount;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
+        filter: ImageFilter.blur(
+          sigmaX: resolvedBlur,
+          sigmaY: resolvedBlur,
+        ),
         child: Container(
           decoration: AppTheme.glassDecoration(
             color: baseColor,
@@ -49,9 +80,9 @@ class GlassCard extends StatelessWidget {
                   onTap!();
                 }
               },
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(radius),
               child: Padding(
-                padding: padding,
+                padding: resolvedPadding,
                 child: child,
               ),
             ),
@@ -84,11 +115,27 @@ class GradientCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final radius = context.responsiveValue(
+      small: borderRadius,
+      medium: borderRadius + 2,
+      large: borderRadius + 4,
+      extraLarge: borderRadius + 6,
+    );
+    final resolvedPadding = padding == const EdgeInsets.all(16)
+        ? EdgeInsets.all(
+            context.responsiveValue(
+              small: AppConstants.spacingMD,
+              medium: AppConstants.spacingLG,
+              large: AppConstants.spacingXL,
+              extraLarge: AppConstants.spacingXXL,
+            ),
+          )
+        : padding;
 
     return Container(
       decoration: BoxDecoration(
         gradient: gradient ?? AppTheme.primaryGradient,
-        borderRadius: BorderRadius.circular(borderRadius),
+        borderRadius: BorderRadius.circular(radius),
         border: showBorder
             ? Border.all(color: Colors.white.withOpacity(0.2), width: 1)
             : null,
@@ -110,9 +157,9 @@ class GradientCard extends StatelessWidget {
               onTap!();
             }
           },
-          borderRadius: BorderRadius.circular(borderRadius),
+          borderRadius: BorderRadius.circular(radius),
           child: Padding(
-            padding: padding,
+            padding: resolvedPadding,
             child: child,
           ),
         ),
@@ -149,6 +196,22 @@ class _PremiumCardState extends State<PremiumCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = widget.accentColor ?? theme.colorScheme.primary;
+    final radius = context.responsiveValue(
+      small: 18.0,
+      medium: 20.0,
+      large: 22.0,
+      extraLarge: 24.0,
+    );
+    final resolvedPadding = widget.padding == const EdgeInsets.all(16)
+        ? EdgeInsets.all(
+            context.responsiveValue(
+              small: AppConstants.spacingLG,
+              medium: AppConstants.spacingXL,
+              large: AppConstants.spacingXL + 4,
+              extraLarge: AppConstants.spacingXXL,
+            ),
+          )
+        : widget.padding;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
@@ -172,7 +235,7 @@ class _PremiumCardState extends State<PremiumCard> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radius),
           border: Border.all(
             color: color.withOpacity(0.2),
             width: 1,
@@ -188,7 +251,7 @@ class _PremiumCardState extends State<PremiumCard> {
               : AppTheme.createGlow(color, intensity: widget.glowIntensity),
         ),
         child: Padding(
-          padding: widget.padding,
+          padding: resolvedPadding,
           child: widget.child,
         ),
       ),
@@ -259,6 +322,22 @@ class _InteractiveCardState extends State<InteractiveCard>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final radius = context.responsiveValue(
+      small: 16.0,
+      medium: 18.0,
+      large: 20.0,
+      extraLarge: 22.0,
+    );
+    final resolvedPadding = widget.padding == const EdgeInsets.all(16)
+        ? EdgeInsets.all(
+            context.responsiveValue(
+              small: AppConstants.spacingMD,
+              medium: AppConstants.spacingLG,
+              large: AppConstants.spacingXL,
+              extraLarge: AppConstants.spacingXXL,
+            ),
+          )
+        : widget.padding;
 
     return MouseRegion(
       onEnter: (_) => _controller.forward(),
@@ -271,7 +350,7 @@ class _InteractiveCardState extends State<InteractiveCard>
             child: Card(
               elevation: _elevationAnimation.value,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(radius),
               ),
               child: InkWell(
                 onTap: () {
@@ -286,9 +365,9 @@ class _InteractiveCardState extends State<InteractiveCard>
                     widget.onLongPress!();
                   }
                 },
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(radius),
                 child: Padding(
-                  padding: widget.padding,
+                  padding: resolvedPadding,
                   child: widget.child,
                 ),
               ),
@@ -299,4 +378,3 @@ class _InteractiveCardState extends State<InteractiveCard>
     );
   }
 }
-

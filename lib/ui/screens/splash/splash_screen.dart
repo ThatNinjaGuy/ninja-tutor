@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/animation_helper.dart';
+import '../../../core/utils/responsive_layout.dart';
 
 /// Splash screen shown on app startup
 class SplashScreen extends ConsumerStatefulWidget {
@@ -39,7 +40,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
-    
+
     _scaleController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -98,7 +99,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     try {
       // Wait for Firebase auth state to settle
       await Future.delayed(const Duration(milliseconds: 500));
-      
+
       if (mounted) {
         // Always go to dashboard - auth screens will be shown automatically if needed
         context.go(AppRoutes.dashboard);
@@ -125,85 +126,144 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    final heroSize = context.responsiveValue(
+      small: 104.0,
+      medium: 128.0,
+      large: 148.0,
+      extraLarge: 168.0,
+    );
+    final iconSize = context.responsiveValue(
+      small: 56.0,
+      medium: 68.0,
+      large: 76.0,
+      extraLarge: 84.0,
+    );
+    final spacing = context.responsiveValue(
+      small: 28.0,
+      medium: 36.0,
+      large: 48.0,
+      extraLarge: 56.0,
+    );
+    final textSpacing = spacing * 0.35;
+    final maxWidth = context.responsiveValue(
+      small: 320.0,
+      medium: 420.0,
+      large: 520.0,
+      extraLarge: 640.0,
+    );
+
     return Scaffold(
       backgroundColor: colorScheme.background,
-      body: Stack(
-        children: [
-          _SplashBackground(animation: _fadeController),
-          AnimatedBuilder(
-            animation: Listenable.merge([
-              _fadeAnimation,
-              _scaleAnimation,
-            ]),
-            builder: (context, child) {
-              return FadeTransition(
-                opacity: _fadeAnimation,
-                child: ScaleTransition(
-                  scale: _scaleAnimation,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        AnimatedBuilder(
-                          animation: _glowPulse,
-                          builder: (context, child) {
-                            return Transform.scale(
-                              scale: _glowPulse.value,
-                              child: Container(
-                                width: 128,
-                                height: 128,
-                                decoration: BoxDecoration(
-                                  gradient: AppTheme.primaryGradient,
-                                  borderRadius: BorderRadius.circular(32),
-                                  boxShadow: AppTheme.createGlow(
-                                    colorScheme.primary,
-                                    intensity: 0.45,
+      body: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: context.pageHorizontalPadding,
+          vertical: spacing,
+        ),
+        child: Stack(
+          children: [
+            _SplashBackground(animation: _fadeController),
+            AnimatedBuilder(
+              animation: Listenable.merge([
+                _fadeAnimation,
+                _scaleAnimation,
+              ]),
+              builder: (context, child) {
+                return FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: ScaleTransition(
+                    scale: _scaleAnimation,
+                    child: Align(
+                      alignment: ResponsiveBreakpoints.isSmall(context)
+                          ? Alignment.center
+                          : Alignment.center,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxWidth),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedBuilder(
+                              animation: _glowPulse,
+                              builder: (context, child) {
+                                return Transform.scale(
+                                  scale: _glowPulse.value,
+                                  child: Container(
+                                    width: heroSize,
+                                    height: heroSize,
+                                    decoration: BoxDecoration(
+                                      gradient: AppTheme.primaryGradient,
+                                      borderRadius:
+                                          BorderRadius.circular(heroSize / 4),
+                                      boxShadow: AppTheme.createGlow(
+                                        colorScheme.primary,
+                                        intensity: 0.45,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.school,
+                                      size: iconSize,
+                                      color: Colors.white,
+                                    ),
                                   ),
-                                ),
-                                child: const Icon(
-                                  Icons.school,
-                                  size: 68,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 36),
-                        Text(
-                          AppConstants.appName,
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onBackground,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SlideTransition(
-                          position: _taglineSlide,
-                          child: FadeTransition(
-                            opacity: _taglineFade,
-                            child: Text(
-                              'AI-enhanced learning journeys',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: colorScheme.onBackground.withOpacity(0.72),
-                                letterSpacing: 0.2,
+                                );
+                              },
+                            ),
+                            SizedBox(height: spacing),
+                            Text(
+                              AppConstants.appName,
+                              textAlign: TextAlign.center,
+                              style: ResponsiveTypography.adjust(
+                                context,
+                                theme.textTheme.headlineMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.onBackground,
+                                    ) ??
+                                    TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.onBackground,
+                                      fontSize: 28,
+                                    ),
                               ),
                             ),
-                          ),
+                            SizedBox(height: textSpacing),
+                            SlideTransition(
+                              position: _taglineSlide,
+                              child: FadeTransition(
+                                opacity: _taglineFade,
+                                child: Text(
+                                  'AI-enhanced learning journeys',
+                                  textAlign: TextAlign.center,
+                                  style: ResponsiveTypography.adjust(
+                                    context,
+                                    theme.textTheme.bodyLarge?.copyWith(
+                                          color: colorScheme.onBackground
+                                              .withOpacity(0.72),
+                                          letterSpacing: 0.2,
+                                        ) ??
+                                        TextStyle(
+                                          color: colorScheme.onBackground
+                                              .withOpacity(0.72),
+                                          letterSpacing: 0.2,
+                                        ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: spacing * 0.9),
+                            _ProgressDots(
+                              controller: _dotsController,
+                              activeColor: colorScheme.primary,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 48),
-                        _ProgressDots(
-                          controller: _dotsController,
-                          activeColor: colorScheme.primary,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-        ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -217,6 +277,36 @@ class _SplashBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final topOrbSize = context.responsiveValue(
+      small: 220.0,
+      medium: 260.0,
+      large: 300.0,
+      extraLarge: 340.0,
+    );
+    final bottomOrbSize = context.responsiveValue(
+      small: 260.0,
+      medium: 300.0,
+      large: 340.0,
+      extraLarge: 380.0,
+    );
+    final horizontalOffset = context.responsiveValue(
+      small: 70.0,
+      medium: 80.0,
+      large: 90.0,
+      extraLarge: 100.0,
+    );
+    final topOffsetBase = context.responsiveValue(
+      small: -120.0,
+      medium: -140.0,
+      large: -160.0,
+      extraLarge: -180.0,
+    );
+    final bottomOffsetBase = context.responsiveValue(
+      small: -140.0,
+      medium: -160.0,
+      large: -180.0,
+      extraLarge: -200.0,
+    );
 
     return AnimatedBuilder(
       animation: animation,
@@ -244,10 +334,10 @@ class _SplashBackground extends StatelessWidget {
               ),
             ),
             Positioned(
-              top: -140 + 40 * (1 - progress),
-              left: -90,
+              top: topOffsetBase + 40 * (1 - progress),
+              left: -horizontalOffset,
               child: _GlowingOrb(
-                size: 280,
+                size: topOrbSize,
                 colors: [
                   colorScheme.primary.withOpacity(0.28),
                   colorScheme.secondary.withOpacity(0.18),
@@ -255,10 +345,10 @@ class _SplashBackground extends StatelessWidget {
               ),
             ),
             Positioned(
-              bottom: -150 + 32 * progress,
-              right: -80,
+              bottom: bottomOffsetBase + 32 * progress,
+              right: -horizontalOffset,
               child: _GlowingOrb(
-                size: 320,
+                size: bottomOrbSize,
                 colors: [
                   AppTheme.aiTipColor.withOpacity(0.24),
                   colorScheme.primary.withOpacity(0.16),
@@ -321,9 +411,7 @@ class _ProgressDots extends StatelessWidget {
               width: isActive ? 16 : 10,
               height: 10,
               decoration: BoxDecoration(
-                color: isActive
-                    ? activeColor
-                    : activeColor.withOpacity(0.25),
+                color: isActive ? activeColor : activeColor.withOpacity(0.25),
                 borderRadius: BorderRadius.circular(12),
               ),
             );

@@ -7,6 +7,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/animation_helper.dart';
+import '../../../core/utils/responsive_layout.dart';
 import '../../../services/api/api_service.dart';
 import '../../widgets/auth/auth_background.dart';
 import '../../widgets/auth/social_login_buttons.dart';
@@ -193,16 +194,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isWide = !ResponsiveBreakpoints.isSmall(context);
+    final maxContentWidth = context.responsiveValue(
+      small: 480.0,
+      medium: 620.0,
+      large: 960.0,
+      extraLarge: 1080.0,
+    );
+    final formMaxWidth = context.responsiveValue(
+      small: 420.0,
+      medium: 480.0,
+      large: 520.0,
+      extraLarge: 560.0,
+    );
+    final cardRadius = context.responsiveValue(
+      small: 24.0,
+      medium: 26.0,
+      large: 28.0,
+      extraLarge: 32.0,
+    );
+    final horizontalPadding = context.responsiveValue(
+      small: AppConstants.spacingXL,
+      medium: AppConstants.spacingXL,
+      large: AppConstants.spacingXL + 8,
+      extraLarge: AppConstants.spacingXXL,
+    );
+    final verticalPadding = context.responsiveValue(
+      small: AppConstants.spacingXL,
+      medium: AppConstants.spacingXL + 4,
+      large: AppConstants.spacingXXL,
+      extraLarge: AppConstants.spacingXXL,
+    );
+    final formInset = EdgeInsets.symmetric(
+      horizontal: horizontalPadding,
+      vertical: verticalPadding,
+    );
+    final verticalSpacing = context.responsiveValue(
+      small: 18.0,
+      medium: 20.0,
+      large: 24.0,
+      extraLarge: 28.0,
+    );
+    final gutter = context.responsiveGutter;
 
     return Scaffold(
       body: Stack(
         children: [
           AuthAnimatedBackground(controller: _introController),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppConstants.defaultPadding),
+          SafeArea(
+            child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
+                constraints: BoxConstraints(maxWidth: maxContentWidth),
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    vertical: verticalSpacing,
+                  ),
                 child: FadeTransition(
                   opacity: _cardFade,
                   child: SlideTransition(
@@ -216,24 +262,91 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           child: child,
                         );
                       },
-                      child: Card(
+                        child: isWide
+                            ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: Padding(
+                                      padding: EdgeInsets.only(right: gutter),
+                                      child: _buildWelcomePanel(
+                                        context,
+                                        theme,
+                                        colorScheme,
+                                        verticalSpacing,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Align(
+                                      alignment: Alignment.center,
+                                      child: ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                            maxWidth: formMaxWidth),
+                                        child: _buildFormCard(
+                                          context,
+                                          theme,
+                                          colorScheme,
+                                          cardRadius,
+                                          formInset,
+                                          verticalSpacing,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ConstrainedBox(
+                                constraints:
+                                    BoxConstraints(maxWidth: formMaxWidth),
+                                child: _buildFormCard(
+                                  context,
+                                  theme,
+                                  colorScheme,
+                                  cardRadius,
+                                  formInset,
+                                  verticalSpacing,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormCard(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colorScheme,
+    double cardRadius,
+    EdgeInsetsGeometry inset,
+    double spacing,
+  ) {
+    return Card(
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(cardRadius),
                         ),
-                        elevation: 8,
+      elevation: 10,
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
+        padding: inset,
                           child: Form(
                             key: _formKey,
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                _buildHeader(theme, colorScheme),
-                                const SizedBox(height: 28),
+              _buildHeader(context, theme, colorScheme, spacing),
+              SizedBox(height: spacing * 1.2),
                                 _buildAnimatedField(
                                   context,
                                   focusNode: _emailFocusNode,
+                borderRadius: cardRadius - 8,
                                   child: TextFormField(
                                     controller: _emailController,
                                     focusNode: _emailFocusNode,
@@ -255,10 +368,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 18),
+              SizedBox(height: spacing * 0.9),
                                 _buildAnimatedField(
                                   context,
                                   focusNode: _passwordFocusNode,
+                borderRadius: cardRadius - 8,
                                   child: TextFormField(
                                     controller: _passwordController,
                                     focusNode: _passwordFocusNode,
@@ -295,7 +409,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     child: const Text('Forgot password?'),
                                   ),
                                 ),
-                                const SizedBox(height: 12),
+              SizedBox(height: spacing * 0.7),
                                 ElevatedButton(
                                   onPressed: _isLoading ? null : _handleLogin,
                                   child: AnimatedSwitcher(
@@ -303,11 +417,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     transitionBuilder: (child, animation) =>
                                         ScaleTransition(scale: animation, child: child),
                                     child: _isLoading
-                                        ? const SizedBox(
-                                            key: ValueKey('loader'),
-                                            height: 22,
-                                            width: 22,
-                                            child: CircularProgressIndicator(strokeWidth: 2.2),
+                      ? SizedBox(
+                          key: const ValueKey('loader'),
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.2, color: colorScheme.onPrimary),
                                           )
                                         : _loginSuccess
                                             ? const Icon(
@@ -320,9 +435,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                               ),
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+              SizedBox(height: spacing),
                                 SocialLoginButtons(isLoading: _isLoading),
-                                const SizedBox(height: 12),
+              SizedBox(height: spacing * 0.7),
                                 TextButton(
                                   onPressed: () {
                                     context.push('/register');
@@ -332,11 +447,99 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               ],
                             ),
                           ),
+      ),
+    );
+  }
+
+  Widget _buildWelcomePanel(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colorScheme,
+    double verticalSpacing,
+  ) {
+    final highlights = <String>[
+      'Personalized study plans tailored by your AI mentor',
+      'Sync progress across web, tablet, and mobile instantly',
+      'Gamified streaks and XP to keep momentum strong',
+    ];
+
+    return Padding(
+      padding: EdgeInsets.only(
+        right: context.responsiveValue(
+          small: 0,
+          medium: AppConstants.spacingSM,
+          large: AppConstants.spacingLG,
+          extraLarge: AppConstants.spacingXL,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Welcome back 👋',
+            style: ResponsiveTypography.adjust(
+              context,
+              theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onBackground,
+                  ) ??
+                  TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onBackground,
+                    fontSize: 28,
+                  ),
+            ),
+          ),
+          SizedBox(height: verticalSpacing * 0.4),
+          Text(
+            'Continue your learning journey with ninja-sharp focus across every device.',
+            style: ResponsiveTypography.adjust(
+              context,
+              theme.textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onBackground.withOpacity(0.75),
+                    height: 1.5,
+                  ) ??
+                  TextStyle(
+                    color: colorScheme.onBackground.withOpacity(0.75),
+                    height: 1.5,
+                  ),
+            ),
+          ),
+          SizedBox(height: verticalSpacing),
+          ...highlights.map(
+            (point) => Padding(
+              padding: EdgeInsets.only(bottom: verticalSpacing * 0.4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 6),
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: AppTheme.successGradient,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      point,
+                      style: ResponsiveTypography.adjust(
+                        context,
+                        theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onBackground.withOpacity(0.68),
+                              height: 1.45,
+                            ) ??
+                            TextStyle(
+                              color: colorScheme.onBackground.withOpacity(0.68),
+                              height: 1.45,
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -345,34 +548,68 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  Widget _buildHeader(ThemeData theme, ColorScheme colorScheme) {
+  Widget _buildHeader(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colorScheme,
+    double spacing,
+  ) {
+    final iconSize = context.responsiveValue(
+      small: 60.0,
+      medium: 68.0,
+      large: 74.0,
+      extraLarge: 80.0,
+    );
+    final ringSize = context.responsiveValue(
+      small: 76.0,
+      medium: 84.0,
+      large: 94.0,
+      extraLarge: 104.0,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
-          width: 72,
-          height: 72,
+          width: ringSize,
+          height: ringSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: AppTheme.primaryGradient,
             boxShadow: AppTheme.createGlow(colorScheme.primary, intensity: 0.4),
           ),
-          child: const Icon(Icons.school, color: Colors.white, size: 40),
+          child: Icon(Icons.school, color: Colors.white, size: iconSize),
         ),
-        const SizedBox(height: 18),
+        SizedBox(height: spacing * 0.7),
         Text(
           AppConstants.appName,
-          style: theme.textTheme.headlineSmall?.copyWith(
+          style: ResponsiveTypography.adjust(
+            context,
+            theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.primary,
+                ) ??
+                TextStyle(
             fontWeight: FontWeight.bold,
             color: colorScheme.primary,
+                  fontSize: 26,
+                ),
           ),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: spacing * 0.35),
         Text(
           AppStrings.signInToAccount,
-          style: theme.textTheme.bodyLarge?.copyWith(
+          style: ResponsiveTypography.adjust(
+            context,
+            theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurface.withOpacity(0.7),
+                  height: 1.4,
+                ) ??
+                TextStyle(
             color: colorScheme.onSurface.withOpacity(0.7),
+                  height: 1.4,
+                ),
           ),
           textAlign: TextAlign.center,
         ),
@@ -384,14 +621,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     BuildContext context, {
     required FocusNode focusNode,
     required Widget child,
+    double? borderRadius,
   }) {
     final theme = Theme.of(context);
     final isFocused = focusNode.hasFocus;
+    final radius = borderRadius ??
+        context.responsiveValue(
+          small: 18.0,
+          medium: 20.0,
+          large: 22.0,
+          extraLarge: 24.0,
+        ) ?? 16.0;
 
     return AnimatedContainer(
       duration: AnimationHelper.fast,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(radius),
         boxShadow: isFocused
             ? AppTheme.createGlow(theme.colorScheme.primary, intensity: 0.25)
             : [],

@@ -199,14 +199,7 @@ class GamificationNotifier extends StateNotifier<GamificationProfile> {
       lastActivityDate: now,
     );
     
-    // Award XP for streak milestones
-    if (newStreak == 7) {
-      awardXP(50, '7-day streak!');
-    } else if (newStreak == 30) {
-      awardXP(200, '30-day streak!');
-    } else if (newStreak == 100) {
-      awardXP(1000, '100-day streak!');
-    }
+    // XP is derived strictly from study time; do not award bonus XP here
     
     debugPrint('🔥 Streak updated: $newStreak days');
   }
@@ -216,9 +209,9 @@ class GamificationNotifier extends StateNotifier<GamificationProfile> {
     final newProgress = state.dailyGoalProgress + pagesRead;
     state = state.copyWith(dailyGoalProgress: newProgress);
     
+    // XP is derived strictly from study time; keep goal status only
     if (newProgress >= state.dailyGoalTarget && 
         state.dailyGoalProgress < state.dailyGoalTarget) {
-      awardXP(25, 'Daily goal completed!');
       debugPrint('🎯 Daily goal met!');
     }
   }
@@ -293,8 +286,7 @@ class GamificationNotifier extends StateNotifier<GamificationProfile> {
         updatedAchievements.add(unlockedAchievement);
         unlockedAchievements.add(unlockedAchievement);
         
-        // Award XP
-        awardXP(achievement.xpReward, 'Achievement: ${achievement.title}');
+        // XP is derived strictly from study time; unlock without awarding XP
       } else {
         updatedAchievements.add(achievement.copyWith(currentProgress: currentProgress));
       }

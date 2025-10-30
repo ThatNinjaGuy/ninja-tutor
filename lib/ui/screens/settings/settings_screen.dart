@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/utils/responsive_layout.dart';
 
 /// Simple user preferences for fallback
 class _SimpleUserPrefs {
@@ -35,6 +36,25 @@ class SettingsScreen extends ConsumerWidget {
     final authState = ref.watch(authProvider);
     final user = authState.user;
     final isDarkMode = ref.watch(themeModeProvider);
+    final horizontalPadding = context.pageHorizontalPadding;
+    final verticalPadding = context.responsiveValue(
+      small: AppConstants.spacingXL,
+      medium: AppConstants.spacingXL,
+      large: AppConstants.spacingXL + 4,
+      extraLarge: AppConstants.spacingXXL,
+    );
+    final sectionSpacing = context.responsiveValue(
+      small: AppConstants.spacingXL,
+      medium: AppConstants.spacingXL,
+      large: AppConstants.spacingXXL,
+      extraLarge: AppConstants.spacingXXL,
+    );
+    final maxContentWidth = context.responsiveValue(
+      small: double.infinity,
+      medium: 800.0,
+      large: 1000.0,
+      extraLarge: 1200.0,
+    );
     
     // Simple user preferences fallback
     final userPrefs = _SimpleUserPrefs();
@@ -43,52 +63,63 @@ class SettingsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Settings'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxContentWidth),
+            child: ListView(
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: verticalPadding,
+              ),
         children: [
-        // User profile section
         _buildUserProfileSection(context, ref, user),
-          
-          const SizedBox(height: 24),
-          
-          // Appearance section
+                SizedBox(height: sectionSpacing),
           _buildAppearanceSection(context, ref, isDarkMode, userPrefs),
-          
-          const SizedBox(height: 24),
-          
-          // Reading preferences section
+                SizedBox(height: sectionSpacing),
           _buildReadingPreferencesSection(context, ref, userPrefs),
-          
-          const SizedBox(height: 24),
-          
-          // AI & Features section
+                SizedBox(height: sectionSpacing),
           _buildAiFeaturesSection(context, ref, userPrefs),
-          
-          const SizedBox(height: 24),
-          
-          // Notifications section
+                SizedBox(height: sectionSpacing),
           _buildNotificationsSection(context, ref, userPrefs),
-          
-          const SizedBox(height: 24),
-          
-          // Data & Storage section
+                SizedBox(height: sectionSpacing),
           _buildDataStorageSection(context, ref),
-          
-          const SizedBox(height: 24),
-          
-          // About section
+                SizedBox(height: sectionSpacing),
           _buildAboutSection(context, ref),
         ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildUserProfileSection(BuildContext context, WidgetRef ref, user) {
     final theme = Theme.of(context);
+    final spacing = _cardSpacing(context);
+    final avatarRadius = context.responsiveValue(
+      small: 28.0,
+      medium: 30.0,
+      large: 34.0,
+      extraLarge: 38.0,
+    );
+    final iconSize = avatarRadius +
+        context.responsiveValue(
+          small: 2.0,
+          medium: 4.0,
+          large: 6.0,
+          extraLarge: 8.0,
+        );
+    final horizontalGap = context.responsiveValue(
+      small: AppConstants.spacingLG,
+      medium: AppConstants.spacingLG,
+      large: AppConstants.spacingXL,
+      extraLarge: AppConstants.spacingXL,
+    );
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: _cardPadding(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -98,21 +129,19 @@ class SettingsScreen extends ConsumerWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
-            
+            SizedBox(height: spacing),
             Row(
               children: [
                 CircleAvatar(
-                  radius: 30,
+                  radius: avatarRadius,
                   backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
                   child: Icon(
                     Icons.person,
-                    size: 32,
+                    size: iconSize,
                     color: theme.colorScheme.primary,
                   ),
                 ),
-                const SizedBox(width: 16),
-                
+                SizedBox(width: horizontalGap),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,7 +161,6 @@ class SettingsScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                
                 if (user != null)
                   IconButton(
                     onPressed: () => _editProfile(context, ref),
@@ -151,12 +179,14 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAppearanceSection(BuildContext context, WidgetRef ref, bool isDarkMode, userPrefs) {
+  Widget _buildAppearanceSection(
+      BuildContext context, WidgetRef ref, bool isDarkMode, userPrefs) {
     final theme = Theme.of(context);
+    final spacing = _cardSpacing(context);
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: _cardPadding(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -166,8 +196,7 @@ class SettingsScreen extends ConsumerWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
-            
+            SizedBox(height: spacing),
             SwitchListTile(
               title: const Text('Dark Mode'),
               subtitle: const Text('Use dark theme'),
@@ -176,18 +205,17 @@ class SettingsScreen extends ConsumerWidget {
                 ref.read(themeModeProvider.notifier).toggleTheme();
               },
             ),
-            
             ListTile(
               title: const Text('Font Size'),
               subtitle: Text('${userPrefs.fontSize.toInt()}sp'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Font size adjustment coming soon!')),
+                  const SnackBar(
+                      content: Text('Font size adjustment coming soon!')),
                 );
               },
             ),
-            
             ListTile(
               title: const Text('Language'),
               subtitle: Text(_getLanguageName(userPrefs.language)),
@@ -200,13 +228,15 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildReadingPreferencesSection(BuildContext context, WidgetRef ref, userPrefs) {
+  Widget _buildReadingPreferencesSection(
+      BuildContext context, WidgetRef ref, userPrefs) {
     final theme = Theme.of(context);
     final readingPrefs = userPrefs.readingPreferences;
+    final spacing = _cardSpacing(context);
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: _cardPadding(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -216,30 +246,29 @@ class SettingsScreen extends ConsumerWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
-            
+            SizedBox(height: spacing),
             ListTile(
               title: const Text('Line Height'),
               subtitle: Text('${readingPrefs.lineHeight}x'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Line height settings coming soon!')),
+                  const SnackBar(
+                      content: Text('Line height settings coming soon!')),
                 );
               },
             ),
-            
             SwitchListTile(
               title: const Text('Auto-scroll'),
               subtitle: const Text('Automatically scroll while reading'),
               value: readingPrefs.autoScroll,
               onChanged: (value) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Auto-scroll settings coming soon!')),
+                  const SnackBar(
+                      content: Text('Auto-scroll settings coming soon!')),
                 );
               },
             ),
-            
             if (readingPrefs.autoScroll)
               ListTile(
                 title: const Text('Auto-scroll Speed'),
@@ -247,29 +276,32 @@ class SettingsScreen extends ConsumerWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Auto-scroll speed settings coming soon!')),
+                    const SnackBar(
+                        content:
+                            Text('Auto-scroll speed settings coming soon!')),
                   );
                 },
               ),
-            
             SwitchListTile(
               title: const Text('Highlight Difficult Words'),
-              subtitle: const Text('Highlight words you might find challenging'),
+              subtitle:
+                  const Text('Highlight words you might find challenging'),
               value: readingPrefs.highlightDifficultWords,
               onChanged: (value) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Highlight settings coming soon!')),
+                  const SnackBar(
+                      content: Text('Highlight settings coming soon!')),
                 );
               },
             ),
-            
             SwitchListTile(
               title: const Text('Show Definitions on Tap'),
               subtitle: const Text('Display word definitions when tapped'),
               value: readingPrefs.showDefinitionsOnTap,
               onChanged: (value) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Definition settings coming soon!')),
+                  const SnackBar(
+                      content: Text('Definition settings coming soon!')),
                 );
               },
             ),
@@ -279,12 +311,14 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAiFeaturesSection(BuildContext context, WidgetRef ref, userPrefs) {
+  Widget _buildAiFeaturesSection(
+      BuildContext context, WidgetRef ref, userPrefs) {
     final theme = Theme.of(context);
+    final spacing = _cardSpacing(context);
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: _cardPadding(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -294,26 +328,24 @@ class SettingsScreen extends ConsumerWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
-            
+            SizedBox(height: spacing),
             SwitchListTile(
               title: const Text('AI Tips'),
               subtitle: const Text('Show contextual AI suggestions and tips'),
               value: userPrefs.aiTipsEnabled,
               onChanged: (value) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('AI Tips settings coming soon!')),
+                  const SnackBar(
+                      content: Text('AI Tips settings coming soon!')),
                 );
               },
             ),
-            
             ListTile(
               title: const Text('AI Response Speed'),
               subtitle: const Text('Balance between speed and accuracy'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _selectAiResponseSpeed(context, ref),
             ),
-            
             ListTile(
               title: const Text('AI Suggestions'),
               subtitle: const Text('Configure what AI can suggest'),
@@ -326,12 +358,14 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildNotificationsSection(BuildContext context, WidgetRef ref, userPrefs) {
+  Widget _buildNotificationsSection(
+      BuildContext context, WidgetRef ref, userPrefs) {
     final theme = Theme.of(context);
+    final spacing = _cardSpacing(context);
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: _cardPadding(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -341,22 +375,22 @@ class SettingsScreen extends ConsumerWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
-            
+            SizedBox(height: spacing),
             SwitchListTile(
               title: const Text('Push Notifications'),
               subtitle: const Text('Receive study reminders and updates'),
               value: userPrefs.notificationsEnabled,
               onChanged: (value) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Notification settings coming soon!')),
+                  const SnackBar(
+                      content: Text('Notification settings coming soon!')),
                 );
               },
             ),
-            
             SwitchListTile(
               title: const Text('Sound'),
-              subtitle: const Text('Play sounds for notifications and feedback'),
+              subtitle:
+                  const Text('Play sounds for notifications and feedback'),
               value: userPrefs.soundEnabled,
               onChanged: (value) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -364,7 +398,6 @@ class SettingsScreen extends ConsumerWidget {
                 );
               },
             ),
-            
             ListTile(
               title: const Text('Study Reminders'),
               subtitle: const Text('Set daily study reminders'),
@@ -379,10 +412,11 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _buildDataStorageSection(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final spacing = _cardSpacing(context);
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: _cardPadding(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -392,29 +426,25 @@ class SettingsScreen extends ConsumerWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
-            
+            SizedBox(height: spacing),
             ListTile(
               title: const Text('Storage Usage'),
               subtitle: const Text('View app storage usage'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _viewStorageUsage(context, ref),
             ),
-            
             ListTile(
               title: const Text('Sync Data'),
               subtitle: const Text('Sync your data across devices'),
               trailing: const Icon(Icons.sync),
               onTap: () => _syncData(context, ref),
             ),
-            
             ListTile(
               title: const Text('Export Data'),
               subtitle: const Text('Export your notes and progress'),
               trailing: const Icon(Icons.download),
               onTap: () => _exportData(context, ref),
             ),
-            
             ListTile(
               title: const Text('Clear Cache'),
               subtitle: const Text('Free up space by clearing cached data'),
@@ -429,10 +459,11 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _buildAboutSection(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final spacing = _cardSpacing(context);
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: _cardPadding(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -442,32 +473,27 @@ class SettingsScreen extends ConsumerWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
-            
+            SizedBox(height: spacing),
             ListTile(
               title: const Text('Version'),
               subtitle: Text(AppConstants.appVersion),
               trailing: const Icon(Icons.info_outline),
             ),
-            
             ListTile(
               title: const Text('Privacy Policy'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _viewPrivacyPolicy(context),
             ),
-            
             ListTile(
               title: const Text('Terms of Service'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _viewTermsOfService(context),
             ),
-            
             ListTile(
               title: const Text('Help & Support'),
               trailing: const Icon(Icons.help_outline),
               onTap: () => _viewHelpSupport(context),
             ),
-            
             ListTile(
               title: const Text('Rate App'),
               trailing: const Icon(Icons.star_outline),
@@ -476,6 +502,26 @@ class SettingsScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  EdgeInsets _cardPadding(BuildContext context) {
+    return EdgeInsets.all(
+      context.responsiveValue(
+        small: AppConstants.spacingLG,
+        medium: AppConstants.spacingLG,
+        large: AppConstants.spacingXL,
+        extraLarge: AppConstants.spacingXL,
+      ),
+    );
+  }
+
+  double _cardSpacing(BuildContext context) {
+    return context.responsiveValue(
+      small: AppConstants.spacingLG,
+      medium: AppConstants.spacingLG,
+      large: AppConstants.spacingXL,
+      extraLarge: AppConstants.spacingXL,
     );
   }
 
@@ -494,11 +540,11 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
-
   // Navigation methods
   void _editProfile(BuildContext context, WidgetRef ref) {
-    final user = ref.read(authProvider);
-    
+    final authState = ref.read(authProvider);
+    final user = authState.user;
+
     if (user == null) {
       // No user signed in, navigate to login
       context.go('/login');
@@ -508,7 +554,7 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
-  void _showProfileEditDialog(BuildContext context, WidgetRef ref, user) {
+  void _showProfileEditDialog(BuildContext context, WidgetRef ref, dynamic user) {
     final nameController = TextEditingController(text: user.name);
     final emailController = TextEditingController(text: user.email);
 
@@ -561,7 +607,8 @@ class SettingsScreen extends ConsumerWidget {
               // Update user profile logic would go here
               Navigator.of(context).pop();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text(AppStrings.profileUpdatedSuccessfully)),
+                const SnackBar(
+                    content: Text(AppStrings.profileUpdatedSuccessfully)),
               );
             },
             child: const Text(AppStrings.save),
