@@ -713,6 +713,9 @@ class ApiService {
     required int currentPage,
     String? selectedText,
     List<Map<String, String>>? conversationHistory,
+    String? previousPageText,
+    String? currentPageText,
+    String? nextPageText,
   }) async {
     try {
       final response = await _dio.post('/ai/reading/ask', data: {
@@ -721,6 +724,12 @@ class ApiService {
         'current_page': currentPage,
         if (selectedText != null) 'selected_text': selectedText,
         'conversation_history': conversationHistory ?? [],
+        if (previousPageText != null && previousPageText.isNotEmpty)
+          'previous_page_text': previousPageText,
+        if (currentPageText != null && currentPageText.isNotEmpty)
+          'current_page_text': currentPageText,
+        if (nextPageText != null && nextPageText.isNotEmpty)
+          'next_page_text': nextPageText,
       });
       return response.data;
     } on DioException catch (e) {
@@ -733,6 +742,19 @@ class ApiService {
   Future<Map<String, dynamic>> getPageContent(String bookId, int pageNumber) async {
     try {
       final response = await _dio.get('/ai/reading/page-content/$bookId/$pageNumber');
+      return response.data;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Get content for multiple pages in a single request
+  Future<Map<String, dynamic>> getMultiplePageContent(String bookId, List<int> pageNumbers) async {
+    try {
+      final response = await _dio.post('/ai/reading/page-content-batch', data: {
+        'book_id': bookId,
+        'page_numbers': pageNumbers,
+      });
       return response.data;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);

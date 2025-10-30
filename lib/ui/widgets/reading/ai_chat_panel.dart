@@ -200,7 +200,7 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
 
               // Quick actions (only show at bottom when text is selected)
               if (widget.selectedText != null && _isAtBottom)
-                _buildQuickActions(theme),
+                _buildQuickActions(theme, aiState),
 
               // Input field
               _buildInputField(theme, aiState),
@@ -400,7 +400,7 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
     );
   }
 
-  Widget _buildQuickActions(ThemeData theme) {
+  Widget _buildQuickActions(ThemeData theme, ReadingAiState aiState) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -429,18 +429,21 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
                 'Define',
                 Icons.search,
                 () => _handleQuickAction('define'),
+                isEnabled: !aiState.isLoading,
               ),
               _buildQuickActionButton(
                 theme,
                 'Explain',
                 Icons.lightbulb_outline,
                 () => _handleQuickAction('explain'),
+                isEnabled: !aiState.isLoading,
               ),
               _buildQuickActionButton(
                 theme,
                 'Summarize',
                 Icons.summarize,
                 () => _handleQuickAction('summarize'),
+                isEnabled: !aiState.isLoading,
               ),
             ],
           ),
@@ -453,10 +456,11 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
     ThemeData theme,
     String label,
     IconData icon,
-    VoidCallback onPressed,
-  ) {
+    VoidCallback onPressed, {
+    required bool isEnabled,
+  }) {
     return OutlinedButton.icon(
-      onPressed: onPressed,
+      onPressed: isEnabled ? onPressed : null,
       icon: Icon(icon, size: 16),
       label: Text(label),
       style: OutlinedButton.styleFrom(
@@ -621,7 +625,7 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Thinking...',
+                  'Gathering context...',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

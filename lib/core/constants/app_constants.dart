@@ -19,8 +19,8 @@ class AppConstants {
   static String get baseUrl {
     // For now, use development URL
     // After Cloud Run deployment, update this to production URL
-    // return developmentBaseUrl;
-    return productionBaseUrl;
+    return developmentBaseUrl;
+    // return productionBaseUrl;
     // Uncomment below after deployment:
     // return kReleaseMode ? productionBaseUrl : developmentBaseUrl;
   }

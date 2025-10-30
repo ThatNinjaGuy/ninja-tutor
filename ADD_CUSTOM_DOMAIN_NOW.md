@@ -91,3 +91,4 @@ If you get stuck at any step, check:
 2. GoDaddy DNS → Verify the record was added correctly
 3. Run: `nslookup reading.thatninjaguy.in` to test DNS propagation
 
+
