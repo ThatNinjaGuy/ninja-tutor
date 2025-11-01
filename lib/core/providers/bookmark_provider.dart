@@ -84,7 +84,6 @@ class BookmarkNotifier extends StateNotifier<BookmarkState> {
   Future<bool> toggleBookmark(String bookId, int pageNumber) async {
     // Prevent double-clicks by checking loading state
     if (state.isLoading) {
-      print('⏳ Bookmark operation already in progress');
       return false;
     }
     
@@ -104,7 +103,6 @@ class BookmarkNotifier extends StateNotifier<BookmarkState> {
         );
         
         if (success) {
-          print('✅ Bookmark removed, updating state');
           // Update state
           final updatedBookmarks = List<BookmarkModel>.from(state.bookmarks)
             ..removeWhere((b) => b.pageNumber == pageNumber);
@@ -130,7 +128,6 @@ class BookmarkNotifier extends StateNotifier<BookmarkState> {
         );
         
         if (bookmark != null) {
-          print('✅ Bookmark created, updating state');
           // Check again before adding to prevent race condition
           if (state.bookmarks.any((b) => b.pageNumber == pageNumber)) {
             print('⚠️ Bookmark already in state, skipping add');
@@ -143,7 +140,6 @@ class BookmarkNotifier extends StateNotifier<BookmarkState> {
           // Sort by page number
           updatedBookmarks.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
           state = state.copyWith(bookmarks: updatedBookmarks, isLoading: false);
-          print('✅ State updated, now ${updatedBookmarks.length} bookmarks');
           return true;
         }
         print('❌ Failed to create bookmark');

@@ -120,8 +120,8 @@ class AppStrings {
   
   // Tooltips
   static const String close = 'Close';
-  static const String aiTips = 'AI Tips';
-  static const String aiTipsAddFirst = 'AI Tips (Add to library first)';
+  static const String aiTips = 'Ask Ninja';
+  static const String aiTipsAddFirst = 'Ask Ninja (Add to library first)';
   static const String quiz = 'Quiz';
   static const String bookmark = 'Bookmark';
   static const String bookmarkAddFirst = 'Bookmark (Add to library first)';

@@ -6,12 +6,14 @@ import 'dart:html' as html;
 import 'dart:async';
 
 import '../../../models/content/book_model.dart';
+import '../../../models/note/highlight_model.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/reading_ai_provider.dart';
 import '../../../core/providers/bookmark_provider.dart';
 import '../../../core/providers/notes_provider.dart';
 import '../../../core/providers/reading_page_provider.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../services/api/api_service.dart';
 import 'reading_viewer.dart';
 import 'ai_chat_panel.dart';
 import 'bookmark_panel.dart';
@@ -39,6 +41,8 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   bool _notesPanelDialogOpen = false; // Track if dialog is actually showing
   String? _currentBookId;
   Timer? _hideNotesTimer;
+  int _highlightsRefreshTrigger = 0; // Counter to force ReadingViewer to reload highlights
+  List<HighlightModel> _allHighlights = []; // Store all highlights for count calculation
   
   // Getters that must be overridden
   bool get isReadingMode => _isReadingMode;
@@ -98,12 +102,13 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       final urlOverride = _getInitialPageOverrideFromUrl();
       _currentPage = urlOverride ?? (book.progress?.currentPage ?? 1);
       // Use microtask to ensure it runs only once per build cycle
-      Future.microtask(() {
+      Future.microtask(() async {
         if (mounted && _currentBookId == book.id) {
           // Update reading page provider after build phase
           ref.read(readingPageProvider.notifier).updatePage(book.id, _currentPage);
           ref.read(bookmarkProvider.notifier).loadBookmarks(book.id);
           ref.read(notesProvider.notifier).loadNotes(book.id);
+          
           // Clear AI context when book changes
           if (hadSelectedText) {
             ref.read(readingAiProvider.notifier).clearSelectedText();
@@ -207,6 +212,14 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
         Expanded(
           child: ReadingViewer(
             book: book,
+            highlightsRefreshTrigger: _highlightsRefreshTrigger,
+            onHighlightsChanged: (highlights) {
+              if (mounted) {
+                setState(() {
+                  _allHighlights = highlights;
+                });
+              }
+            },
             onTextSelected: _handleTextSelection,
             onDefinitionRequest: _handleDefinitionRequest,
             onPageChanged: (page) => setCurrentPage(page),
@@ -260,7 +273,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
               const SizedBox(height: 16),
               _buildCompactControlButton(
                 icon: Icons.psychology,
-                tooltip: isInLibrary ? 'AI Tips' : 'AI Tips (Add to library first)',
+                tooltip: isInLibrary ? 'Ask Ninja' : 'Ask Ninja (Add to library first)',
                 isActive: _showAiPanel,
                 isDisabled: !isInLibrary,
                 onPressed: isInLibrary ? () => setState(() => _showAiPanel = !_showAiPanel) : null,
@@ -337,7 +350,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
           ),
           _buildCompactControlButton(
             icon: Icons.psychology,
-            tooltip: isInLibrary ? 'AI Tips' : 'AI Tips (Add to library first)',
+            tooltip: isInLibrary ? 'Ask Ninja' : 'Ask Ninja (Add to library first)',
             isActive: _showAiPanel,
             isDisabled: !isInLibrary,
             onPressed: isInLibrary ? () => setState(() => _showAiPanel = !_showAiPanel) : null,
@@ -471,17 +484,57 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   Widget _buildHighlightsButton(BookModel book, bool isInLibrary) {
     final theme = Theme.of(context);
     
-    return _buildCompactControlButton(
-      icon: Icons.highlight,
-      tooltip: isInLibrary ? 'Highlights' : 'Highlights (Add to library first)',
-      isActive: _showHighlightsPanel,
-      isDisabled: !isInLibrary,
-      onPressed: isInLibrary ? () {
-        setState(() {
-          _showHighlightsPanel = !_showHighlightsPanel;
-          _showNotesPanel = false;
-        });
-      } : null,
+    // Count highlights on current page only
+    final currentPageHighlightsCount = _allHighlights
+        .where((h) => h.pageNumber == _currentPage)
+        .length;
+    
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        _buildCompactControlButton(
+          icon: Icons.highlight,
+          tooltip: isInLibrary ? 'Highlights' : 'Highlights (Add to library first)',
+          isActive: _showHighlightsPanel,
+          isDisabled: !isInLibrary,
+          onPressed: isInLibrary ? () {
+            setState(() {
+              _showHighlightsPanel = !_showHighlightsPanel;
+              _showNotesPanel = false;
+            });
+          } : null,
+        ),
+        if (currentPageHighlightsCount > 0)
+          Positioned(
+            right: -4,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.secondary,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white,
+                  width: 2,
+                ),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 20,
+                minHeight: 20,
+              ),
+              child: Center(
+                child: Text(
+                  '$currentPageHighlightsCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -643,6 +696,10 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
               getCurrentPage: () => _currentPage,  // Pass callback to get current page dynamically
               selectedText: _selectedTextFromPdf,  // Pass selected text from PDF
               onNoteClicked: _handleNoteClick,  // Handle note clicks from sidebar
+              onNoteDeleted: (noteId) {
+                // Trigger refresh of notes in ReadingViewer
+                setState(() {});
+              },
               onClose: () {
                 Navigator.of(dialogContext).pop();
               },
@@ -689,6 +746,15 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
                   _showHighlightsPanel = false;
                 });
                 setCurrentPage(page);
+              },
+              onHighlightDeleted: (highlightId) async {
+                // Reload highlights and refresh PDF viewer
+                // Force ReadingViewer to reload by updating its key
+                if (mounted) {
+                  setState(() {
+                    _highlightsRefreshTrigger++; // Increment to change the key
+                  });
+                }
               },
               onClose: () {
                 Navigator.of(dialogContext).pop();
@@ -812,10 +878,20 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     // CRITICAL: Close the notes panel dialog first if it's actually open
     // Use the tracker flag instead of _showNotesPanel (which gets reset immediately)
     if (_notesPanelDialogOpen) {
-      Navigator.of(context).pop(); // Close the notes panel dialog
-      _notesPanelDialogOpen = false; // Mark as closed
-      await Future.delayed(const Duration(milliseconds: 200)); // Wait for close animation
-      if (!mounted) return;
+      try {
+        // Check if we can actually pop
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(); // Close the notes panel dialog
+          _notesPanelDialogOpen = false; // Mark as closed
+          await Future.delayed(const Duration(milliseconds: 200)); // Wait for close animation
+          if (!mounted) return;
+        } else {
+          _notesPanelDialogOpen = false; // Just reset the flag
+        }
+      } catch (e) {
+        debugPrint('⚠️ Failed to close notes panel: $e');
+        _notesPanelDialogOpen = false; // Reset flag on error
+      }
     }
 
     _disablePdfPointerEvents();

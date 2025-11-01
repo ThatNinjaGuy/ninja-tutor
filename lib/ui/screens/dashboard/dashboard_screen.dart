@@ -61,7 +61,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     int totalReadingTimeMinutes = 0;
     List<DateTime> lastReadDates = [];
 
-    debugPrint('📊 Calculating dashboard stats for ${books.length} books:');
 
     for (final book in books) {
       final progress = book.progress;
@@ -80,7 +79,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         // Collect last read dates for streak calculation
         lastReadDates.add(progress.lastReadAt);
       } else {
-        debugPrint('   📖 "${book.title}": No progress data');
       }
     }
 

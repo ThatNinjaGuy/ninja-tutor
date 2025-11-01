@@ -121,13 +121,11 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
     }
     
     if (_authToken == null) {
-      debugPrint('⏳ Auth token not ready, will load My Books when auth completes');
       _shouldLoadOnAuth = true;
       state = state.copyWith(isLoadingUserLibrary: true);
       return;
     }
     
-    debugPrint('🔄 Fetching My Books from API...');
     await _loadUserLibrary();
   }
 
@@ -145,7 +143,6 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
       return;
     }
     
-    debugPrint('🔄 Fetching All Books from API (single optimized call)...');
     await _loadAllBooksOptimized();
   }
   
@@ -166,7 +163,6 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         perCategory: 5, // Get 5 books per category for balanced distribution
       );
       
-      debugPrint('✅ All Books loaded: ${books.length} total books (balanced per category) in single API call');
       
       state = state.copyWith(
         allBooks: books,
@@ -224,7 +220,6 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         limit: limit,
       );
       
-      debugPrint('✅ All Books loaded and cached: ${books.length} items');
       
       state = state.copyWith(
         allBooks: books,
@@ -260,8 +255,6 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         final progressData = data['progress'] as Map<String, dynamic>?;
         
         // DEBUG: Log raw book data
-        debugPrint('🔍 DEBUG: Raw bookData file_url: ${bookData['file_url']}');
-        debugPrint('🔍 DEBUG: bookData keys: ${bookData.keys}');
         
         // Merge book and progress data for proper parsing
         final mergedData = Map<String, dynamic>.from(bookData);
@@ -272,19 +265,14 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
         final book = BookModel.fromJson(mergedData);
         
         // DEBUG: Log parsed book data
-        debugPrint('🔍 DEBUG: Parsed book fileUrl: ${book.fileUrl}');
-        debugPrint('🔍 DEBUG: Book ID: ${book.id}');
-        debugPrint('🔍 DEBUG: Book Title: ${book.title}');
         
         // Debug: Log progress parsing
         if (progressData != null) {
-          debugPrint('📖 ${book.title}: pages_read=${progressData['pages_read_count']}, time=${progressData['reading_time_minutes']}min → parsed: ${book.progress?.totalPagesRead}/${book.totalPages}, ${book.progress?.timeSpent}min');
         }
         
         return book;
       }).toList();
       
-      debugPrint('✅ My Books loaded and cached: ${userBooks.length} items');
       
       state = state.copyWith(
         userLibraryBookIds: bookIds,
@@ -555,12 +543,10 @@ class UnifiedLibraryNotifier extends StateNotifier<LibraryState> {
           userLibraryBooks: updatedUserLibraryBooks,
         );
         
-        debugPrint('✅ Book "${book.title}" uploaded and added to user library');
       } catch (addToLibraryError) {
         debugPrint('⚠️ Error adding book to library (non-fatal): $addToLibraryError');
         // Still add to all books list even if adding to library failed
         state = state.copyWith(allBooks: [book, ...currentBooks]);
-        debugPrint('✅ Book "${book.title}" uploaded but failed to add to user library');
       }
       
       return book;

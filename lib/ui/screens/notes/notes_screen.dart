@@ -37,9 +37,7 @@ final combinedNotesProvider = FutureProvider<List<NoteModel>>((ref) async {
 
   try {
     // Fetch all notes for user in one call
-    debugPrint('🔄 Calling GET /notes/all...');
     final allNotes = await apiService.getAllUserNotes();
-    debugPrint('✅ Fetched ${allNotes.length} notes');
     allItems.addAll(allNotes);
   } catch (e) {
     debugPrint('⚠️ Failed to load notes: $e');
@@ -47,9 +45,7 @@ final combinedNotesProvider = FutureProvider<List<NoteModel>>((ref) async {
 
   try {
     // Fetch all bookmarks for user in one call
-    debugPrint('🔄 Calling GET /bookmarks/all...');
     final bookmarksData = await apiService.getAllUserBookmarks();
-    debugPrint('✅ Fetched ${bookmarksData.length} bookmarks');
 
     // Convert bookmarks to NoteModel format for display
     for (final bookmarkData in bookmarksData) {

@@ -35,7 +35,6 @@ class UserQuizzesNotifier extends StateNotifier<AsyncValue<List<QuizSummary>>> {
     }
 
     try {
-      debugPrint('🔄 Fetching quizzes from API...');
       state = const AsyncValue.loading();
       
       final apiService = ref.read(apiServiceProvider);
@@ -47,7 +46,6 @@ class UserQuizzesNotifier extends StateNotifier<AsyncValue<List<QuizSummary>>> {
       
       state = AsyncValue.data(quizzes);
       _hasLoaded = true;
-      debugPrint('✅ Quizzes loaded and cached: ${quizzes.length} items');
     } catch (e, stack) {
       debugPrint('Error loading quizzes: $e');
       state = AsyncValue.error(e, stack);
@@ -94,7 +92,6 @@ class QuizResultsNotifier extends StateNotifier<AsyncValue<List<QuizResult>>> {
     }
 
     try {
-      debugPrint('🔄 Fetching results from API...');
       state = const AsyncValue.loading();
       
       final apiService = ref.read(apiServiceProvider);
@@ -106,7 +103,6 @@ class QuizResultsNotifier extends StateNotifier<AsyncValue<List<QuizResult>>> {
       
       state = AsyncValue.data(results);
       _hasLoaded = true;
-      debugPrint('✅ Results loaded and cached: ${results.length} items');
     } catch (e, stack) {
       debugPrint('Error loading quiz results: $e');
       state = AsyncValue.error(e, stack);

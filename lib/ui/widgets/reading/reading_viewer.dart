@@ -29,6 +29,8 @@ class ReadingViewer extends ConsumerStatefulWidget {
     this.onNoteClicked,
     this.onAskAi,
     this.notes,
+    this.highlightsRefreshTrigger = 0,
+    this.onHighlightsChanged,
   });
 
   final BookModel book;
@@ -39,6 +41,8 @@ class ReadingViewer extends ConsumerStatefulWidget {
   final Function(String noteId)? onNoteClicked;  // Callback for when a note is clicked
   final Future<void> Function(String selectedText)? onAskAi; // Trigger AI assistant with selected text
   final List<dynamic>? notes;  // List of notes to display on the PDF
+  final int highlightsRefreshTrigger;  // Counter to trigger highlights reload
+  final Function(List<HighlightModel> highlights)? onHighlightsChanged;  // Callback when highlights change
 
   @override
   ConsumerState<ReadingViewer> createState() => _ReadingViewerState();
@@ -186,6 +190,13 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       _notesForBook = List.from(widget.notes!);
       _sendNotesToPdfViewer(_notesForBook);
     }
+    
+    // Reload highlights when refresh trigger changes
+    if (widget.highlightsRefreshTrigger != oldWidget.highlightsRefreshTrigger) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadHighlightsForBook();
+      });
+    }
   }
 
   @override
@@ -238,7 +249,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     
     // For PDF files, use direct URL (no blob pre-fetching)
     // PDF.js will handle range requests automatically for streaming
-    debugPrint('📄 PDF detected - using direct URL for streaming (no blob pre-fetch)');
     
     if (mounted) {
       setState(() {
@@ -255,9 +265,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   Future<void> _loadEpubData() async {
-    debugPrint('📕 Starting EPUB load for book: ${widget.book.title}');
-    debugPrint('📕 Book fileUrl: ${widget.book.fileUrl}');
-    debugPrint('📕 Book format: ${widget.book.metadata.format}');
     
     if (widget.book.fileUrl == null || widget.book.fileUrl!.isEmpty) {
       debugPrint('❌ No EPUB file URL available');
@@ -273,7 +280,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // Fetch EPUB as blob and convert to base64 data URI for EPUB.js
     try {
       final backendUrl = '${AppConstants.baseUrl}/api/v1/books/${widget.book.id}/file';
-      debugPrint('📕 Fetching EPUB from: $backendUrl');
       
       final response = await html.window.fetch(backendUrl);
       
@@ -281,8 +287,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       final status = _getResponseStatus(response);
       final statusText = _getResponseStatusText(response);
       final isOk = _isResponseOk(response);
-      debugPrint('📕 Fetch response status: $status');
-      debugPrint('📕 Response OK: $isOk');
       
       if (!isOk) {
         throw Exception('HTTP $status: $statusText');
@@ -290,7 +294,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       
       // Convert response to blob
       final blob = await response.blob();
-      debugPrint('📕 Blob created, size: ${blob.size} bytes, type: ${blob.type}');
       
       // Convert blob to base64 data URI for EPUB.js
       // EPUB.js has issues with blob: URLs for ZIP files, so we use data URI
@@ -299,8 +302,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       await reader.onLoad.first;
       String dataUrl = reader.result as String;
       
-      debugPrint('📕 Data URL created, length: ${dataUrl.length} chars');
-      debugPrint('📕 Data URL prefix: ${dataUrl.substring(0, 50)}...');
       
       // Fix the MIME type in the data URI (backend now sets correct type, but fix just in case)
       if (dataUrl.startsWith('data:application/pdf')) {
@@ -317,7 +318,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
           _error = null;
         });
         
-        debugPrint('✅ EPUB blob URL set, will send to iframe');
         
         // Try to send EPUB URL to iframe if it's already loaded
         Future.delayed(const Duration(milliseconds: 300), () {
@@ -348,7 +348,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    debugPrint('📖 ReadingViewer build: isEpubFormat=$_isEpubFormat, isLoading=$_isLoading, error=$_error');
     
     return Container(
       color: theme.colorScheme.surface,
@@ -362,7 +361,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
             else if (_isEpubFormat) ...[
               // Show debug info for EPUB
               () {
-                debugPrint('📕 Rendering EPUB viewer for: ${widget.book.title}');
                 return _buildEpubViewer(theme);
               }()
             ]
@@ -559,9 +557,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
                   _isLoading = false;
                 });
                 
-                // Hide download and print buttons using CSS injection
-                _hideUnwantedButtons();
-                
                 // Setup message listener for PDF.js communication
                 _setupPdfMessageListener();
                 
@@ -673,15 +668,12 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // Use EPUB.js viewer from Flutter app
     final epubJsUrl = '/epubjs/web/custom_epub_viewer.html';
     
-    debugPrint('📕 Creating EPUB viewer iframe with viewType: $viewType');
-    debugPrint('📕 EPUB viewer URL: $epubJsUrl');
     
     // Register the view factory
     try {
       ui_web.platformViewRegistry.registerViewFactory(
         viewType,
         (int viewId) {
-          debugPrint('📕 View factory called for viewId: $viewId');
           
           _iframeElement = html.IFrameElement()
             ..src = epubJsUrl
@@ -691,7 +683,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
             ..style.display = 'block'
             ..allowFullscreen = true
             ..onLoad.listen((_) {
-              debugPrint('✅ EPUB iframe loaded successfully');
               
               if (mounted) {
                 setState(() {
@@ -728,7 +719,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
               }
             });
           
-          debugPrint('📕 Returning EPUB iframe element');
           return _iframeElement!;
         },
       );
@@ -800,27 +790,23 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // No more blob URL - PDF.js will fetch the PDF incrementally
     final bookId = widget.book.id;
     final backendUrl = '${AppConstants.baseUrl}/api/v1/books/$bookId/file';
-    debugPrint('✅ Using backend endpoint for PDF streaming: $backendUrl');
     return backendUrl;
   }
 
   String? _getFullEpubUrl() {
     // Use blob URL if available (EPUB data loaded as blob to avoid origin issues)
     if (_epubBlobUrl != null) {
-      print('✅ Using blob URL for EPUB: $_epubBlobUrl');
       return _epubBlobUrl;
     }
     
     // If blob URL is not ready yet, return null to wait
     if (_isLoading) {
-      print('⏳ Waiting for EPUB blob URL to be created...');
       return null;
     }
     
     // Fallback to backend endpoint
     final bookId = widget.book.id;
     final backendUrl = '${AppConstants.baseUrl}/api/v1/books/$bookId/file';
-    print('✅ Using backend endpoint for EPUB: $backendUrl');
     return backendUrl;
   }
 
@@ -902,6 +888,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         _highlightsForBook = highlights;
       });
 
+      // Notify parent with full highlights list (so it can calculate per-page count)
+      widget.onHighlightsChanged?.call(highlights);
+
       if (highlights.isNotEmpty) {
         _sendNotesToPdfViewer(_notesForBook);
       }
@@ -912,7 +901,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   }
 
   void _handlePdfMessage(Map<String, dynamic> message) {
-    debugPrint('📨 Received message from viewer: ${message['type']}');
     
     switch (message['type']) {
       case 'appToggleHighlight':
@@ -981,7 +969,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         break;
       case 'bookReady':
         // Handle EPUB book ready message (same as pdfReady)
-        debugPrint('📕 EPUB book ready message received');
         _onPdfReady(message['totalPages'] ?? 0, message['currentPage'] ?? 1);
         break;
       case 'error':
@@ -1213,12 +1200,14 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       _highlightsForBook = [highlight, ..._highlightsForBook];
     });
 
+    // Notify parent with updated highlights list
+    widget.onHighlightsChanged?.call(_highlightsForBook);
+
     _sendNotesToPdfViewer(_notesForBook);
   }
 
   void _onIdleStateChange(bool isIdle) {
     // Track idle state for accurate time measurement
-    print('User idle state: $isIdle');
   }
 
   void _onPdfReady(int totalPages, int currentPage) {
@@ -1233,7 +1222,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     _cancelUrlRetryTimer();
     // Start tracking time for the initial page
     _currentPageStartTime = DateTime.now();
-    print('📖 PDF ready - starting time tracking for page $currentPage');
 
     // Send current bookmark state to the PDF viewer
     final bookmarkState = ref.read(bookmarkProvider);
@@ -1242,7 +1230,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // Send notes to PDF viewer with a slight delay to ensure PDF.js is fully initialized
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted && _notesForBook.isNotEmpty) {
-        print('📤 Delayed sending ${_notesForBook.length} notes to PDF viewer');
         _sendNotesToPdfViewer(_notesForBook);
       }
     });
@@ -1266,9 +1253,7 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         };
       }));
 
-      print('📤 Prepared ${notesData.length} notes for PDF viewer');
       for (var note in notes) {
-        print('📝 Note ID: ${note.id}, Page: ${note.pageNumber}, hasSelectedText: ${note.selectedText?.isNotEmpty ?? false}');
       }
     }
 
@@ -1285,11 +1270,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     }
 
     if (notesData.isEmpty) {
-      print('ℹ️ No notes or highlights to send to viewer');
       return;
     }
 
-    print('📤 Sending ${notesData.length} annotations (notes + highlights) to PDF viewer');
     _iframeElement?.contentWindow?.postMessage({
       'type': 'displayNotes',
       'notes': notesData,
@@ -1327,7 +1310,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
 
   void _sendPageTimeData(int pageNum, int timeSpent) {
     // TODO: Implement API call to save page time data
-    print('Sending page time data: page $pageNum, time $timeSpent seconds');
   }
 
   Future<HighlightModel?> _saveHighlight(
@@ -1345,7 +1327,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         positionData: position != null ? jsonEncode(position) : null,
       );
 
-      print('💾 Highlight saved: ${highlight.id} on page ${highlight.pageNumber}');
       return highlight;
     } catch (e, stackTrace) {
       debugPrint('❌ Failed to save highlight: $e');
@@ -1363,6 +1344,9 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       setState(() {
         _highlightsForBook = _highlightsForBook.where((h) => h.id != highlightId).toList();
       });
+      
+      // Notify parent with updated highlights list
+      widget.onHighlightsChanged?.call(_highlightsForBook);
       
       // Re-send all notes and highlights to refresh the PDF viewer
       _sendNotesToPdfViewer(_notesForBook);
@@ -1400,7 +1384,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     annotation['timestamp'] = DateTime.now().toIso8601String();
     annotation['bookId'] = widget.book.id;
     
-    print('✏️ Annotation captured: type=$type, page=$page');
     
     switch (type) {
       case 'freetext':
@@ -1410,9 +1393,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         
         _capturedTextAnnotations.add(annotation);
         
-        print('   📄 Text #${_capturedTextAnnotations.length}: "$text" (fontSize: $fontSize, color: $color)');
-        print('   📍 Position: PDF(${position?['pdfX']}, ${position?['pdfY']})');
-        print('   Total text annotations: ${_capturedTextAnnotations.length}');
         _saveTextAnnotation(text, page, position);
         break;
         
@@ -1423,10 +1403,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         
         _capturedDrawings.add(annotation);
         
-        print('   ✏️ Drawing #${_capturedDrawings.length}: ${width}x${height}px');
-        print('   📍 Position: PDF(${position?['pdfX']}, ${position?['pdfY']})');
-        print('   🖼️ Data size: ${drawingData.length} chars (base64 PNG)');
-        print('   Total drawings: ${_capturedDrawings.length}');
         _saveDrawingAnnotation(drawingData, page, position);
         break;
         
@@ -1436,18 +1412,14 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         _capturedHighlights.add(annotation);
         
         print('   🎨 Highlight #${_capturedHighlights.length}: color=$color');
-        print('   📍 Position: PDF(${position?['pdfX']}, ${position?['pdfY']})');
-        print('   Total highlights: ${_capturedHighlights.length}');
         break;
         
       default:
-        print('   ❓ Unknown annotation type: $type');
     }
   }
   
   void _saveTextAnnotation(String text, int pageNum, Map<String, dynamic>? position) {
     // TODO: Implement API call to save text annotation
-    print('💾 Saving text annotation to backend:');
     print('   Text: "$text"');
     print('   Page: $pageNum');
     print('   Position: $position');
@@ -1455,7 +1427,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   
   void _saveDrawingAnnotation(String drawingData, int pageNum, Map<String, dynamic>? position) {
     // TODO: Implement API call to save drawing annotation
-    print('💾 Saving drawing annotation to backend:');
     print('   Page: $pageNum');
     print('   Position: $position');
     print('   Drawing data (base64 PNG): ${drawingData.substring(0, 50)}... (${drawingData.length} chars total)');
@@ -1499,13 +1470,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     print('==================================\n');
   }
 
-  void _hideUnwantedButtons() {
-    // This method is no longer needed as we're using local PDF.js with buttons already removed
-  }
-  
   /// Send PDF URL to iframe via postMessage
   void _sendPdfUrlToIframe() {
-    debugPrint('🔍 _sendPdfUrlToIframe called');
     
     if (_iframeElement == null || _iframeElement!.contentWindow == null) {
       debugPrint('⚠️ Cannot send PDF URL: iframe not ready');
@@ -1524,8 +1490,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       _currentPage = urlOverride;
     }
     
-    debugPrint('📨 Sending PDF URL to iframe for streaming: $pdfUrl');
-    debugPrint('📨 PDF.js will use HTTP Range requests for incremental loading');
     
     try {
       _iframeElement!.contentWindow!.postMessage({
@@ -1533,7 +1497,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         'url': pdfUrl,
         'page': _currentPage, // request initial page
       }, '*');
-      debugPrint('✅ PDF URL sent (streaming). Awaiting ready acknowledgment...');
     } catch (e) {
       debugPrint('❌ Failed to send PDF URL: $e');
     }
@@ -1541,10 +1504,6 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   
   /// Send EPUB URL to iframe via postMessage
   void _sendEpubUrlToIframe() {
-    debugPrint('🔍 _sendEpubUrlToIframe called');
-    debugPrint('🔍 _iframeElement: $_iframeElement');
-    debugPrint('🔍 _iframeElement?.contentWindow: ${_iframeElement?.contentWindow}');
-    debugPrint('🔍 _epubBlobUrl length: ${_epubBlobUrl?.length ?? 0}');
     
     if (_iframeElement == null || _iframeElement!.contentWindow == null) {
       debugPrint('⚠️ Cannot send EPUB URL: iframe not ready');
@@ -1559,15 +1518,12 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       return;
     }
     
-    debugPrint('📨 Sending EPUB URL to iframe (data URI length: ${epubUrl.length} chars)');
-    debugPrint('📨 Message payload: {type: loadEPUB, url: [data URI]}');
     
     try {
       _iframeElement!.contentWindow!.postMessage({
         'type': 'loadEPUB',
         'url': epubUrl,
       }, '*');
-      debugPrint('✅ EPUB URL sent. Awaiting ready acknowledgment...');
     } catch (e, stackTrace) {
       debugPrint('❌ Failed to send EPUB URL: $e');
       debugPrint('❌ Stack trace: $stackTrace');

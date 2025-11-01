@@ -21,7 +21,6 @@ class BookmarkService {
     
     // If there's already a pending request for this book, return that future
     if (_pendingRequests.containsKey(bookId)) {
-      print('⏳ Awaiting existing bookmark request for $bookId');
       return _pendingRequests[bookId]!;
     }
     
@@ -45,7 +44,6 @@ class BookmarkService {
       final bookmarksJson = await _apiService.getBookmarksForBook(bookId);
       final bookmarks = bookmarksJson.map((json) => BookmarkModel.fromJson(json)).toList();
       _bookmarksCache[bookId] = bookmarks;
-      print('✅ Cached ${bookmarks.length} bookmarks for $bookId');
       return bookmarks;
     } catch (e) {
       print('❌ Error fetching bookmarks: $e');
@@ -60,13 +58,11 @@ class BookmarkService {
     String? note,
   }) async {
     try {
-      print('📍 BookmarkService: Creating bookmark for page $pageNumber');
       final bookmarkJson = await _apiService.createBookmark(
         bookId: bookId,
         pageNumber: pageNumber,
         note: note,
       );
-      print('✅ BookmarkService: API returned bookmark data');
       final bookmark = BookmarkModel.fromJson(bookmarkJson);
       
       // Update cache
@@ -74,7 +70,6 @@ class BookmarkService {
         _bookmarksCache[bookId]!.add(bookmark);
         // Re-sort by page number
         _bookmarksCache[bookId]!.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-        print('✅ BookmarkService: Cache updated, now ${_bookmarksCache[bookId]!.length} bookmarks');
       } else {
         print('⚠️ BookmarkService: Cache not initialized for bookId $bookId');
       }

@@ -36,7 +36,6 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
     super.initState();
     // Load bookmarks when panel first opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print('🔷 BookmarkPanel initState: loading bookmarks for ${widget.bookId}');
       ref.read(bookmarkProvider.notifier).loadBookmarks(widget.bookId);
     });
   }
@@ -46,12 +45,10 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
     super.didUpdateWidget(oldWidget);
     // Reload bookmarks if book changes
     if (oldWidget.bookId != widget.bookId) {
-      print('🔷 BookmarkPanel: Book changed from ${oldWidget.bookId} to ${widget.bookId}');
       ref.read(bookmarkProvider.notifier).loadBookmarks(widget.bookId, forceRefresh: true);
     }
     // Log page change for debugging
     if (oldWidget.currentPage != widget.currentPage) {
-      print('🔷 BookmarkPanel: Page changed from ${oldWidget.currentPage} to ${widget.currentPage}');
     }
   }
 
@@ -167,7 +164,6 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
     
     final isCurrentPageBookmarked = bookmarkState.isPageBookmarked(currentPage);
     
-    print('🔷 Building current page section: page=$currentPage, isBookmarked=$isCurrentPageBookmarked, isLoading=${bookmarkState.isLoading}');
     
     return Container(
       padding: const EdgeInsets.all(16),
@@ -216,7 +212,6 @@ class _BookmarkPanelState extends ConsumerState<BookmarkPanel> {
             onPressed: (_isProcessing || bookmarkState.isLoading) ? null : () async {
               // Prevent double-clicks with local state
               if (_isProcessing) {
-                print('⏳ Already processing bookmark operation');
                 return;
               }
               

@@ -15,6 +15,7 @@ class NotesPanel extends ConsumerStatefulWidget {
   final VoidCallback onClose;
   final String? selectedText;  // Optional: pre-selected text from PDF
   final Function(String noteId)? onNoteClicked;  // Callback when a note is clicked
+  final Function(String noteId)? onNoteDeleted;  // Callback when a note is deleted
 
   const NotesPanel({
     super.key,
@@ -23,6 +24,7 @@ class NotesPanel extends ConsumerStatefulWidget {
     required this.onClose,
     this.selectedText,
     this.onNoteClicked,
+    this.onNoteDeleted,
   });
 
   @override
@@ -39,7 +41,6 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
     super.initState();
     // Load notes when panel first opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print('🔷 NotesPanel initState: loading notes for ${widget.bookId}');
       ref.read(notesProvider.notifier).loadNotes(widget.bookId);
     });
   }
@@ -49,7 +50,6 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
     super.didUpdateWidget(oldWidget);
     // Reload notes if book changes
     if (oldWidget.bookId != widget.bookId) {
-      print('🔷 NotesPanel: Book changed from ${oldWidget.bookId} to ${widget.bookId}');
       ref.read(notesProvider.notifier).loadNotes(widget.bookId);
     }
   }
@@ -70,6 +70,9 @@ class _NotesPanelState extends ConsumerState<NotesPanel> {
       
       if (mounted) {
         if (success) {
+          // Notify parent to refresh PDF viewer
+          widget.onNoteDeleted?.call(note.id);
+          
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Note deleted successfully'),

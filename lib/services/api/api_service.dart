@@ -30,7 +30,6 @@ class ApiService {
   void _initializeDio() {
     // Always read fresh from AppConstants to ensure correct URL
     final baseUrl = AppConstants.baseUrl;
-    debugPrint('🌐 Initializing API service with base URL: $baseUrl');
     
     _dio = Dio(BaseOptions(
       baseUrl: '${baseUrl}/${AppConstants.apiVersion}',

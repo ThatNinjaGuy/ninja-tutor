@@ -230,7 +230,7 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'AI Reading Assistant',
+              'Ask Ninja',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -408,11 +408,13 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Quick Actions',
-            style: theme.textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
+          Center(
+            child: Text(
+              'Quick Actions',
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -676,6 +678,14 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
                 ),
                 filled: true,
                 fillColor: Colors.white,
+                // Add chat icon inside the input
+                prefixIcon: Padding(
+                  padding: const EdgeInsets.only(left: 12, right: 4),
+                  child: Icon(
+                    Icons.psychology,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
               ),
               maxLines: 3,
               minLines: 1,

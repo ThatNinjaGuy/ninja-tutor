@@ -65,12 +65,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     if (!_tabController.indexIsChanging) {
       if (_tabController.index == 1 && !_exploreBooksLoaded) {
         // Explore Books tab - load all books only when this tab is opened for the first time
-        debugPrint('📚 Switching to Explore Books tab - loading all books');
         _exploreBooksLoaded = true;
         ref.read(unifiedLibraryProvider.notifier).ensureAllBooksLoaded();
       } else if (_tabController.index == 0 && !_myBooksLoaded) {
         // My Books tab - load user library only when this tab is opened for the first time
-        debugPrint('📚 Switching to My Books tab - loading user library');
         _myBooksLoaded = true;
         ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
       } else {
@@ -128,13 +126,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         // Load Explore Books data if it's the active tab and hasn't been loaded yet
         if (_tabController.index == 1 && !_exploreBooksLoaded) {
-          debugPrint('🚀 Initial load from build - Explore Books tab');
           _exploreBooksLoaded = true;
           ref.read(unifiedLibraryProvider.notifier).ensureAllBooksLoaded();
         }
         // Load My Books data if it's the active tab and hasn't been loaded yet
         if (_tabController.index == 0 && !_myBooksLoaded) {
-          debugPrint('🚀 Initial load from build - My Books tab');
           _myBooksLoaded = true;
           ref.read(unifiedLibraryProvider.notifier).ensureMyBooksLoaded();
         }

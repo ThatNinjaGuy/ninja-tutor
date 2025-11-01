@@ -446,7 +446,6 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen>
           }
         }
 
-        print('✅ Built user answers map with ${userAnswers.length} entries');
         print('Quiz has ${quiz.questions.length} questions');
 
         // Show review dialog using common widget

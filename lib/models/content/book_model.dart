@@ -162,7 +162,6 @@ class BookModel extends Equatable {
     final percentage = progress!.totalPagesRead / totalPages;
     
     // Debug logging
-    debugPrint('📊 Progress for "$title": ${progress!.totalPagesRead} pages read (60+ sec) / $totalPages total = ${(percentage * 100).toStringAsFixed(1)}%');
     
     return percentage;
   }

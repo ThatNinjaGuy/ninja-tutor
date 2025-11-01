@@ -11,6 +11,7 @@ class HighlightsPanel extends ConsumerStatefulWidget {
   final int Function() getCurrentPage;
   final VoidCallback onClose;
   final Function(int page)? onPageNavigate;
+  final Function(String highlightId)? onHighlightDeleted;
 
   const HighlightsPanel({
     super.key,
@@ -18,6 +19,7 @@ class HighlightsPanel extends ConsumerStatefulWidget {
     required this.getCurrentPage,
     required this.onClose,
     this.onPageNavigate,
+    this.onHighlightDeleted,
   });
 
   @override
@@ -90,6 +92,9 @@ class _HighlightsPanelState extends ConsumerState<HighlightsPanel> {
         setState(() {
           _highlights = _highlights.where((h) => h.id != highlight.id).toList();
         });
+
+        // Notify parent to refresh PDF viewer
+        widget.onHighlightDeleted?.call(highlight.id);
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
