@@ -193,6 +193,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
             onPageChanged: (page) => setCurrentPage(page),
             onSelectedTextChanged: _handlePdfTextSelection,
             onNoteClicked: _handleNoteClick,
+            onAskAi: _handleAskAi,
             notes: ref
                 .watch(notesProvider)
                 .allNotes
@@ -469,24 +470,31 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       barrierDismissible: true,
       barrierColor: Colors.black.withOpacity(0.5),
       builder: (BuildContext dialogContext) {
+        final mediaSize = MediaQuery.of(dialogContext).size;
+        final dialogWidth = mediaSize.width * 0.9;
+        final dialogHeight = mediaSize.height * 0.9;
+
         return Dialog(
-          alignment: Alignment.centerRight,
-          insetPadding: EdgeInsets.zero,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          child: Container(
-            width: MediaQuery.of(context).size.width * AppConstants.aiPanelWidthPercentage,
-            height: MediaQuery.of(context).size.height,
-            child: AiChatPanel(
-              bookId: book.id,
-              currentPage: _currentPage,
-              selectedText: _selectedTextFromPdf,  // Use PDF selected text instead
-              onClose: () {
-                Navigator.of(dialogContext).pop();
-                setState(() {
-                  _showAiPanel = false;
-                });
-              },
+          child: SizedBox(
+            width: dialogWidth,
+            height: dialogHeight,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AiChatPanel(
+                bookId: book.id,
+                currentPage: _currentPage,
+                selectedText: _selectedTextFromPdf,  // Use PDF selected text instead
+                isFullscreen: true,
+                onClose: () {
+                  Navigator.of(dialogContext).pop();
+                  setState(() {
+                    _showAiPanel = false;
+                  });
+                },
+              ),
             ),
           ),
         );
@@ -655,7 +663,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   /// Enable or disable PDF scrolling
   
   // Reading event handlers
-  void _handleTextSelection(String text, Offset position) {
+  Future<void> _handleTextSelection(String text, Offset position) async {
     setState(() {
       _selectedText = text;
       // Don't auto-open AI panel anymore, let user choose
@@ -663,7 +671,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     
     // Show note creation dialog if we have a current book
     if (_currentBookId != null && text.isNotEmpty) {
-      _showNoteCreationDialogWithSelection(_currentBookId!, text);
+      await _showNoteCreationDialogWithSelection(_currentBookId!, text);
     }
   }
   
@@ -672,6 +680,39 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     setState(() {
       _selectedTextFromPdf = selectedText;
     });
+
+    final bookId = _currentBookId;
+    if (bookId != null) {
+      ref.read(readingAiProvider.notifier).updateContext(
+            page: _currentPage,
+            selectedText: (selectedText != null && selectedText.trim().isNotEmpty)
+                ? selectedText
+                : null,
+            bookId: bookId,
+          );
+    }
+  }
+
+  Future<void> _handleAskAi(String selectedText) async {
+    if (selectedText.trim().isEmpty) {
+      return;
+    }
+
+    final bookId = _currentBookId;
+    if (bookId != null) {
+      ref.read(readingAiProvider.notifier).updateContext(
+            page: _currentPage,
+            selectedText: selectedText,
+            bookId: bookId,
+          );
+    }
+
+    if (mounted) {
+      setState(() {
+        _selectedTextFromPdf = selectedText;
+        _showAiPanel = true;
+      });
+    }
   }
   
   /// Handle note click from PDF or sidebar
@@ -681,110 +722,141 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     final note = notes.firstWhere((n) => n.id == noteId, orElse: () => throw Exception('Note not found'));
     
     if (!mounted) return;
-    
-    // Show edit dialog
-    await showDialog<bool>(
-      context: context,
-      builder: (context) => NoteEditDialog(
-        note: note,
-        onSave: (content, title, noteId) async {
-          // Update note via provider
-          await ref.read(notesProvider.notifier).updateNote(
-            noteId: noteId ?? note.id,
-            content: content,
-            title: title,
-          );
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Note updated'),
-                duration: Duration(seconds: 2),
-              ),
+
+    _disablePdfPointerEvents();
+    try {
+      // Show edit dialog
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black54,
+        useRootNavigator: true,
+        builder: (context) => NoteEditDialog(
+          note: note,
+          onSave: (content, title, noteId) async {
+            // Update note via provider
+            await ref.read(notesProvider.notifier).updateNote(
+              noteId: noteId ?? note.id,
+              content: content,
+              title: title,
             );
-          }
-        },
-        onDelete: (noteId) async {
-          // Delete note via provider
-          await ref.read(notesProvider.notifier).deleteNote(noteId);
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Note deleted'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-        },
-      ),
-    );
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Note updated'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+          onDelete: (noteId) async {
+            // Delete note via provider
+            await ref.read(notesProvider.notifier).deleteNote(noteId);
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Note deleted'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+        ),
+      );
+    } finally {
+      _enablePdfPointerEvents();
+    }
   }
   
   /// Show note creation dialog with selected text
   Future<void> _showNoteCreationDialogWithSelection(String bookId, String selectedText) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => NoteCreationDialog(
-        pageNumber: _currentPage,
-        selectedText: selectedText,
-        onSave: (content, title, selectedText) async {
-          final note = await ref.read(notesProvider.notifier).createNote(
-            bookId: bookId,
-            pageNumber: _currentPage,
-            content: content,
-            title: title,
-            selectedText: selectedText,
-          );
-          
-          if (note != null && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Note added to page $_currentPage'),
-                duration: const Duration(seconds: 2),
-                behavior: SnackBarBehavior.floating,
-              ),
+    _disablePdfPointerEvents();
+    try {
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black54,
+        useRootNavigator: true,
+        builder: (context) => NoteCreationDialog(
+          pageNumber: _currentPage,
+          selectedText: selectedText,
+          onSave: (content, title, selectedText) async {
+            final note = await ref.read(notesProvider.notifier).createNote(
+              bookId: bookId,
+              pageNumber: _currentPage,
+              content: content,
+              title: title,
+              selectedText: selectedText,
             );
-          }
-        },
-      ),
-    );
+            
+            if (note != null && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Note added to page $_currentPage'),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
+        ),
+      );
+    } finally {
+      _enablePdfPointerEvents();
+    }
   }
 
   void _handleDefinitionRequest(String word) {
-    // TODO: Implement AI definition request
-    // Placeholder for when AI service is implemented
-  }
+    if (word.trim().isEmpty || !mounted) {
+      return;
+    }
 
-  
-  /// Show note creation dialog
-  Future<void> _showNoteCreationDialog(String bookId) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => NoteCreationDialog(
-        pageNumber: _currentPage,
-        selectedText: _selectedTextFromPdf,
-        onSave: (content, title, selectedText) async {
-          final note = await ref.read(notesProvider.notifier).createNote(
-            bookId: bookId,
-            pageNumber: _currentPage,
-            content: content,
-            title: title,
-            selectedText: selectedText,
-          );
-          
-          if (note != null && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Note added to page $_currentPage'),
-                duration: const Duration(seconds: 2),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        },
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Definition lookup for "$word" coming soon.'),
+        duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  /// Show note creation dialog
+  Future<void> _showNoteCreationDialog(String bookId) async {
+    _disablePdfPointerEvents();
+    try {
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black54,
+        useRootNavigator: true,
+        builder: (context) => NoteCreationDialog(
+          pageNumber: _currentPage,
+          selectedText: _selectedTextFromPdf,
+          onSave: (content, title, selectedText) async {
+            final note = await ref.read(notesProvider.notifier).createNote(
+              bookId: bookId,
+              pageNumber: _currentPage,
+              content: content,
+              title: title,
+              selectedText: selectedText,
+            );
+            
+            if (note != null && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Note added to page $_currentPage'),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
+        ),
+      );
+    } finally {
+      _enablePdfPointerEvents();
+    }
   }
   
   /// Delete a note
@@ -826,8 +898,9 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   
 
   void _toggleHighlight() {
-    // TODO: Toggle highlight mode
-    // Placeholder for when highlight service is implemented
+    // Notify the embedded PDF viewer (inside the iframe) to toggle highlight mode
+    // We forward an app-level message; ReadingViewer listens and relays it to PDF.js
+    html.window.postMessage({'type': 'appToggleHighlight'}, '*');
   }
   
   @override

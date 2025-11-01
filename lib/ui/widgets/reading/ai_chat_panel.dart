@@ -9,6 +9,7 @@ class AiChatPanel extends ConsumerStatefulWidget {
   final int currentPage;
   final String? selectedText;
   final VoidCallback onClose;
+  final bool isFullscreen;
 
   const AiChatPanel({
     super.key,
@@ -16,6 +17,7 @@ class AiChatPanel extends ConsumerStatefulWidget {
     required this.currentPage,
     this.selectedText,
     required this.onClose,
+    this.isFullscreen = false,
   });
 
   @override
@@ -25,6 +27,7 @@ class AiChatPanel extends ConsumerStatefulWidget {
 class _AiChatPanelState extends ConsumerState<AiChatPanel> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _selectedTextScrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   
   // State for selected text pill
@@ -90,6 +93,7 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
     _textController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _selectedTextScrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -164,47 +168,43 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
     final aiState = ref.watch(readingAiProvider);
 
     return Material(
-      elevation: 8,
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(16),
-        bottomLeft: Radius.circular(16),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            bottomLeft: Radius.circular(16),
+      elevation: widget.isFullscreen ? 12 : 8,
+      borderRadius: BorderRadius.circular(widget.isFullscreen ? 16 : 12),
+      child: SizedBox.expand(
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(widget.isFullscreen ? 16 : 12),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Header
-              _buildHeader(theme),
+          child: SafeArea(
+            child: Column(
+              children: [
+                // Header
+                _buildHeader(theme),
 
-              // Selected text pill
-              if (widget.selectedText != null)
-                _buildSelectedTextPill(theme),
+                // Selected text pill
+                if (widget.selectedText != null)
+                  _buildSelectedTextPill(theme),
 
-              // Error message
-              if (aiState.error != null)
-                _buildErrorBanner(theme, aiState.error!),
+                // Error message
+                if (aiState.error != null)
+                  _buildErrorBanner(theme, aiState.error!),
 
-              // Message list
-              Expanded(
-                child: aiState.messages.isEmpty
-                    ? _buildEmptyState(theme)
-                    : _buildMessageList(theme, aiState),
-              ),
+                // Message list
+                Expanded(
+                  child: aiState.messages.isEmpty
+                      ? _buildEmptyState(theme)
+                      : _buildMessageList(theme, aiState),
+                ),
 
-              // Quick actions (only show at bottom when text is selected)
-              if (widget.selectedText != null && _isAtBottom)
-                _buildQuickActions(theme, aiState),
+                // Quick actions (only show at bottom when text is selected)
+                if (widget.selectedText != null && _isAtBottom)
+                  _buildQuickActions(theme, aiState),
 
-              // Input field
-              _buildInputField(theme, aiState),
-            ],
+                // Input field
+                _buildInputField(theme, aiState),
+              ],
+            ),
           ),
         ),
       ),
@@ -255,6 +255,9 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
 
   Widget _buildSelectedTextPill(ThemeData theme) {
     final selectedText = widget.selectedText ?? '';
+    final fontSize = theme.textTheme.bodyMedium?.fontSize ?? 14.0;
+    final lineHeightMultiplier = theme.textTheme.bodyMedium?.height ?? 1.4;
+    final maxHeight = fontSize * lineHeightMultiplier * 5;
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -337,24 +340,42 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
             Padding(
               padding: const EdgeInsets.only(top: 8, left: 12, right: 12),
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.5,
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      selectedText,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface,
-                        fontStyle: FontStyle.italic,
+                    constraints: BoxConstraints(
+                      maxHeight: maxHeight,
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Scrollbar(
+                        controller: _selectedTextScrollController,
+                        thumbVisibility: true,
+                        child: SingleChildScrollView(
+                          controller: _selectedTextScrollController,
+                          padding: const EdgeInsets.all(12),
+                          child: SelectableText(
+                            selectedText,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurface,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
+            ),
+          if (!_isPillExpanded)
+            Padding(
+              padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
+              child: Text(
+                selectedText,
+                maxLines: 5,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                  fontStyle: FontStyle.italic,
                 ),
               ),
             ),
@@ -656,7 +677,7 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
             child: TextField(
               controller: _textController,
               focusNode: _focusNode,
-              autofocus: true, // Auto-focus when dialog opens
+              autofocus: widget.isFullscreen,
               decoration: InputDecoration(
                 hintText: 'Ask a question about your reading...',
                 border: OutlineInputBorder(

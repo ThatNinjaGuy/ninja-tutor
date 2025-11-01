@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,7 @@ import '../../core/constants/app_constants.dart';
 import '../../models/content/book_model.dart';
 import '../../models/quiz/quiz_model.dart' as quiz;
 import '../../models/note/note_model.dart';
+import '../../models/note/highlight_model.dart';
 
 /// API service for network requests and AI integrations
 class ApiService {
@@ -648,6 +650,70 @@ class ApiService {
     }
   }
 
+  Future<List<HighlightModel>> getHighlightsForBook(String bookId) async {
+    try {
+      final response = await _dio.get('/reading/highlights/$bookId');
+      final data = response.data;
+
+      if (data is Map<String, dynamic>) {
+        final rawHighlights = data['highlights'] as List<dynamic>? ?? const [];
+        return rawHighlights
+            .whereType<Map<String, dynamic>>()
+            .map((json) => HighlightModel.fromJson(json, bookId: bookId))
+            .toList();
+      }
+
+      return const [];
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  Future<HighlightModel> createHighlight({
+    required String bookId,
+    required int pageNumber,
+    required String text,
+    required String color,
+    String? positionData,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/reading/highlights',
+        queryParameters: {
+          'book_id': bookId,
+          'page_number': pageNumber,
+          'text': text,
+          'color': color,
+          if (positionData != null) 'position_data': positionData,
+        },
+      );
+
+      final highlightId = response.data is Map<String, dynamic>
+          ? (response.data['highlight_id'] as String?)
+          : null;
+
+      return HighlightModel(
+        id: highlightId ?? 'temp-${DateTime.now().millisecondsSinceEpoch}',
+        bookId: bookId,
+        pageNumber: pageNumber,
+        text: text,
+        color: color,
+        positionData: positionData,
+        createdAt: DateTime.now(),
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  Future<void> deleteHighlight(String highlightId) async {
+    try {
+      await _dio.delete('/reading/highlights/$highlightId');
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   // Enhanced AI endpoints
 
   /// Get AI-powered definition
@@ -917,7 +983,7 @@ class ApiService {
         'isFavorite': data['is_favorite'] ?? false,
         'linkedText': data['linked_text'],
         'aiInsights': data['ai_insights'],
-        'selectedText': data['selected_text'],
+        'selected_text': data['selected_text'] ?? selectedText,
       };
       
       return NoteModel.fromJson(transformedData);

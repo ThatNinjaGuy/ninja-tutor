@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 import 'dart:async';
@@ -9,7 +10,11 @@ import 'reading_controls_overlay.dart';
 import '../../../models/content/book_model.dart';
 import '../../../core/providers/unified_library_provider.dart';
 import '../../../core/providers/reading_ai_provider.dart';
+import '../../../core/providers/bookmark_provider.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../models/note/highlight_model.dart';
+import '../../../models/bookmark/bookmark_model.dart';
+import '../../../services/api/api_service.dart';
 import 'reading_controls_panel.dart';
 
 /// Main reading viewer widget for displaying book content
@@ -22,15 +27,17 @@ class ReadingViewer extends ConsumerStatefulWidget {
     this.onPageChanged,
     this.onSelectedTextChanged,
     this.onNoteClicked,
+    this.onAskAi,
     this.notes,
   });
 
   final BookModel book;
-  final Function(String text, Offset position)? onTextSelected;
+  final Future<void> Function(String text, Offset position)? onTextSelected;
   final Function(String word)? onDefinitionRequest;
   final Function(int page)? onPageChanged;
   final Function(String? selectedText)? onSelectedTextChanged;  // Callback for when text selection changes
   final Function(String noteId)? onNoteClicked;  // Callback for when a note is clicked
+  final Future<void> Function(String selectedText)? onAskAi; // Trigger AI assistant with selected text
   final List<dynamic>? notes;  // List of notes to display on the PDF
 
   @override
@@ -75,10 +82,15 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   final List<Map<String, dynamic>> _capturedTextAnnotations = [];
   final List<Map<String, dynamic>> _capturedDrawings = [];
   final List<Map<String, dynamic>> _capturedHighlights = [];
-  
+ 
   // Notes for current book
   List<dynamic> _notesForBook = [];
-  
+  List<HighlightModel> _highlightsForBook = [];
+ 
+  // Bookmark tracking
+  ProviderSubscription<BookmarkState>? _bookmarkSubscription;
+  Set<int> _cachedBookmarkedPages = <int>{};
+
   // Message listener reference for cleanup
   void Function(html.Event)? _messageListener;
 
@@ -112,6 +124,22 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     if (widget.notes != null) {
       _notesForBook = List.from(widget.notes!);
     }
+
+    // Load persisted highlights for this book
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadHighlightsForBook();
+    });
+
+    // Listen to bookmark changes and sync with PDF viewer
+    _bookmarkSubscription = ref.listenManual<BookmarkState>(
+      bookmarkProvider,
+      (previous, next) {
+        if (next.currentBookId == widget.book.id) {
+          _maybeSendBookmarksToViewer(next.bookmarks);
+        }
+      },
+      fireImmediately: true,
+    );
   }
   
   /// Detect if the book is in EPUB format
@@ -137,6 +165,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       _documentLoaded = false;
       _cancelUrlRetryTimer();
       _urlRetryCount = 0;
+      _highlightsForBook = [];
+      _cachedBookmarkedPages.clear();
       
       // Re-detect format and load appropriate viewer
       _isEpubFormat = _detectEpubFormat(widget.book);
@@ -145,6 +175,10 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
       } else {
         _loadPdfData();
       }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadHighlightsForBook();
+      });
     }
     
     // Update notes when widget.notes changes
@@ -178,6 +212,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     _isLoading = true;
     _documentLoaded = false;
     _cancelUrlRetryTimer();
+    _bookmarkSubscription?.close();
+    _bookmarkSubscription = null;
     
     super.dispose();
   }
@@ -857,10 +893,48 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     html.window.addEventListener('message', _messageListener!);
   }
 
+  Future<void> _loadHighlightsForBook() async {
+    try {
+      final highlights = await ApiService().getHighlightsForBook(widget.book.id);
+      if (!mounted) return;
+
+      setState(() {
+        _highlightsForBook = highlights;
+      });
+
+      if (highlights.isNotEmpty) {
+        _sendNotesToPdfViewer(_notesForBook);
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Failed to load highlights: $e');
+      debugPrint(stackTrace.toString());
+    }
+  }
+
   void _handlePdfMessage(Map<String, dynamic> message) {
     debugPrint('📨 Received message from viewer: ${message['type']}');
     
     switch (message['type']) {
+      case 'appToggleHighlight':
+        // Forward toggle highlight command to the PDF.js iframe
+        try {
+          _iframeElement?.contentWindow?.postMessage({
+            'type': 'toggleHighlightMode',
+          }, '*');
+        } catch (e) {
+          debugPrint('❌ Failed to forward highlight toggle: $e');
+        }
+        break;
+      case 'createHighlight':
+        try {
+          _iframeElement?.contentWindow?.postMessage({
+            'type': 'createHighlight',
+            'color': message['color'],
+          }, '*');
+        } catch (e) {
+          debugPrint('❌ Failed to forward createHighlight: $e');
+        }
+        break;
       case 'pageChange':
         final previousPage = message['previousPage'] ?? 1;
         final newPage = message['newPage'] ?? 1;
@@ -881,7 +955,20 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         _onTextSelection(message['text'] ?? '', message['page'] ?? 1, position);
         break;
       case 'highlight':
-        _onHighlight(message['text'] ?? '', message['page'] ?? 1, message['color'] ?? 'yellow');
+        Map<String, dynamic>? position;
+        if (message['position'] != null) {
+          try {
+            position = Map<String, dynamic>.from(message['position']);
+          } catch (_) {
+            position = null;
+          }
+        }
+        unawaited(_onHighlight(
+          message['text'] ?? '',
+          message['page'] ?? 1,
+          message['color'] ?? 'yellow',
+          position,
+        ));
         break;
       case 'annotation':
         _onAnnotation(message);
@@ -908,33 +995,144 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
         }
         break;
       case 'createNoteFromSelection':
-        _onCreateNoteFromSelection(message);
+        unawaited(_onCreateNoteFromSelection(message));
         break;
       case 'noteClicked':
         widget.onNoteClicked?.call(message['noteId'] as String);
+        break;
+      case 'askAI':
+        // Handle Ask AI from selection tooltip
+        final selectedText = message['selectedText'] as String?;
+        if (selectedText != null && selectedText.trim().isNotEmpty && mounted) {
+          widget.onSelectedTextChanged?.call(selectedText);
+          if (widget.onAskAi != null) {
+            unawaited(widget.onAskAi!(selectedText));
+          }
+        }
+        break;
+      case 'defineWord':
+        // Handle Define Word from selection tooltip
+        final selectedText = message['selectedText'] as String?;
+        if (selectedText != null && mounted) {
+          widget.onDefinitionRequest?.call(selectedText);
+        }
+        break;
+      case 'toggleBookmark':
+        final page = message['page'] as int?;
+        if (page != null) {
+          unawaited(_onToggleBookmark(page));
+        }
+        break;
+      case 'deleteHighlight':
+        final highlightId = message['highlightId'] as String?;
+        if (highlightId != null) {
+          unawaited(_onDeleteHighlight(highlightId));
+        }
         break;
       default:
         debugPrint('⚠️ Unknown message type: ${message['type']}');
     }
   }
   
-  void _onCreateNoteFromSelection(Map<String, dynamic> message) {
+  Future<void> _onCreateNoteFromSelection(Map<String, dynamic> message) async {
     final selectedText = message['selectedText'] as String?;
     final page = message['page'] as int?;
-    final position = message['position'] as Map<String, dynamic>?;
     
-    if (selectedText != null && page != null) {
-      // Trigger note creation dialog in parent
+    // Convert LinkedMap to Map<String, dynamic>
+    Map<String, dynamic>? position;
+    if (message['position'] != null) {
+      try {
+        position = Map<String, dynamic>.from(message['position']);
+      } catch (e) {
+        debugPrint('⚠️ Failed to convert position: $e');
+        position = null;
+      }
+    }
+    
+    if (selectedText != null && page != null && mounted) {
+      // Store the selection data temporarily
+      setState(() {
+        _selectedText = selectedText;
+        _selectionPosition = position;
+        _showSelectionOverlay = false; // Hide the selection overlay since we're creating a note
+      });
+
+      // The actual dialog will be shown by ReadingInterfaceMixin. Await completion so we can
+      // safely resume PDF interactions afterwards.
+      if (widget.onTextSelected != null) {
+        try {
+          await widget.onTextSelected!(selectedText, const Offset(0, 0));
+        } catch (e) {
+          debugPrint('⚠️ Error while handling note creation callback: $e');
+        }
+      }
+    }
+  }
+
+  Future<void> _onToggleBookmark(int page) async {
+    try {
+      final notifier = ref.read(bookmarkProvider.notifier);
+      final success = await notifier.toggleBookmark(widget.book.id, page);
+      final state = ref.read(bookmarkProvider);
+      final isBookmarked = state.isPageBookmarked(page);
+
+      _iframeElement?.contentWindow?.postMessage({
+        'type': 'bookmarkStatus',
+        'page': page,
+        'isBookmarked': isBookmarked,
+        'success': success,
+      }, '*');
+
+      if (!mounted) {
+        return;
+      }
+
+      final messenger = ScaffoldMessenger.of(context);
+      if (success) {
+        final text = isBookmarked
+            ? 'Bookmark added to page $page'
+            : 'Bookmark removed from page $page';
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(text),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        _cachedBookmarkedPages = {
+          ...state.bookmarks
+              .where((bookmark) => bookmark.bookId == widget.book.id)
+              .map((bookmark) => bookmark.pageNumber),
+        };
+      } else {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Unable to update bookmark for page $page'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Failed to toggle bookmark: $e');
+      debugPrint(stackTrace.toString());
+
+      final state = ref.read(bookmarkProvider);
+      final isBookmarked = state.isPageBookmarked(page);
+      _iframeElement?.contentWindow?.postMessage({
+        'type': 'bookmarkStatus',
+        'page': page,
+        'isBookmarked': isBookmarked,
+        'success': false,
+      }, '*');
+
       if (mounted) {
-        // Store the selection data temporarily
-        setState(() {
-          _selectedText = selectedText;
-          _selectionPosition = position;
-          _showSelectionOverlay = false; // Hide the selection overlay since we're creating a note
-        });
-        
-        // The actual dialog will be shown by ReadingInterfaceMixin
-        widget.onTextSelected?.call(selectedText, const Offset(0, 0));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating bookmark: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
     }
   }
@@ -1000,9 +1198,22 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     }
   }
 
-  void _onHighlight(String text, int pageNum, String color) {
-    // Save highlight to backend
-    _saveHighlight(text, pageNum, color);
+  Future<void> _onHighlight(
+    String text,
+    int pageNum,
+    String color,
+    Map<String, dynamic>? position,
+  ) async {
+    final highlight = await _saveHighlight(text, pageNum, color, position);
+    if (highlight == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _highlightsForBook = [highlight, ..._highlightsForBook];
+    });
+
+    _sendNotesToPdfViewer(_notesForBook);
   }
 
   void _onIdleStateChange(bool isIdle) {
@@ -1023,6 +1234,10 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     // Start tracking time for the initial page
     _currentPageStartTime = DateTime.now();
     print('📖 PDF ready - starting time tracking for page $currentPage');
+
+    // Send current bookmark state to the PDF viewer
+    final bookmarkState = ref.read(bookmarkProvider);
+    _maybeSendBookmarksToViewer(bookmarkState.bookmarks, force: true);
     
     // Send notes to PDF viewer with a slight delay to ensure PDF.js is fully initialized
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -1035,35 +1250,78 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
   
   /// Send notes data to PDF viewer for highlighting
   void _sendNotesToPdfViewer(List<dynamic> notes) {
-    if (notes.isEmpty) return;
-    
-    final notesData = notes.map((note) => {
-      'id': note.id,
-      'page': note.pageNumber,
-      'selectedText': note.selectedText,
-      'content': note.content,
-      'title': note.title,
-    }).toList();
-    
-    print('📤 Sending ${notesData.length} notes to PDF viewer');
-    // Debug: Check all notes for selectedText
+    final List<Map<String, dynamic>> notesData = [];
+
     if (notes.isNotEmpty) {
-      print('📝 Notes with selectedText:');
+      notesData.addAll(notes.map((note) {
+        final noteColor = note.style?.color;
+        return {
+          'id': note.id,
+          'page': note.pageNumber,
+          'selectedText': note.selectedText,
+          'content': note.content,
+          'title': note.title,
+          if (noteColor != null) 'color': noteColor,
+          'source': 'note',
+        };
+      }));
+
+      print('📤 Prepared ${notesData.length} notes for PDF viewer');
       for (var note in notes) {
-        print('   ID: ${note.id}, Page: ${note.pageNumber}');
-        print('   selectedText: ${note.selectedText}');
-        print('   selectedText is null: ${note.selectedText == null}');
-        print('   selectedText is empty: ${note.selectedText?.isEmpty ?? true}');
+        print('📝 Note ID: ${note.id}, Page: ${note.pageNumber}, hasSelectedText: ${note.selectedText?.isNotEmpty ?? false}');
       }
     }
-    // Debug: Check first note in notesData to see if conversion worked
-    if (notesData.isNotEmpty) {
-      print('📝 First note in notesData: ${notesData[0]}');
-      print('📝 Full notesData JSON: ${notesData.toString()}');
+
+    if (_highlightsForBook.isNotEmpty) {
+      notesData.addAll(_highlightsForBook.map((highlight) => {
+            'id': highlight.id,
+            'page': highlight.pageNumber,
+            'selectedText': highlight.text,
+            'content': highlight.text,
+            'title': 'Highlight',
+            'color': highlight.color,
+            'source': 'highlight',
+          }));
     }
+
+    if (notesData.isEmpty) {
+      print('ℹ️ No notes or highlights to send to viewer');
+      return;
+    }
+
+    print('📤 Sending ${notesData.length} annotations (notes + highlights) to PDF viewer');
     _iframeElement?.contentWindow?.postMessage({
       'type': 'displayNotes',
       'notes': notesData,
+    }, '*');
+  }
+
+  void _maybeSendBookmarksToViewer(List<BookmarkModel> bookmarks, {bool force = false}) {
+    final newPages = <int>{};
+    for (final bookmark in bookmarks) {
+      if (bookmark.bookId == widget.book.id) {
+        newPages.add(bookmark.pageNumber);
+      }
+    }
+
+    final hasChanges = newPages.length != _cachedBookmarkedPages.length ||
+        newPages.difference(_cachedBookmarkedPages).isNotEmpty;
+
+    if (!force && !hasChanges) {
+      return;
+    }
+
+    _cachedBookmarkedPages = {...newPages};
+
+    if (!_documentLoaded || _iframeElement?.contentWindow == null) {
+      return;
+    }
+
+    final sortedPages = newPages.toList()..sort();
+
+    _iframeElement?.contentWindow?.postMessage({
+      'type': 'bookmarkStateUpdate',
+      'pages': sortedPages,
     }, '*');
   }
 
@@ -1072,9 +1330,65 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     print('Sending page time data: page $pageNum, time $timeSpent seconds');
   }
 
-  void _saveHighlight(String text, int pageNum, String color) {
-    // TODO: Implement API call to save highlight
-    print('💾 Saving highlight: "$text" on page $pageNum with color $color');
+  Future<HighlightModel?> _saveHighlight(
+    String text,
+    int pageNum,
+    String color,
+    Map<String, dynamic>? position,
+  ) async {
+    try {
+      final highlight = await ApiService().createHighlight(
+        bookId: widget.book.id,
+        pageNumber: pageNum,
+        text: text,
+        color: color,
+        positionData: position != null ? jsonEncode(position) : null,
+      );
+
+      print('💾 Highlight saved: ${highlight.id} on page ${highlight.pageNumber}');
+      return highlight;
+    } catch (e, stackTrace) {
+      debugPrint('❌ Failed to save highlight: $e');
+      debugPrint(stackTrace.toString());
+      return null;
+    }
+  }
+
+  Future<void> _onDeleteHighlight(String highlightId) async {
+    try {
+      await ApiService().deleteHighlight(highlightId);
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _highlightsForBook = _highlightsForBook.where((h) => h.id != highlightId).toList();
+      });
+      
+      // Re-send all notes and highlights to refresh the PDF viewer
+      _sendNotesToPdfViewer(_notesForBook);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Highlight deleted'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Failed to delete highlight: $e');
+      debugPrint(stackTrace.toString());
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete highlight: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
   
   void _onAnnotation(Map<String, dynamic> annotation) {
@@ -1362,3 +1676,4 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
     }
   }
 }
+

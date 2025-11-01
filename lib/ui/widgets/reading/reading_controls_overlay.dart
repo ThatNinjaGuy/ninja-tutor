@@ -167,7 +167,7 @@ class _ReadingControlsOverlayState extends ConsumerState<ReadingControlsOverlay>
 
   void _createHighlight(String color) {
     // Send highlight command to PDF.js
-    _sendMessageToPdf('highlight', {
+    _sendMessageToPdf('createHighlight', {
       'text': widget.selectedText,
       'page': widget.pageNumber,
       'color': color,
