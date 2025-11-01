@@ -16,6 +16,7 @@ import 'reading_viewer.dart';
 import 'ai_chat_panel.dart';
 import 'bookmark_panel.dart';
 import 'notes_panel.dart';
+import 'highlights_panel.dart';
 import 'notes_tooltip.dart';
 import 'note_creation_dialog.dart';
 import 'note_edit_dialog.dart';
@@ -30,10 +31,12 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
   String? _selectedTextFromPdf;  // Store selected text from PDF
   int _currentPage = 1;
   
-  // Bookmark and notes tooltip state
+  // Bookmark, notes, and highlights panel state
   bool _showBookmarkPanel = false;
   bool _showNotesPanel = false;
+  bool _showHighlightsPanel = false;
   bool _showNotesTooltip = false;
+  bool _notesPanelDialogOpen = false; // Track if dialog is actually showing
   String? _currentBookId;
   Timer? _hideNotesTimer;
   
@@ -60,9 +63,10 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     setState(() {
       _currentPage = value;
       // Close panels when page changes
-      if (_showBookmarkPanel || _showNotesPanel || _showNotesTooltip) {
+      if (_showBookmarkPanel || _showNotesPanel || _showHighlightsPanel || _showNotesTooltip) {
         _showBookmarkPanel = false;
         _showNotesPanel = false;
+        _showHighlightsPanel = false;
         _showNotesTooltip = false;
       }
     });
@@ -133,16 +137,30 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
         _showNotesDialog(book);
       });
     }
-    
+
+    // Show highlights panel as dialog when flag is set
+    if (_showHighlightsPanel) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showHighlightsDialog(book);
+      });
+    }
+
+    // Show AI dialog when flag is set
+    if (_showAiPanel) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showAiDialog(book);
+      });
+    }
     
     return KeyboardListener(
       focusNode: FocusNode(),
       onKeyEvent: (KeyEvent event) {
         if (event is KeyDownEvent && event.logicalKey.keyLabel == 'Escape') {
-          if (_showBookmarkPanel || _showNotesPanel || _showNotesTooltip) {
+          if (_showBookmarkPanel || _showNotesPanel || _showHighlightsPanel || _showNotesTooltip) {
             setState(() {
               _showBookmarkPanel = false;
               _showNotesPanel = false;
+              _showHighlightsPanel = false;
               _showNotesTooltip = false;
             });
           }
@@ -151,10 +169,11 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       child: GestureDetector(
         onTap: () {
         // Close panels when tapping outside
-        if (_showBookmarkPanel || _showNotesPanel || _showNotesTooltip) {
+        if (_showBookmarkPanel || _showNotesPanel || _showHighlightsPanel || _showNotesTooltip) {
           setState(() {
             _showBookmarkPanel = false;
             _showNotesPanel = false;
+            _showHighlightsPanel = false;
             _showNotesTooltip = false;
           });
         }
@@ -251,12 +270,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
               const SizedBox(height: 16),
               _buildNotesButton(book, isInLibrary, notesCount),
               const SizedBox(height: 16),
-              _buildCompactControlButton(
-                icon: Icons.highlight,
-                tooltip: isInLibrary ? 'Highlight' : 'Highlight (Add to library first)',
-                isDisabled: !isInLibrary,
-                onPressed: isInLibrary ? _toggleHighlight : null,
-              ),
+              _buildHighlightsButton(book, isInLibrary),
             ],
           ),
         ),
@@ -330,12 +344,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
           ),
               _buildBookmarkButton(book, isInLibrary, isBookmarked),
               _buildNotesButton(book, isInLibrary, notesCount),
-          _buildCompactControlButton(
-            icon: Icons.highlight,
-            tooltip: isInLibrary ? 'Highlight' : 'Highlight (Add to library first)',
-            isDisabled: !isInLibrary,
-            onPressed: isInLibrary ? _toggleHighlight : null,
-          ),
+              _buildHighlightsButton(book, isInLibrary),
         ],
       ),
     );
@@ -420,6 +429,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
           onPressed: isInLibrary ? () {
             setState(() {
               _showNotesPanel = !_showNotesPanel;
+              _showHighlightsPanel = false;
             });
           } : null,
         ),
@@ -454,6 +464,24 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
             ),
           ),
       ],
+    );
+  }
+
+  /// Build highlights button with count badge
+  Widget _buildHighlightsButton(BookModel book, bool isInLibrary) {
+    final theme = Theme.of(context);
+    
+    return _buildCompactControlButton(
+      icon: Icons.highlight,
+      tooltip: isInLibrary ? 'Highlights' : 'Highlights (Add to library first)',
+      isActive: _showHighlightsPanel,
+      isDisabled: !isInLibrary,
+      onPressed: isInLibrary ? () {
+        setState(() {
+          _showHighlightsPanel = !_showHighlightsPanel;
+          _showNotesPanel = false;
+        });
+      } : null,
     );
   }
 
@@ -582,6 +610,17 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     // Reset flag immediately to prevent repeated calls
     if (!_showNotesPanel) return;
     
+    // Reset flag immediately to prevent multiple calls
+    final shouldShow = _showNotesPanel;
+    setState(() {
+      _showNotesPanel = false;
+    });
+    
+    if (!shouldShow) return;
+    
+    // Mark that dialog is now open
+    _notesPanelDialogOpen = true;
+    
     // Disable PDF pointer events when dialog opens
     _disablePdfPointerEvents();
     
@@ -606,8 +645,55 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
               onNoteClicked: _handleNoteClick,  // Handle note clicks from sidebar
               onClose: () {
                 Navigator.of(dialogContext).pop();
+              },
+            ),
+          ),
+        );
+      },
+    ).then((_) {
+      // Mark that dialog is now closed
+      _notesPanelDialogOpen = false;
+      // Re-enable PDF pointer events when dialog closes
+      _enablePdfPointerEvents();
+    });
+  }
+
+  /// Show highlights panel as a proper Dialog
+  void _showHighlightsDialog(BookModel book) {
+    // Reset flag immediately to prevent repeated calls
+    if (!_showHighlightsPanel) return;
+    
+    // Disable PDF pointer events when dialog opens
+    _disablePdfPointerEvents();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          alignment: Alignment.centerRight,
+          insetPadding: EdgeInsets.zero,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            width: MediaQuery.of(context).size.width * AppConstants.aiPanelWidthPercentage,
+            height: MediaQuery.of(context).size.height,
+            child: HighlightsPanel(
+              key: ValueKey('highlights_${book.id}'),
+              bookId: book.id,
+              getCurrentPage: () => _currentPage,
+              onPageNavigate: (page) {
+                Navigator.of(dialogContext).pop();
                 setState(() {
-                  _showNotesPanel = false;
+                  _showHighlightsPanel = false;
+                });
+                setCurrentPage(page);
+              },
+              onClose: () {
+                Navigator.of(dialogContext).pop();
+                setState(() {
+                  _showHighlightsPanel = false;
                 });
               },
             ),
@@ -621,14 +707,14 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
       // Ensure flag is reset when dialog closes
       if (mounted) {
         setState(() {
-          _showNotesPanel = false;
+          _showHighlightsPanel = false;
         });
       }
     });
     
     // Reset flag after showing dialog
     setState(() {
-      _showNotesPanel = false;
+      _showHighlightsPanel = false;
     });
   }
   
@@ -723,6 +809,15 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
     
     if (!mounted) return;
 
+    // CRITICAL: Close the notes panel dialog first if it's actually open
+    // Use the tracker flag instead of _showNotesPanel (which gets reset immediately)
+    if (_notesPanelDialogOpen) {
+      Navigator.of(context).pop(); // Close the notes panel dialog
+      _notesPanelDialogOpen = false; // Mark as closed
+      await Future.delayed(const Duration(milliseconds: 200)); // Wait for close animation
+      if (!mounted) return;
+    }
+
     _disablePdfPointerEvents();
     try {
       // Show edit dialog
@@ -730,7 +825,7 @@ mixin ReadingInterfaceMixin<T extends ConsumerStatefulWidget> on ConsumerState<T
         context: context,
         barrierDismissible: true,
         barrierColor: Colors.black54,
-        useRootNavigator: true,
+        useRootNavigator: false, // Use local navigator, not root
         builder: (context) => NoteEditDialog(
           note: note,
           onSave: (content, title, noteId) async {

@@ -31,7 +31,7 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
   final FocusNode _focusNode = FocusNode();
   
   // State for selected text pill
-  bool _isPillExpanded = true;  // Expanded by default on first open
+  bool _isPillExpanded = false;  // Collapsed by default (shows "Source")
   String? _previousSelectedText;  // Track if selected text has changed
   bool _isAtBottom = true;  // Track if scrolled to bottom
 
@@ -78,10 +78,10 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
         bookId: widget.bookId,
       );
       
-      // If selected text changed, expand the pill
+      // If selected text changed, keep pill collapsed
       if (oldWidget.selectedText != widget.selectedText) {
         setState(() {
-          _isPillExpanded = true;
+          _isPillExpanded = false;
           _previousSelectedText = widget.selectedText;
         });
       }
@@ -121,7 +121,7 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
     _textController.clear();
     ref.read(readingAiProvider.notifier).askQuestion(message, widget.bookId);
     
-    // Collapse the pill after first question
+    // Keep the pill collapsed after sending question
     if (_isPillExpanded) {
       setState(() {
         _isPillExpanded = false;
@@ -273,7 +273,6 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
         children: [
           Row(
             children: [
-              if (_isPillExpanded) Expanded(child: Container()),
               Expanded(
                 child: Center(
                   child: InkWell(
@@ -321,29 +320,17 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
                   ),
                 ),
               ),
-              if (_isPillExpanded) ...[
-                Expanded(child: Container()),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () {
-                    ref.read(readingAiProvider.notifier).clearSelectedText();
-                  },
-                  icon: const Icon(Icons.close, size: 20),
-                  tooltip: 'Clear selection',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
             ],
           ),
           if (_isPillExpanded)
             Padding(
-              padding: const EdgeInsets.only(top: 8, left: 12, right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxHeight: maxHeight,
                     ),
                     child: Container(
+                      width: double.infinity,
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(8),
@@ -365,19 +352,6 @@ class _AiChatPanelState extends ConsumerState<AiChatPanel> {
                       ),
                     ),
                   ),
-            ),
-          if (!_isPillExpanded)
-            Padding(
-              padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
-              child: Text(
-                selectedText,
-                maxLines: 5,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
             ),
         ],
       ),
