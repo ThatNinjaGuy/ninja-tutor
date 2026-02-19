@@ -1266,6 +1266,8 @@ class _ReadingViewerState extends ConsumerState<ReadingViewer> {
             'title': 'Highlight',
             'color': highlight.color,
             'source': 'highlight',
+            if (highlight.positionData != null)
+              'position': highlight.positionData,
           }));
     }
 
